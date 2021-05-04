@@ -226,7 +226,11 @@ def fmap(segments, algorithms, alt_signal=None):
             vals_segment.append(vals_alg)
             
         vals_segment = _np.array(vals_segment)
+        print(vals_segment.shape)
+        print(vals_segment)
         seg_data_array = _np.repeat(segment_data, alt_signal.get_nchannels(), axis = 1)
+        print(seg_data_array.shape)
+        print(seg_data_array)
         vals_segment = _np.concatenate([seg_data_array, vals_segment], axis = 0)
         values.append(vals_segment)
     

@@ -232,6 +232,7 @@ class FixedSegments(_SegmentsWithLabelSignal):
         return b, e
 
 class CustomSegments(_SegmentsWithLabelSignal):
+    #TODO: labels should be a list with labels of each segment, not a signal
     """
     Custom segments iterator, specifying an array of begin times and an array of end times.
 

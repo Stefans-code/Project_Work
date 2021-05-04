@@ -1,7 +1,7 @@
 # coding=utf-8
 from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
-from pyphysio.Signal import Signal, EvenlySignal
-from pyphysio.Utility import PhUI as _PhUI
+from .Signal import Signal, EvenlySignal #was pyphysio.Signal
+from .Utility import PhUI as _PhUI #was pyphysio.Utility
 import numpy as _np
 __author__ = 'AleB'
 

@@ -2,19 +2,77 @@
 import numpy as _np
 
 from ..BaseIndicator import Indicator as _Indicator
+from ..BaseAlgorithm import Cache as _Cache
 from ..indicators.FrequencyDomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
 from ..filters.Filters import ImputeNAN as _ImputeNAN
+from ..Utility import PhUI as _PhUI
+from ..Signal import EvenlySignal as _EvenlySignal
 
 __author__ = 'AleB'
 
-class Kurtosis(_Indicator):
+class SignalQualityIndicator(_Indicator):
+    """ 
+    A Signal Quality Indicator is a special class of indicators
+    that also returns if the value is within a range.
+    Used to check the quality of signals.
+    """
+    def __init__(self, threshold, **kwargs):
+        assert len(threshold)==2
+        _Indicator.__init__(self, threshold=threshold, **kwargs)
+    
+    @classmethod
+    def is_good(cls, output, params):
+        # params = cls._params
+        threshold = params['threshold']
+        return(output >= threshold[0] and output <= threshold[1])
+        
+    @classmethod
+    def run(cls, data, params=None, use_cache=False, **kwargs):
+        if type(params) is dict:
+            kwargs.update(params)
+        if not isinstance(data.get_values(), _np.ndarray):
+            _PhUI.w("The data must be a Signal (see class EvenlySignal and UnevenlySignal).")
+            use_cache = False
+        if use_cache is True:
+            _Cache.cache_check(data)
+            # noinspection PyTypeChecker
+            return _Cache.run_cached(data, cls, kwargs)
+        else:            
+            if not data.is_multi():
+                output = cls.algorithm(data, kwargs)
+                isgood = cls.is_good(output, kwargs)
+                return(output, isgood)
+            else:
+                data_values = data.get_values()
+                values_out = []
+                isgood_out = []
+                for i_ch in range(data.get_nchannels()):
+                    channel_ph = _EvenlySignal(data_values[:,i_ch], data.get_sampling_freq(), data.get_start_time())
+                    output_ph = cls.algorithm(channel_ph, kwargs)
+                    isgood_ph = cls.is_good(output_ph)
+                    values_out.append(output_ph)
+                    isgood_out.append(isgood_ph)
+        
+                # if output are signals, compose a multimodal instance
+                if isinstance(values_out[0], _EvenlySignal):
+                    values_out_np = _np.stack([x.get_values() for x in values_out], axis=1)
+                    output = data.clone_properties(values_out_np)
+                    
+                    isgood_out_np = _np.stack([x.get_values() for x in isgood_out], axis=1)
+                    isgood = data.clone_properties(isgood_out_np)
+                    return(output, isgood)
+                else:
+                    return(values_out, isgood_out)
+
+
+class Kurtosis(SignalQualityIndicator):
     """
     Compute the Kurtosis of the signal
     
     """
-    def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+    def __init__(self, threshold, **kwargs):
+        SignalQualityIndicator.__init__(self, threshold, **kwargs)
 
     @classmethod
     def algorithm(cls, data, params):

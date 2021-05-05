@@ -5,10 +5,10 @@ import scipy.stats as _stats
 from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_design as _filter_design, \
     deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve
 # from matplotlib.pyplot import plot as _plot
-from ..BaseAlgorithm import Algorithm as _Algorithm
-from ..Signal import UnevenlySignal as _UnevenlySignal
+from . import Algorithm as _Algorithm
+from ..signal import UnevenlySignal as _UnevenlySignal
 # from ..Utility import abstractmethod as _abstract
-from ..tools.Tools import SignalRange
+from .tools import SignalRange
 from collections import Sequence
 # __author__ = 'AleB'
 

@@ -1,7 +1,8 @@
-from .indicators.FrequencyDomain import *
-from .indicators.NonLinearDomain import *
-from .indicators.PeaksDescription import *
-from .indicators.TimeDomain import *
+from .indicators.frequencydomain import *
+from .indicators.nonlinear import *
+from .indicators.peaks import *
+from .indicators.timedomain import *
+from .sqi.sqi import *
 
 def preset_sqi_ecg(prefix="SQI_", method='ar'):
     K = Kurtosis(name='kurtosis')

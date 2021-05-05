@@ -1,12 +1,12 @@
 # coding=utf-8
 import numpy as _np
 
-from ..BaseAlgorithm import Algorithm as _Algorithm
-from ..indicators.FrequencyDomain import PowerInBand as _PowerInBand
+from ..processing import Algorithm as _Algorithm
+from ..indicators.frequencydomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
-from ..filters.Filters import ImputeNAN as _ImputeNAN
-from ..Utility import PhUI as _PhUI
-from ..Signal import EvenlySignal as _EvenlySignal
+from ..processing.filters import ImputeNAN as _ImputeNAN
+# from ..Utility import PhUI as _PhUI
+# from ..signal import EvenlySignal as _EvenlySignal
 
 # __author__ = 'AleB'
 

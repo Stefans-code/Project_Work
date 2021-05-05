@@ -1,68 +1,66 @@
 # coding=utf-8
 # from __future__ import division
 
-from numpy import array as _array
-from .tools.Tools import *
+# from numpy import array as _array
+# from .tools.Tools import *
 import numpy as _np
-from .filters import Filters
-from .segmentation import SegmentsGenerators
-from .indicators import FrequencyDomain
-from .indicators import NonLinearDomain
-from .indicators import PeaksDescription
-from .indicators import TimeDomain
-from .BaseSegmentation import Segment
-from .Signal import EvenlySignal, UnevenlySignal, from_pickle, from_pickleable
+import os as _os
+from .processing.tools import *
+from .processing.filters import *
+from .processing.estimators import *
+
+from .indicators.timedomain import *
+from .indicators.frequencydomain import *
+from .indicators.peaks import *
+from .indicators.nonlinear import *
+
+from .segmenters import *
+from .signal import *
 from .interactive import Annotate
-# BE CAREFUL with NAMES!!!
-from .estimators.Estimators import *
-from .filters.Filters import *
 
-from .sqi.SignalQuality import *
+from .sqi.sqi import *
 #from .tests import TestData
-from .segmentation.SegmentsGenerators import *
-from .Signal import Signal
-
-#TODO: all signals as N_SAMPLES x N_CH, with N_CH =1 for non MultiEvenly
 
 print("Please cite:")
 print("Bizzego et al. (2019) 'pyphysio: A physiological signal processing library for data science approaches in physiology', SoftwareX")
 
-__author__ = "AleB"
+# __author__ = "AleB"
+    
+def update_signal(signal):
+    signal_type = signal.ph['signal_type']
+    info = {'signal_type': signal_type}
+    signal.ph['info'] = info
+    return(signal)
 
-def nature2type(data):
-    data.ph['signal_type'] = data.ph['signal_nature']
-    #
-#    if isinstance(data, Signal):
-#        stim = data.get_stim()
-#        stim.ph['signal_type'] = stim.ph['signal_nature']
-#        data.set_stim(stim)
-    return(data)
+class TestData(object):
+    _sing = None
+    _path = _os.path.join(_os.path.dirname(__file__), '..', 'test', "data")
+    _file = "medical.txt.bz2"
 
+    @classmethod
+    def get_data(cls):
+        if TestData._sing is None:
+            TestData._sing = _np.genfromtxt(_os.path.join(TestData._path, TestData._file), delimiter="\t")
+        return TestData._sing
 
-def algo(function, **kwargs):
-    """
-    Builds on the fly a new algorithm class using the passed function and params if passed.
-    :param function: function(data, params) to be called
-    :param kwargs: parameters to pass to the function.
-    :return: An algorithm class if params is None else a parametrized algorithm instance.
-    """
+    # The following methods return an array to make it easier to test the Signal wrapping classes
 
-    from .BaseAlgorithm import Algorithm
+    @classmethod
+    def ecg(cls):
+        return TestData.get_data()[:, 0]
 
-    class Custom(Algorithm):
-        def __init__(self, **kwargs):
-            Algorithm.__init__(self, **kwargs)
+    @classmethod
+    def eda(cls):
+        return TestData.get_data()[:, 1]
 
-        def algorithm(self, signal):
-            params = self._params
-            return function(signal, params)
+    @classmethod
+    def bvp(cls):
+        return TestData.get_data()[:, 2]
 
-    if len(kwargs) == 0:
-        return Custom
-    else:
-        return Custom(**kwargs)
-
-
+    @classmethod
+    def resp(cls):
+        return TestData.get_data()[:, 3]
+    
 def test():
     from pytest import main as m
     from os.path import dirname as d

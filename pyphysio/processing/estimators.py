@@ -1,11 +1,11 @@
 # coding=utf-8
-from __future__ import division
+# from __future__ import division
 import numpy as _np
-from ..BaseAlgorithm import Algorithm as _Algorithm
-from ..Signal import UnevenlySignal as _UnevenlySignal, EvenlySignal as _EvenlySignal
-from ..filters.Filters import IIRFilter as _IIRFilter, DeConvolutionalFilter as _DeConvolutionalFilter, \
+from . import Algorithm as _Algorithm
+from ..signal import UnevenlySignal as _UnevenlySignal, EvenlySignal as _EvenlySignal
+from .filters import IIRFilter as _IIRFilter, DeConvolutionalFilter as _DeConvolutionalFilter, \
     ConvolutionalFilter as _ConvolutionalFilter
-from ..tools.Tools import SignalRange as _SignalRange, PeakDetection as _PeakDetection, Minima as _Minima, \
+from .tools import SignalRange as _SignalRange, PeakDetection as _PeakDetection, Minima as _Minima, \
     PeakSelection as _PeakSelection, Diff as _Diff
 
 # __author__ = 'AleB'

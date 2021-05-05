@@ -1,11 +1,11 @@
 # coding=utf-8
 # from __future__ import division
-
-from ..BaseAlgorithm import Algorithm as _Algorithm
-from ..tools.Tools import Diff as _Diff
-from ..indicators.TimeDomain import Mean as _Mean, StDev as _StDev
-from scipy.spatial.distance import cdist as _cd
 import numpy as _np
+from ..processing import Algorithm as _Algorithm
+from ..processing.tools import Diff as _Diff
+from .timedomain import Mean as _Mean, StDev as _StDev
+from scipy.spatial.distance import cdist as _cd
+
 
 # __author__ = 'AleB'
 

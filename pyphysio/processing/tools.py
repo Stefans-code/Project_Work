@@ -5,9 +5,8 @@ from scipy.signal import welch as _welch, periodogram as _periodogram, freqz as 
 import pycwt.wavelet as wave
 from scipy import linalg as _linalg
 
-from ..BaseAlgorithm import Algorithm as _Algorithm
-from ..Signal import UnevenlySignal as _UnevenlySignal, EvenlySignal as _EvenlySignal
-
+from . import Algorithm as _Algorithm
+from ..signal import UnevenlySignal as _UnevenlySignal, EvenlySignal as _EvenlySignal
 
 class Diff(_Algorithm):
     """
@@ -148,7 +147,6 @@ class PeakDetection(_Algorithm):
 
         return _np.array(maxp), _np.array(minp), _np.array(maxv), _np.array(minv)
 
-
 class PeakSelection(_Algorithm):
     """
     Identify the start and the end indexes of each peak in the signal, using derivatives.
@@ -228,7 +226,6 @@ class PeakSelection(_Algorithm):
 
         return i_start, i_stop
 
-
 class SignalRange(_Algorithm):
     """
     Estimate the local range of the signal by sliding windowing
@@ -287,7 +284,6 @@ class SignalRange(_Algorithm):
                 deltas = _np.convolve(deltas, _np.ones(win_len)/win_len, mode='same')
 
             return deltas
-
 
 class PSD(_Algorithm):
     """
@@ -449,7 +445,6 @@ class PSD(_Algorithm):
             psd /= _np.sum(psd)
         return freqs, psd
 
-
 class Wavelet(_Algorithm):
     """
     TODO
@@ -574,7 +569,6 @@ class Maxima(_Algorithm):
             maxs = maxs[1:]
             return _np.array(idx_maxs), _np.array(maxs)
 
-
 class Minima(_Algorithm):
     """
     Find all local minima in the signal
@@ -618,7 +612,6 @@ class Minima(_Algorithm):
         params = self._params
         idx_mins, mins = Maxima(**params)(-signal.copy())
         return idx_mins, -1 * mins
-
 
 class BootstrapEstimation(_Algorithm):
     """
@@ -670,7 +663,6 @@ class BootstrapEstimation(_Algorithm):
         estim = _np.sort(estim)
         return estim[int(len(estim) / 2)]
 
-
 class Durations(_Algorithm):
     """
     Compute durations of events starting from their start and stop indexes
@@ -709,7 +701,6 @@ class Durations(_Algorithm):
             else:
                 durations.append(_np.nan)
         return durations
-
 
 class Slopes(_Algorithm):
     """
@@ -750,7 +741,6 @@ class Slopes(_Algorithm):
             else:
                 slopes.append(_np.nan)
         return slopes
-
 
 class BeatOutliers(_Algorithm):
     """
@@ -822,7 +812,6 @@ class BeatOutliers(_Algorithm):
                 counter_bad = 0
 
         return id_bad_ibi
-
 
 class FixIBI(_Algorithm):
     """

@@ -4,8 +4,9 @@
 # from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
 
 import numpy as _np
-from ..BaseAlgorithm import Algorithm as _Algorithm
-from ..tools.Tools import PeakDetection as _PeakDetection, PeakSelection as _Algorithmelection, Durations as _Durations, \
+from ..processing import Algorithm as _Algorithm
+from ..processing.tools import PeakDetection as _PeakDetection,\
+    PeakSelection as _Algorithmelection, Durations as _Durations,\
     Slopes as _Slopes
 
 # __author__ = 'AleB'

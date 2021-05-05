@@ -2,10 +2,10 @@
 # from __future__ import division
 
 import numpy as _np
+from ..processing import Algorithm as _Algorithm
 
-from ..BaseAlgorithm import Algorithm as _Algorithm
-from ..tools.Tools import Diff as _Diff
-from ..Signal import EvenlySignal as _EvenlySignal, Signal as _Signal
+from ..processing.tools import Diff as _Diff
+from ..signal import EvenlySignal as _EvenlySignal, Signal as _Signal
 
 
 # __author__ = 'AleB'

@@ -1,18 +1,10 @@
-# coding=utf-8
-# from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
-from .Signal import Signal as _Signal
-# from .Utility import PhUI as _PhUI #was pyphysio.Utility
+from ..signal import Signal as _Signal
 import numpy as _np
-# __author__ = 'AleB'
-
 
 class Algorithm(object):
     """
-    This is the algorithm container super class. It (is abstract) should be used only to be extended.
+    This is the algorithm container super class. It should be used only to be extended.
     """
-    # __metaclass__ = _ABCMeta
-
-    # _log = None
 
     def __init__(self, **kwargs):
         """
@@ -62,18 +54,6 @@ class Algorithm(object):
             return self._params[param]
 
 
-    # @classmethod
-    # @_abstract
-    # def is_compatible(cls, signal):
-    #     """
-    #     Placeholder for the subclasses
-    #     :returns: Weather nature is compatible or not
-    #     @raise NotImplementedError: Ever
-    #     """
-    #     pass
-
-    # @classmethod
-    # @_abstract
     def algorithm(cls, data):
         """
         Placeholder for the subclasses
@@ -82,3 +62,24 @@ class Algorithm(object):
         :param data:
         """
         pass
+
+def algo(function, **kwargs):
+    """
+    Builds on the fly a new algorithm class using the passed function and params if passed.
+    :param function: function(data, params) to be called
+    :param kwargs: parameters to pass to the function.
+    :return: An algorithm class if params is None else a parametrized algorithm instance.
+    """
+
+    class Custom(_Algorithm):
+        def __init__(self, **kwargs):
+            _Algorithm.__init__(self, **kwargs)
+
+        def algorithm(self, signal):
+            params = self._params
+            return function(signal, params)
+
+    if len(kwargs) == 0:
+        return Custom
+    else:
+        return Custom(**kwargs)

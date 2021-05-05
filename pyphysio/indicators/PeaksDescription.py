@@ -1,33 +1,17 @@
 # coding=utf-8
-from __future__ import division
-
-from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
+# from __future__ import division
+# 
+# from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
 
 import numpy as _np
-from ..BaseIndicator import Indicator as _Indicator
-from ..tools.Tools import PeakDetection as _PeakDetection, PeakSelection as _PeakSelection, Durations as _Durations, \
+from ..BaseAlgorithm import Algorithm as _Algorithm
+from ..tools.Tools import PeakDetection as _PeakDetection, PeakSelection as _Algorithmelection, Durations as _Durations, \
     Slopes as _Slopes
 
-__author__ = 'AleB'
+# __author__ = 'AleB'
 
 
-class _Peaks(_Indicator):
-    """
-    Peaks base class
-    """
-    __metaclass__ = _ABCMeta
-
-    def __init__(self, delta, **kwargs):
-        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
-        _Indicator.__init__(self, delta=delta, **kwargs)
-
-    @classmethod
-    @_abstract
-    def algorithm(cls, data, params):
-        pass
-
-
-class PeaksMax(_Peaks):
+class PeaksMax(_Algorithm):
     """
     Return the maximum amplitude of detected peaks.
 
@@ -43,22 +27,24 @@ class PeaksMax(_Peaks):
     
     """
     def __init__(self, delta, **kwargs):
-        _Indicator.__init__(self, delta=delta, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        _Algorithm.__init__(self, delta=delta, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
+        
         delta = params['delta']
 
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
 
         if len(idx_maxs) == 0:
-            cls.warn("No peak found")
+            print("No peak found")
             return _np.nan
         else:
             return _np.nanmax(val_maxs)
 
 
-class PeaksMin(_Peaks):
+class PeaksMin(_Algorithm):
     """
     Return the minimum amplitude of detected peaks.
 
@@ -74,22 +60,23 @@ class PeaksMin(_Peaks):
     
     """
     def __init__(self, delta, **kwargs):
-        _Indicator.__init__(self, delta=delta, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        _Algorithm.__init__(self, delta=delta, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
 
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(data)
+        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
 
         if len(idx_maxs) == 0:
-            cls.warn("No peak found, returning numpy.nan")
+            print("No peak found, returning numpy.nan")
             return _np.nan
         else:
             return _np.nanmin(val_maxs)
 
 
-class PeaksMean(_Peaks):
+class PeaksMean(_Algorithm):
     """
     Return the average amplitude of detected peaks.
 
@@ -105,22 +92,23 @@ class PeaksMean(_Peaks):
     
     """
     def __init__(self, delta, **kwargs):
-        _Indicator.__init__(self, delta=delta, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        _Algorithm.__init__(self, delta=delta, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
 
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(data)
+        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
 
         if len(idx_maxs) == 0:
-            cls.warn("No peak found")
+            print("No peak found")
             return _np.nan
         else:
             return _np.nanmean(val_maxs)
 
 
-class PeaksNum(_Peaks):
+class PeaksNum(_Algorithm):
     """
     Return the number of detected peaks.
 
@@ -136,39 +124,22 @@ class PeaksNum(_Peaks):
     
     """
     def __init__(self, delta, **kwargs):
-        _Indicator.__init__(self, delta=delta, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        _Algorithm.__init__(self, delta=delta, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
-
+        
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
 
         if len(idx_maxs) == 0:
-            cls.warn("No peak found")
+            print("No peak found")
             return _np.nan
         else:
             return len(idx_maxs)
 
-
-class _PeaksInterval(_Peaks):
-    """
-    Peaks base class
-    """
-    __metaclass__ = _ABCMeta
-
-    def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        assert win_pre > 0, 'win_pre must be > 0'
-        assert win_post > 0, 'win_post must be > 0'
-        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-
-    @classmethod
-    @_abstract
-    def algorithm(cls, data, params):
-        pass
-
-
-class DurationMin(_PeaksInterval):
+class DurationMin(_Algorithm):
     """
     Return the minimum duration of detected peaks.
 
@@ -188,30 +159,33 @@ class DurationMin(_PeaksInterval):
     
     """
     def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        assert win_pre > 0, 'win_pre must be > 0'
+        assert win_post > 0, 'win_post must be > 0'
+        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
 
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
         if len(idx_maxs) == 0:
-            cls.warn("No peaks found")
+            print("No peaks found")
             return _np.nan
 
-        idxs_start, idxs_stop = _PeakSelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
+        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
 
         if len(idxs_start) == 0:
-            cls.warn("Unable to detect the start of the peaks")
+            print("Unable to detect the start of the peaks")
             return _np.nan
         else:
             durations = _Durations(starts=idxs_start, stops=idxs_stop)(signal)
             return _np.nanmin(_np.array(durations))
 
 
-class DurationMax(_PeaksInterval):
+class DurationMax(_Algorithm):
     """
     Return the maximum duration of detected peaks.
 
@@ -231,10 +205,13 @@ class DurationMax(_PeaksInterval):
     
     """
     def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        assert win_pre > 0, 'win_pre must be > 0'
+        assert win_post > 0, 'win_post must be > 0'
+        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
 
         delta = params['delta']
         win_pre = params['win_pre']
@@ -242,20 +219,20 @@ class DurationMax(_PeaksInterval):
 
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
         if len(idx_maxs) == 0:
-            cls.warn("No peaks found")
+            print("No peaks found")
             return _np.nan
 
-        idxs_start, idxs_stop = _PeakSelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
+        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
 
         if len(idxs_start) == 0:
-            cls.warn("Unable to detect the start of the peaks")
+            print("Unable to detect the start of the peaks")
             return _np.nan
         else:
             durations = _Durations(starts=idxs_start, stops=idxs_stop)(signal)
             return _np.nanmax(_np.array(durations))
 
 
-class DurationMean(_PeaksInterval):
+class DurationMean(_Algorithm):
     """
     Return the average duration of detected peaks.
 
@@ -275,30 +252,33 @@ class DurationMean(_PeaksInterval):
     
     """
     def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        assert win_pre > 0, 'win_pre must be > 0'
+        assert win_post > 0, 'win_post must be > 0'
+        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
 
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
         if len(idx_maxs) == 0:
-            cls.warn("No peaks found")
+            print("No peaks found")
             return _np.nan
 
-        idxs_start, idxs_stop = _PeakSelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
+        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
 
         if len(idxs_start) == 0:
-            cls.warn("Unable to detect the start of the peaks")
+            print("Unable to detect the start of the peaks")
             return _np.nan
         else:
             durations = _Durations(starts=idxs_start, stops=idxs_stop)(signal)
             return _np.nanmean(_np.array(durations))
 
 
-class SlopeMin(_PeaksInterval):
+class SlopeMin(_Algorithm):
     """
     Return the minimum slope of detected peaks.
 
@@ -318,30 +298,33 @@ class SlopeMin(_PeaksInterval):
     
     """
     def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        assert win_pre > 0, 'win_pre must be > 0'
+        assert win_post > 0, 'win_post must be > 0'
+        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
 
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
         if len(idx_maxs) == 0:
-            cls.warn("No peaks found")
+            print("No peaks found")
             return _np.nan
 
-        idxs_start, idxs_stop = _PeakSelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
+        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
         
         if len(idxs_start) == 0:
-            cls.warn("Unable to detect the start of the peaks")
+            print("Unable to detect the start of the peaks")
             return _np.nan
         else:
             slopes = _Slopes(starts=idxs_start, peaks=idx_maxs)(signal)
             return _np.nanmin(_np.array(slopes))
 
 
-class SlopeMax(_PeaksInterval):
+class SlopeMax(_Algorithm):
     """
     Return the maximum slope of detected peaks.
 
@@ -361,30 +344,33 @@ class SlopeMax(_PeaksInterval):
     
     """
     def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        assert win_pre > 0, 'win_pre must be > 0'
+        assert win_post > 0, 'win_post must be > 0'
+        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
 
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
         if len(idx_maxs) == 0:
-            cls.warn("No peaks found")
+            print("No peaks found")
             return _np.nan
 
-        idxs_start, idxs_stop = _PeakSelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
+        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
         
         if len(idxs_start) == 0:
-            cls.warn("Unable to detect the start of the peaks")
+            print("Unable to detect the start of the peaks")
             return _np.nan
         else:
             slopes = _Slopes(starts=idxs_start, peaks=idx_maxs)(signal)
             return _np.nanmax(_np.array(slopes))
 
 
-class SlopeMean(_PeaksInterval):
+class SlopeMean(_Algorithm):
     """
     Return the average slope of detected peaks.
 
@@ -404,22 +390,26 @@ class SlopeMean(_PeaksInterval):
     
     """
     def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+        assert win_pre > 0, 'win_pre must be > 0'
+        assert win_post > 0, 'win_post must be > 0'
+        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    
+    def algorithm(self, signal):
+        params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
 
         idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
         if len(idx_maxs) == 0:
-            cls.warn("No peaks found")
+            print("No peaks found")
             return _np.nan
 
-        idxs_start, idxs_stop = _PeakSelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
+        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
         if len(idxs_start) == 0:
-            cls.warn("Unable to detect the start of the peaks")
+            print("Unable to detect the start of the peaks")
             return _np.nan
         else:
             slopes = _Slopes(starts=idxs_start, peaks=idx_maxs)(signal)

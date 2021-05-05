@@ -1,18 +1,18 @@
 # coding=utf-8
 from __future__ import division
 import numpy as _np
-from ..BaseEstimator import Estimator as _Estimator
+from ..BaseAlgorithm import Algorithm as _Algorithm
 from ..Signal import UnevenlySignal as _UnevenlySignal, EvenlySignal as _EvenlySignal
 from ..filters.Filters import IIRFilter as _IIRFilter, DeConvolutionalFilter as _DeConvolutionalFilter, \
     ConvolutionalFilter as _ConvolutionalFilter
 from ..tools.Tools import SignalRange as _SignalRange, PeakDetection as _PeakDetection, Minima as _Minima, \
     PeakSelection as _PeakSelection, Diff as _Diff
 
-__author__ = 'AleB'
+# __author__ = 'AleB'
 
 
 # IBI ESTIMATION
-class BeatFromBP(_Estimator):
+class BeatFromBP(_Algorithm):
     """
     Identify the beats in a Blood Pulse (BP) signal and compute the IBIs.
     Optimized to identify the percussion peak.
@@ -44,10 +44,10 @@ class BeatFromBP(_Estimator):
             self.warn("Parameter bpm_max out of reasonable range (10, 400)")
         assert 0 < win_pre <= 1, "Window pre peak value should be in (0 and 1]"
         assert 0 < win_post <= 1, "Window post peak value should be in (0 and 1]"
-        _Estimator.__init__(self, bpm_max=bpm_max, win_pre=win_pre, win_post=win_post)
+        _Algorithm.__init__(self, bpm_max=bpm_max, win_pre=win_pre, win_post=win_post)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         fsamp = signal.get_sampling_freq()
         bpm_max = params["bpm_max"]
         win_pre = params["win_pre"] * fsamp
@@ -100,7 +100,7 @@ class BeatFromBP(_Estimator):
                 peak = idx_mins[0]
                 true_peaks.append(start_ + peak_obs + peak + 1)
             else:
-                cls.warn('Peak not found; idx_beat: ' + str(idx_beat))
+                print('Peak not found; idx_beat: ' + str(idx_beat))
                 pass
 
         # STAGE 3 - FINALIZE computing IBI
@@ -111,14 +111,14 @@ class BeatFromBP(_Estimator):
         ibi = _UnevenlySignal(values=ibi_values,
                               sampling_freq=fsamp,
                               start_time=signal.get_start_time(),
-                              signal_type='IBI',
+                              info = signal.get_info(),
                               x_values=idx_ibi,
                               x_type='indices',
                               duration=signal.get_duration())
         return ibi
 
 
-class BeatFromECG(_Estimator):
+class BeatFromECG(_Algorithm):
     """
     Identify the beats in an ECG signal and compute the IBIs.
 
@@ -148,10 +148,10 @@ class BeatFromECG(_Estimator):
             self.warn("Parameter bpm_max out of reasonable range (10, 400)")
         assert delta >= 0, "Delta value should be positive (or equal to 0 if automatically computed)"
         assert 0 < k < 1, "K coefficient must be in the range (0,1)"
-        _Estimator.__init__(self, bpm_max=bpm_max, delta=delta, k=k)
+        _Algorithm.__init__(self, bpm_max=bpm_max, delta=delta, k=k)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         bpm_max, delta, k = params["bpm_max"], params["delta"], params["k"]
         fmax = bpm_max / 60
 
@@ -179,7 +179,6 @@ class BeatFromECG(_Estimator):
         ibi = _UnevenlySignal(values=ibi_values,
                               sampling_freq=fsamp,
                               start_time=signal.get_start_time(),
-                              signal_type='IBI',
                               x_values=idx_ibi,
                               x_type='indices',
                               duration=signal.get_duration())
@@ -188,7 +187,7 @@ class BeatFromECG(_Estimator):
 
 
 # PHASIC ESTIMATION
-class DriverEstim(_Estimator):
+class DriverEstim(_Algorithm):
     """
     Estimates the driver of an EDA signal according to (see Notes)
 
@@ -219,10 +218,10 @@ class DriverEstim(_Estimator):
     def __init__(self, t1=.75, t2=2):
         assert t1 > 0, "t1 value has to be positive"
         assert t2 > 0, "t2 value has to be positive"
-        _Estimator.__init__(self, t1=t1, t2=t2)
+        _Algorithm.__init__(self, t1=t1, t2=t2)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         t1 = params['t1']
         t2 = params['t2']
 
@@ -249,7 +248,7 @@ class DriverEstim(_Estimator):
         # gaussian smoothing
         driver = _ConvolutionalFilter(irftype='gauss', win_len=_np.max([0.2, 1 / fsamp]) * 8, normalize=True)(driver)
 
-        driver = _EvenlySignal(driver, sampling_freq=fsamp, start_time=signal.get_start_time(),signal_type="dEDA")
+        driver = _EvenlySignal(driver, sampling_freq=fsamp, start_time=signal.get_start_time(),info=signal.get_info())
         return driver
 
     @staticmethod
@@ -283,7 +282,7 @@ class DriverEstim(_Estimator):
         return bateman
 
 
-class PhasicEstim(_Estimator):
+class PhasicEstim(_Algorithm):
     """
     Estimates the phasic and tonic components of a EDA driver function.
     It uses a detection algorithm based on the derivative of the driver.
@@ -324,10 +323,10 @@ class PhasicEstim(_Estimator):
         assert grid_size > 0, "Step of the interpolation grid has to be positive"
         assert win_pre > 0,  "Window pre peak value has to be positive"
         assert win_post > 0, "Window post peak value has to be positive"
-        _Estimator.__init__(self, delta=delta, grid_size=grid_size, win_pre=win_pre, win_post=win_post)
+        _Algorithm.__init__(self, delta=delta, grid_size=grid_size, win_pre=win_pre, win_post=win_post)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         delta = params["delta"]
         grid_size = params["grid_size"]
         win_pre = params['win_pre']
@@ -357,7 +356,7 @@ class PhasicEstim(_Estimator):
         idx_grid = _np.arange(0, len(driver_no_peak) - 1, grid_size * fsamp)
         idx_grid = _np.r_[idx_grid, len(driver_no_peak) - 1]
 
-        driver_grid = _UnevenlySignal(driver_no_peak[idx_grid], sampling_freq = fsamp, start_time= signal.get_start_time(), signal_type="dEDA",
+        driver_grid = _UnevenlySignal(driver_no_peak[idx_grid], sampling_freq = fsamp, start_time= signal.get_start_time(), info=signal.get_info(),
                                       x_values=idx_grid, x_type='indices', duration=signal.get_duration())
         tonic = driver_grid.to_evenly(kind='cubic')
 
@@ -366,7 +365,7 @@ class PhasicEstim(_Estimator):
         return phasic, tonic, driver_no_peak
 
 
-class Energy(_Estimator):
+class Energy(_Algorithm):
     """
     Estimate the local energy of the signal, by windowing
 
@@ -392,10 +391,10 @@ class Energy(_Estimator):
     def __init__(self, win_len, win_step, smooth=True):
         assert win_len > 0, "Window length has to be positive"
         assert win_step > 0, "Window step has to be positive"
-        _Estimator.__init__(self, win_len=win_len, win_step=win_step, smooth=smooth)
+        _Algorithm.__init__(self, win_len=win_len, win_step=win_step, smooth=smooth)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         win_len = params['win_len']
         win_step = params['win_step']
         smooth = params['smooth']

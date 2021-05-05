@@ -1,19 +1,19 @@
 # coding=utf-8
-from __future__ import division
+# from __future__ import division
 import numpy as _np
 import scipy.stats as _stats
 from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_design as _filter_design, \
     deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve
-from matplotlib.pyplot import plot as _plot
-from ..BaseFilter import Filter as _Filter
-from ..Signal import EvenlySignal as _EvenlySignal, UnevenlySignal as _UnevenlySignal
-from ..Utility import abstractmethod as _abstract
+# from matplotlib.pyplot import plot as _plot
+from ..BaseAlgorithm import Algorithm as _Algorithm
+from ..Signal import UnevenlySignal as _UnevenlySignal
+# from ..Utility import abstractmethod as _abstract
 from ..tools.Tools import SignalRange
 from collections import Sequence
-__author__ = 'AleB'
+# __author__ = 'AleB'
 
 
-class Normalize(_Filter):
+class Normalize(_Algorithm):
     """
     Normalized the input signal using the general formula: ( signal - BIAS ) / RANGE
 
@@ -44,27 +44,28 @@ class Normalize(_Filter):
             "norm_method must be one of 'mean', 'standard', 'min', 'maxmin', 'custom'"
         if norm_method == "custom":
             assert norm_range != 0, "norm_range must not be zero"
-        _Filter.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range)
+        _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range)
 
-    @classmethod
-    def algorithm(cls, signal, params):
-        from ..indicators.TimeDomain import Mean as _Mean, StDev as _StDev
+    def algorithm(self, signal):
 
+        from ..indicators.TimeDomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
+                
+        params = self._params
         method = params['norm_method']
         if method == "mean":
             return signal - _Mean()(signal)
         elif method == "standard":
             return (signal - _Mean()(signal)) / _StDev()(signal)
         elif method == "min":
-            return signal - _np.min(signal)
+            return signal - _Min(signal)
         elif method == "maxmin":
-            return (signal - _np.min(signal)) / (_np.max(signal) - _np.min(signal))
+            return (signal - _Min(signal)) / (_Max(signal) - _Min(signal))
         elif method == "custom":
             return (signal - params['norm_bias']) / params['norm_range']
 
 
 
-class IIRFilter(_Filter):
+class IIRFilter(_Algorithm):
     """
     Filter the input signal using an Infinite Impulse Response filter.
 
@@ -101,16 +102,14 @@ class IIRFilter(_Filter):
         assert att > loss, "Attenuation value should be greater than loss value"
         assert ftype in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel'],\
             "Filter type must be in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel']"
-        _Filter.__init__(self, fp=fp, fs=fs, loss=loss, att=att, ftype=ftype)
+        _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, ftype=ftype)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        assert not isinstance(signal, _UnevenlySignal), 'Filtering Unevenly signal is undefined.'
+        
+        params = self._params
         fsamp = signal.get_sampling_freq()
         fp, fs, loss, att, ftype = params["fp"], params["fs"], params["loss"], params["att"], params["ftype"]
-
-        if isinstance(signal, _UnevenlySignal):
-            cls.warn('Filtering Unevenly signal is undefined. Returning original signal.')
-            return signal
 
         nyq = 0.5 * fsamp
         fp = _np.array(fp)
@@ -118,22 +117,19 @@ class IIRFilter(_Filter):
 
         wp = fp / nyq
         ws = fs / nyq
-        # noinspection PyTupleAssignmentBalance
+
         b, a = _filter_design.iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
 
         sig_filtered = signal.clone_properties(_filtfilt(b, a, signal.get_values()))
 
         if _np.isnan(sig_filtered[0]):
-            cls.warn('Filter parameters allow no solution. Returning original signal.')
+            print('Filter parameters allow no solution. Returning original signal.')
             return signal
         else:
             return sig_filtered
 
-    @_abstract
-    def plot(self):
-        pass
 
-class FIRFilter(_Filter):
+class FIRFilter(_Algorithm):
     """
     Filter the input signal using a Finite Impulse Response filter.
 
@@ -170,16 +166,14 @@ class FIRFilter(_Filter):
         assert att > loss, "Attenuation value should be greater than loss value"
         assert wtype in ['hamming'],\
             "Window type must be in ['hamming']"
-        _Filter.__init__(self, fp=fp, fs=fs, loss=loss, att=att, wtype=wtype)
+        _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, wtype=wtype)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        assert not isinstance(signal, _UnevenlySignal), 'Filtering Unevenly signal is undefined.'
+        
+        params = self._params
         fsamp = signal.get_sampling_freq()
         fp, fs, loss, att, wtype = params["fp"], params["fs"], params["loss"], params["att"], params["wtype"]
-
-        if isinstance(signal, _UnevenlySignal):
-            cls.warn('Filtering Unevenly signal is undefined. Returning original signal.')
-            return signal
 
         fp = _np.array(fp)
         fs = _np.array(fs)
@@ -215,16 +209,12 @@ class FIRFilter(_Filter):
         sig_filtered = signal.clone_properties(_convolve(signal.get_values(), b, mode='same'))
 
         if _np.isnan(sig_filtered[0]):
-            cls.warn('Filter parameters allow no solution. Returning original signal.')
+            print('Filter parameters allow no solution. Returning original signal.')
             return signal
         else:
             return sig_filtered
 
-    @_abstract
-    def plot(self):
-        pass
-
-class KalmanFilter(_Filter):
+class KalmanFilter(_Algorithm):
     def __init__(self, R, ratio=1, win_len=1, win_step=0.5):
         assert R > 0, "R should be positive"
         if ratio is not None:
@@ -232,10 +222,10 @@ class KalmanFilter(_Filter):
         assert win_len > 0, "Window length value should be positive"
         assert win_step > 0, "Window step value should be positive"
         
-        _Filter.__init__(self, R=R, ratio=ratio, win_len=win_len, win_step=win_step)
+        _Algorithm.__init__(self, R=R, ratio=ratio, win_len=win_len, win_step=win_step)
         
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal, params):
+        params = self._params
         R = params['R']
         ratio = params['ratio']
         win_len = params['win_len']
@@ -261,15 +251,14 @@ class KalmanFilter(_Filter):
         x_out = signal.clone_properties(x_out)
         return(x_out)
 
-############
-class ImputeNAN(_Filter):
+
+class ImputeNAN(_Algorithm):
     def __init__(self, win_len=5, allnan='nan'):
         assert win_len>0, "win_len should be >0"
         assert allnan in ['zeros', 'nan']
-        _Filter.__init__(self, win_len = win_len, allnan=allnan)
+        _Algorithm.__init__(self, win_len = win_len, allnan=allnan)
         
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
         def group_consecutives(vals, step=1):
             """Return list of consecutive lists of numbers from vals (number list)."""
             run = []
@@ -285,6 +274,7 @@ class ImputeNAN(_Filter):
             return result
 
         #%
+        params = self._params
         win_len = params['win_len']*signal.get_sampling_freq()
         allnan = params['allnan']
         
@@ -337,17 +327,17 @@ class ImputeNAN(_Filter):
         return(signal_out)
 
 
-class RemoveSpikes(_Filter):
+class RemoveSpikes(_Algorithm):
     def __init__(self, K=2, N=1, dilate=0, D=0.95, method='step'):
         assert K > 0, "K should be positive"
         assert isinstance(N, int) and N>0, "N value not valid"
         assert dilate>=0, "dilate should be >= 0.0"
         assert D>=0, "D should be >= 0.0"
         assert method in ['linear', 'step']
-        _Filter.__init__(self, K=K, N=N, dilate=dilate, D=D, method=method)
+        _Algorithm.__init__(self, K=K, N=N, dilate=dilate, D=D, method=method)
     
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         K = params['K']
         N = params['N']
         dilate = params['dilate']
@@ -390,7 +380,7 @@ class RemoveSpikes(_Filter):
         x_out = signal.clone_properties(x_out)
         return(x_out)
 
-class DenoiseEDA(_Filter):
+class DenoiseEDA(_Algorithm):
     """
     Remove noise due to sensor displacement from the EDA signal.
     
@@ -415,10 +405,11 @@ class DenoiseEDA(_Filter):
     def __init__(self, threshold, win_len=2):
         assert threshold > 0, "Threshold value should be positive"
         assert win_len > 0, "Window length value should be positive"
-        _Filter.__init__(self, threshold=threshold, win_len=win_len)
+        _Algorithm.__init__(self, threshold=threshold, win_len=win_len)
 
     @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         threshold = params['threshold']
         win_len = params['win_len']
 
@@ -443,7 +434,7 @@ class DenoiseEDA(_Filter):
         return signal_out
 
 
-class ConvolutionalFilter(_Filter):
+class ConvolutionalFilter(_Algorithm):
     """
     Filter a signal by convolution with a given impulse response function (IRF).
 
@@ -472,11 +463,11 @@ class ConvolutionalFilter(_Filter):
         assert irftype in ['gauss', 'rect', 'triang', 'dgauss', 'custom'],\
             "IRF type must be in ['gauss', 'rect', 'triang', 'dgauss', 'custom']"
         assert irftype == 'custom' or win_len > 0, "Window length value should be positive"
-        _Filter.__init__(self, irftype=irftype, win_len=win_len, irf=irf, normalize=normalize)
+        _Algorithm.__init__(self, irftype=irftype, win_len=win_len, irf=irf, normalize=normalize)
 
     # TODO (Andrea): TEST normalization and results
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         irftype = params["irftype"]
         normalize = params["normalize"]
 
@@ -484,24 +475,19 @@ class ConvolutionalFilter(_Filter):
         irf = None
 
         if irftype == 'custom':
-            if 'irf' not in params:
-                cls.error("'irf' parameter missing.")
-                return signal
-            else:
-                irf = _np.array(params["irf"])
-                n = len(irf)
+            assert 'irf' in params, "'irf' parameter should be defined when irftype = 'custom'"
+                
+            irf = _np.array(params["irf"])
+            n = len(irf)
         else:
-            if 'win_len' not in params:
-                cls.error("'win_len' parameter missing.")
-                return signal
-            else:
-                n = int(params['win_len'] * fsamp)
+            assert 'win_len' in params, "'win_len' should be defined when irftype is not 'custom'"
+                
+            n = int(params['win_len'] * fsamp)
 
-                if irftype == 'gauss':
-                    if n < 8:
-                        # TODO (Andrea): test, sometimes it returns nan
-                        cls.error(
-                            "'win_len' too short to generate a gaussian IRF, expected > " + str(_np.ceil(8 / fsamp)))
+            if irftype == 'gauss':
+                if n < 8:
+                    # TODO (Andrea): test, sometimes it returns nan
+                    print(f"'win_len' too short to generate a gaussian IRF, expected > {str(_np.ceil(8 / fsamp))}")
                     std = _np.floor(n / 8)
                     irf = _gaussian(n, std)
                 elif irftype == 'rect':
@@ -529,12 +515,8 @@ class ConvolutionalFilter(_Filter):
         signal_out = signal.clone_properties(signal_f[n:-n])
         return signal_out
 
-    @classmethod
-    def plot(cls):
-        pass
 
-
-class DeConvolutionalFilter(_Filter):
+class DeConvolutionalFilter(_Algorithm):
     """
     Filter a signal by deconvolution with a given impulse response function (IRF).
 
@@ -562,10 +544,10 @@ class DeConvolutionalFilter(_Filter):
     def __init__(self, irf, normalize=True, deconv_method='sps'):
         # TODO (Andrea): "check that irf[0]>0 to avoid scipy BUG" is it normal? Need to put a check?
         assert deconv_method in ['fft', 'sps'], "Deconvolution method not valid"
-        _Filter.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
+        _Algorithm.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         irf = params["irf"]
         normalize = params["normalize"]
         deconvolution_method = params["deconv_method"]
@@ -578,15 +560,12 @@ class DeConvolutionalFilter(_Filter):
             fft_irf = _np.fft.fft(irf, n=l)
             out = _np.fft.ifft(fft_signal / fft_irf)
         elif deconvolution_method == 'sps':
-            cls.warn('sps based deconvolution needs to be tested. Use carefully.')
+            print('sps based deconvolution needs to be tested. Use carefully.')
             out, _ = _deconvolve(signal, irf)
         else:
-            cls.error('Deconvolution method not implemented. Returning original signal.')
+            print('Deconvolution method not implemented. Returning original signal.')
             out = signal.get_values()
 
         out_signal = signal.clone_properties(abs(out))
 
         return out_signal
-
-    def plot(self):
-        _plot(self._params['irf'])

@@ -1,16 +1,16 @@
 # coding=utf-8
-from __future__ import division
+# from __future__ import division
 
-from ..BaseIndicator import Indicator as _Indicator
+from ..BaseAlgorithm import Algorithm as _Algorithm
 from ..tools.Tools import Diff as _Diff
 from ..indicators.TimeDomain import Mean as _Mean, StDev as _StDev
 from scipy.spatial.distance import cdist as _cd
 import numpy as _np
 
-__author__ = 'AleB'
+# __author__ = 'AleB'
 
 
-class PoincareSD1(_Indicator):
+class PoincareSD1(_Algorithm):
     """
     Return the SD1 value of the Poincare' plot of input Inter Beat Intervals
 
@@ -22,21 +22,21 @@ class PoincareSD1(_Indicator):
     """
 
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
+    def algorithm(self, signal):
         """
         Calculates Poincare SD 1 and 2
         @return: (SD1, SD2)
         @rtype: (array, array)
         """
-        xd, yd = _np.array(list(data[:-1])), _np.array(list(data[1:]))
+        
+        xd, yd = _np.array(list(signal[:-1])), _np.array(list(signal[1:]))
         sd1 = _np.std((xd - yd) / _np.sqrt(2.0))
         return sd1
 
 
-class PoincareSD2(_Indicator):
+class PoincareSD2(_Algorithm):
     """
     Return the SD2 value of the Poincare' plot of input Inter Beat Intervals
 
@@ -48,21 +48,20 @@ class PoincareSD2(_Indicator):
     """
 
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
+    def algorithm(self, signal):
         """
         Calculates Poincare SD 1 and 2
         @return: (SD1, SD2)
         @rtype: (array, array)
         """
-        xd, yd = _np.array(list(data[:-1])), _np.array(list(data[1:]))
+        xd, yd = _np.array(list(signal[:-1])), _np.array(list(signal[1:]))
         sd2 = _np.std((xd + yd) / _np.sqrt(2.0))
         return sd2
 
 
-class PoincareSD1SD2(_Indicator):
+class PoincareSD1SD2(_Algorithm):
     """
     Return the SD1/SD2 value of the Poincare' plot of input Inter Beat Intervals
 
@@ -74,21 +73,20 @@ class PoincareSD1SD2(_Indicator):
     """
 
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
+    def algorithm(self, signal):
         """
         Calculates Poincare SD 1 and 2
         @return: (SD1, SD2)
         @rtype: (array, array)
         """
-        sd1 = PoincareSD1()(data)
-        sd2 = PoincareSD2()(data)
+        sd1 = PoincareSD1()(signal)
+        sd2 = PoincareSD2()(signal)
         return sd1 / sd2
 
 
-class PoinEll(_Indicator):
+class PoinEll(_Algorithm):
     """
     Return the SD1*SD2*pi value of the Poincare' plot of input Inter Beat Intervals
 
@@ -100,16 +98,15 @@ class PoinEll(_Indicator):
     """
 
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-        sd1 = PoincareSD1()(data)
-        sd2 = PoincareSD2()(data)
+    def algorithm(self, signal):
+        sd1 = PoincareSD1()(signal)
+        sd2 = PoincareSD2()(signal)
         return sd1 * sd2 * _np.pi
 
 
-class PNNx(_Indicator):
+class PNNx(_Algorithm):
     """
     Computes the relative frequency of pairs of consecutive samples s1, s2 such that s1-s2 >= 'threshold' in
     milliseconds.
@@ -126,17 +123,18 @@ class PNNx(_Indicator):
     """
 
     def __init__(self, threshold, **kwargs):
-        _Indicator.__init__(self, threshold=threshold, **kwargs)
+        _Algorithm.__init__(self, threshold=threshold, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-        if len(data) ==0:
+    def algorithm(self, signal):
+        params = self._params
+        
+        if len(signal) ==0:
             return _np.nan
         else:
-            return NNx.algorithm(data, params) / float(len(data))
+            return NNx.algorithm(signal, params) / float(len(signal))
 
 
-class NNx(_Indicator):
+class NNx(_Algorithm):
     """
     Counts the pairs of consecutive samples s1, s2 such that s1-s2 >= 'threshold' in milliseconds.
     
@@ -148,26 +146,27 @@ class NNx(_Indicator):
 
     def __init__(self, threshold, **kwargs):
         assert threshold > 0, "Not implemented for threshold not > 0"
-        _Indicator.__init__(self, threshold=threshold, **kwargs)
+        _Algorithm.__init__(self, threshold=threshold, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
+        params = self._params
         th = params['threshold']
         diff = _Diff()(signal)
         return sum(1.0 for x in diff * 1000 if x > th)
 
 
-class _Embed(_Indicator):
+class _Embed(_Algorithm):
     def __init__(self, dimension, **kwargs):
-        _Indicator.__init__(self, dimension=dimension, **kwargs)
+        _Algorithm.__init__(self, dimension=dimension, **kwargs)
 
-    @classmethod
-    def algorithm(cls, signal, params):
+    def algorithm(self, signal):
         """
         Calculates the the vector of the sequences of length 'subset_size' of the data
         @return: Data array with shape (l - n + 1, n) having l=len(data) and n=subset_size
         @rtype: array
         """
+        params = self._params
+        
         n = params['dimension']
         # t = params['delay']
         num = len(signal) - n + 1
@@ -181,7 +180,7 @@ class _Embed(_Indicator):
             return []
 
 
-class ApproxEntropy(_Indicator):
+class ApproxEntropy(_Algorithm):
     """
     Calculates Approximate Entropy
         
@@ -198,20 +197,20 @@ class ApproxEntropy(_Indicator):
 
     def __init__(self, radius=.5, **kwargs):
         assert radius > 0, "Parameter radius should be > 0"
-        _Indicator.__init__(self, radius=radius, **kwargs)
+        _Algorithm.__init__(self, radius=radius, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-        if len(data) < 3:
+    def algorithm(self, signal):
+        params = self._params
+        if len(signal) < 3:
             return _np.nan
         else:
             r = params['radius']
-            uj_m = _Embed(dimension=2, delay=1)(data)
-            uj_m1 = _Embed(dimension=3, delay=1)(data)
+            uj_m = _Embed(dimension=2, delay=1)(signal)
+            uj_m1 = _Embed(dimension=3, delay=1)(signal)
             card_elem_m = uj_m.shape[0]
             card_elem_m1 = uj_m1.shape[0]
 
-            r = r * _np.std(data)
+            r = r * _np.std(signal)
             d_m = _cd(uj_m, uj_m, 'chebyshev')
             d_m1 = _cd(uj_m1, uj_m1, 'chebyshev')
 
@@ -233,7 +232,7 @@ class ApproxEntropy(_Indicator):
             return phi_m - phi_m1
 
 
-class SampleEntropy(_Indicator):
+class SampleEntropy(_Algorithm):
     """
     Calculates Sample Entropy
         
@@ -250,21 +249,21 @@ class SampleEntropy(_Indicator):
 
     def __init__(self, radius=.5, **kwargs):
         assert radius > 0, "Parameter radius should be > 0"
-        _Indicator.__init__(self, radius=radius, **kwargs)
+        _Algorithm.__init__(self, radius=radius, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-        if len(data) < 4:
+    def algorithm(self, signal):
+        params = self._params
+        if len(signal) < 4:
             return _np.nan
         else:
             r = params['radius']
-            uj_m = _Embed(dimension=2, delay=1)(data)
-            uj_m1 = _Embed(dimension=3, delay=1)(data)
+            uj_m = _Embed(dimension=2, delay=1)(signal)
+            uj_m1 = _Embed(dimension=3, delay=1)(signal)
 
             num_elem_m = uj_m.shape[0]
             num_elem_m1 = uj_m1.shape[0]
 
-            r = r * _StDev()(data)
+            r = r * _StDev()(signal)
 
             d_m = _cd(uj_m, uj_m, 'chebyshev')
             d_m1 = _cd(uj_m1, uj_m1, 'chebyshev')
@@ -287,7 +286,7 @@ class SampleEntropy(_Indicator):
             return _np.log(cm / cm1)
 
 
-class DFAShortTerm(_Indicator):
+class DFAShortTerm(_Algorithm):
     """
     Calculate the alpha1 (short term) component index of the De-trended Fluctuation Analysis.
    
@@ -298,12 +297,11 @@ class DFAShortTerm(_Indicator):
     """
 
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-
-        x = data
+    def algorithm(self, signal):
+        
+        x = signal
         if len(x) < 16:
             return _np.nan
         else:
@@ -327,7 +325,7 @@ class DFAShortTerm(_Indicator):
             return _np.linalg.lstsq(_np.vstack([_np.log(l), _np.ones(len(l))]).T, _np.log(f))[0][0]
 
 
-class DFALongTerm(_Indicator):
+class DFALongTerm(_Algorithm):
     """
     Calculate the alpha2 (long term) component index of the De-trended Fluctuation Analysis.
    
@@ -338,11 +336,11 @@ class DFALongTerm(_Indicator):
     """
 
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-        x = data
+    def algorithm(self, signal):
+        
+        x = signal
         if len(x) < 64:
             return _np.nan
         else:

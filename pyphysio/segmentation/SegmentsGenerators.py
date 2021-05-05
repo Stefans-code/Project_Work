@@ -1,112 +1,11 @@
 # coding=utf-8
 import numpy as _np
-from ..Utility import PhUI as _PhUI, abstractmethod as _abstract
-from ..BaseSegmentation import SegmentsGenerator, Segment
+from numpy import asarray as _asarray
+# from ..Utility import abstractmethod as _abstract
+from ..BaseSegmentation import SegmentsWithLabelSignal as _SegmentsWithLabelSignal, Segment
 from ..Signal import Signal as _Signal
 
-__author__ = 'AleB'
-
-
-class _SegmentsWithLabelSignal(SegmentsGenerator):
-    # Assumed: label signal extended over the end by holding the value
-
-    def __init__(self, drop_cut=True, drop_mixed=True, **kwargs):
-        super(_SegmentsWithLabelSignal, self).__init__(drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
-        self._labsig = None
-
-    @_abstract
-    def init_segmentation(self):
-        pass
-
-    def next_segment(self):
-        if self._signal is None:
-            _PhUI.w("Can't preview the segments without a signal here. Use the syntax " +
-                    FixedSegments.__name__ + "(**params)(signal)")
-            raise StopIteration()
-
-        b, e, label = self.next_segment_mix_labels()
-        s = Segment(b, e, label, self._signal)
-        return s
-
-    @_abstract
-    def next_times(self):
-        pass
-
-    def check_drop_and_range(self, s, b, e):
-        drop = True, None, None
-
-        # signal segment bounds
-
-        # full under-range (empty) or full over-range (empty)
-        if e < s.get_start_time() or b >= s.get_end_time():
-            return drop
-
-        # part before start: mixed and shorter (as partially before the first label's begin)
-        if b < s.get_start_time():
-            if self._params['drop_mixed'] or self._params['drop_cut']:
-                # goto next segment (drop)
-                return drop
-            else:
-                # cut to start
-                b = s.get_start_time()
-
-        # part after end: shorter but not mixed (as half after the last label's end)
-        if e > s.get_end_time():
-            if self._params['drop_cut']:
-                # goto next segment (drop)
-                return drop
-            else:
-                # cut to start
-                e = s.get_end_time()
-
-        # Don't drop, inclusive begin time, exclusive end time
-        return False, b, e
-
-    def next_segment_mix_labels(self):
-        label = b = e = None
-        while True:
-            # break    ==> keep
-            # continue ==> drop
-
-            b, e = self.next_times()
-
-
-            drop, b, e = self.check_drop_and_range(self._signal, b, e)
-
-            if drop:
-                continue
-
-            if not isinstance(self._labsig, _Signal):
-                label = None
-            else:
-
-                drop, _, _ = self.check_drop_and_range(self._labsig, b, e)
-
-                if drop:
-                    # partially or completely out of labsig range and have to drop it
-                    label = None
-                    continue
-
-                # labels segment bounds, may be < 0 (None < 0)
-                first = self._labsig.get_iidx(b)
-                last = self._labsig.get_iidx(e)
-                
-                if first == last:
-                    last += 1
-
-                lab_seg = self._labsig.segment_iidx(first, last)
-                lab_first = lab_seg[0]
-
-                if len(lab_seg) == 1 or (lab_seg[:1:-1] == lab_first).all(): ###[AB]
-                    label = lab_first
-                else:
-                    if self._params['drop_mixed']:
-                        continue
-                    else:
-                        label = None
-            break
-
-        return b, e, label
+# __author__ = 'AleB'
 
 
 class RandomFixedSegments(_SegmentsWithLabelSignal):
@@ -134,47 +33,31 @@ class RandomFixedSegments(_SegmentsWithLabelSignal):
         Whether to drop segments that are shorter due to the crossing of the signal end.
     """
 
-    def __init__(self, N, width, start=None, stop = None, labels=None, drop_mixed=True, drop_cut=True, **kwargs):
-        super(RandomFixedSegments, self).__init__(N=N, width=width, start=start, stop=stop, labels=labels, drop_cut=drop_cut,
-                                            drop_mixed=drop_mixed, **kwargs)
+    def __init__(self, N, width, labels, drop_mixed=True, drop_cut=True, **kwargs):
+        super(RandomFixedSegments, self).__init__(N=N, width=width, labels=labels, 
+                                                  drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         assert N > 0
         assert width > 0
-        assert start is None or isinstance(start, float)
-        assert stop is None or isinstance(stop, float)
-        assert labels is None or isinstance(labels, _Signal),\
-            "The parameter 'labels' should be a Signal."
-        self._width = None
-        self._tst = None
-        self._tsp = None
-        self._i = None
+        assert isinstance(labels, _Signal), "The parameter 'labels' should be a Signal."
+        self._N = N
+        self._width = width
+        self._i = -1
 
-    def init_segmentation(self):
-        self._N = self._params["N"]
-        w = self._params["width"]
-        self._width = w 
-        self._labsig = self._params["labels"]
-        self._tst = self._params["start"]
-        self._tsp = self._params["stop"]
-        
-        #generate random start instants
-        tst = self._signal.get_start_time() if self._tst is None else self._tst
-        tsp = self._signal.get_end_time() if self._tsp is None else self._tsp
-        tsp = tsp - w
+        tst = labels.get_start_time()
+        tsp = labels.get_end_time() - width
         self._tst_randoms = _np.random.uniform(tst, tsp, self._N)
+        self._labsig = labels
         
     def next_times(self):
-        if self._i is None:
-            self._i = 0
+        self._i +=1
         
         if self._i < len(self._tst_randoms):
             b = self._tst_randoms[self._i]
             e = b + self._width
-            self._i += 1
             return b, e
         else:
             raise StopIteration()
             
-
 class FixedSegments(_SegmentsWithLabelSignal):
     """
     Fixed length segments iterator, specifying step and width in seconds.
@@ -202,32 +85,26 @@ class FixedSegments(_SegmentsWithLabelSignal):
         Whether to drop segments that are shorter due to the crossing of the signal end.
     """
 
-    def __init__(self, step, width=None, start=None, labels=None, drop_mixed=True, drop_cut=True, **kwargs):
-        super(FixedSegments, self).__init__(step=step, width=width, start=start, labels=labels, drop_cut=drop_cut,
-                                            drop_mixed=drop_mixed, **kwargs)
+    def __init__(self, step, width=None, labels=None, drop_mixed=True, drop_cut=True, **kwargs):
+        super(FixedSegments, self).__init__(step=step, width=width, labels=labels, drop_mixed=drop_mixed,
+                                            drop_cut=drop_cut, **kwargs)
         assert step > 0
         assert width is None or width > 0
-        assert start is None or start > 0
         assert labels is None or isinstance(labels, _Signal),\
             "The parameter 'labels' should be a Signal."
-        self._step = None
-        self._width = None
+        self._step = step
+        self._width = width if width is not None else step
         self._t = None
-
-    def init_segmentation(self):
-        self._step = self._params["step"]
-        w = self._params["width"]
-        self._width = w if w is not None else self._step
-        self._labsig = self._params["labels"]
-        self._t = self._params["start"]
-
+        self._labsig = labels
+        
     def next_times(self):
+        assert self._labsig is not None
         if self._t is None:
-            self._t = self._signal.get_start_time()
+            self._t = self._labsig.get_start_time()
         b = self._t
         self._t += self._step
         e = b + self._width
-        if b >= self._signal.get_end_time():
+        if b >= self._labsig.get_end_time():
             raise StopIteration()
         return b, e
 
@@ -260,23 +137,18 @@ class CustomSegments(_SegmentsWithLabelSignal):
         assert len(begins) == len(ends), "The number of begins has to be equal to the number of ends :)"
         assert labels is None or isinstance(labels, _Signal),\
             "The parameter 'labels' should be an Signal."
-        self._i = None
-        self._b = None
-        self._e = None
-
-    def init_segmentation(self):
         self._i = -1
-        self._b = self._params['begins']
-        self._e = self._params['ends']
-        self._labsig = self._params["labels"]
+        self._b = begins
+        self._e = ends
+        self._labsig = labels
 
+    
     def next_times(self):
         self._i += 1
         if self._i < len(self._b):
             return self._b[self._i], self._e[self._i]
         else:
             raise StopIteration()
-
 
 class LabelSegments(_SegmentsWithLabelSignal):
     """
@@ -299,13 +171,9 @@ class LabelSegments(_SegmentsWithLabelSignal):
     def __init__(self, labels, drop_mixed=True, drop_cut=True, **kwargs):
         super(LabelSegments, self).__init__(labels=labels, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         assert labels is None or isinstance(labels, _Signal),\
-            "The parameter 'labels' should be an Signal."
-        self._i = None
-        self._labsig = None
-
-    def init_segmentation(self):
+            "The parameter 'labels' should be a Signal."
         self._i = 0
-        self._labsig = self._params['labels']
+        self._labsig = labels
 
     def next_times(self):
         if self._i >= len(self._labsig):
@@ -318,3 +186,51 @@ class LabelSegments(_SegmentsWithLabelSignal):
         e = self._labsig.get_time_from_iidx(end)
         self._i = end
         return b, e
+
+def fmap(segments, algorithms, alt_signal=None):
+    # TODO : rename extract_indicators
+    """
+    Generates a list composed of a list of results for each segment.
+
+    [[result for each algorithm] for each segment]
+    :param segments: An iterable of segments (e.g. an initialized SegmentGenerator)
+    :param algorithms: A list of algorithms
+    :param alt_signal: The signal that will be used instead of the one referenced in the segments
+
+    :return: values, col_names A tuple: matrix (segment x algorithms) containing a value for each
+     algorithm, the list of the algorithm names.
+    """
+
+    
+    seg_for = segments(alt_signal) if isinstance(segments, _SegmentsWithLabelSignal) else segments
+    
+    values = []
+    for seg in seg_for:
+        segment_data = _np.array([seg.get_begin_time(), seg.get_end_time(), seg.get_label()]).reshape(3,1)
+        vals_segment = []
+        for alg in algorithms:
+            vals_alg = _np.array(alg(seg(alt_signal)))
+
+            if not alt_signal.is_multi():
+#                vals_alg = _np.expand_dims([vals_alg], 1)
+                vals_alg = _np.array([vals_alg])
+            vals_segment.append(vals_alg)
+            
+        vals_segment = _np.array(vals_segment)
+        print(vals_segment.shape)
+        print(vals_segment)
+        seg_data_array = _np.repeat(segment_data, alt_signal.get_nchannels(), axis = 1)
+        print(seg_data_array.shape)
+        print(seg_data_array)
+        vals_segment = _np.concatenate([seg_data_array, vals_segment], axis = 0)
+        values.append(vals_segment)
+    
+    values = _np.array(values)
+    
+    #for compatibility
+    if not alt_signal.is_multi():
+        values = values[:,:,0]
+        
+    col_names = ["begin", "end", "label"] + [x.__repr__() for x in algorithms]
+    
+    return values, _asarray(col_names)

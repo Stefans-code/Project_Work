@@ -1,17 +1,16 @@
 # coding=utf-8
 import numpy as _np
 
-from ..BaseIndicator import Indicator as _Indicator
-from ..BaseAlgorithm import Cache as _Cache
+from ..BaseAlgorithm import Algorithm as _Algorithm
 from ..indicators.FrequencyDomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
 from ..filters.Filters import ImputeNAN as _ImputeNAN
 from ..Utility import PhUI as _PhUI
 from ..Signal import EvenlySignal as _EvenlySignal
 
-__author__ = 'AleB'
+# __author__ = 'AleB'
 
-class SignalQualityIndicator(_Indicator):
+class SignalQualityIndicator(_Algorithm):
     """ 
     A Signal Quality Indicator is a special class of indicators
     that also returns if the value is within a range.
@@ -19,51 +18,21 @@ class SignalQualityIndicator(_Indicator):
     """
     def __init__(self, threshold, **kwargs):
         assert len(threshold)==2
-        _Indicator.__init__(self, threshold=threshold, **kwargs)
+        _Algorithm.__init__(self, threshold=threshold, **kwargs)
     
-    @classmethod
-    def is_good(cls, output, params):
-        # params = cls._params
+    def is_good(self, output):
+        params = self._params
         threshold = params['threshold']
         return(output >= threshold[0] and output <= threshold[1])
         
     @classmethod
     def run(cls, data, params=None, use_cache=False, **kwargs):
-        if type(params) is dict:
-            kwargs.update(params)
-        if not isinstance(data.get_values(), _np.ndarray):
-            _PhUI.w("The data must be a Signal (see class EvenlySignal and UnevenlySignal).")
-            use_cache = False
-        if use_cache is True:
-            _Cache.cache_check(data)
-            # noinspection PyTypeChecker
-            return _Cache.run_cached(data, cls, kwargs)
-        else:            
-            if not data.is_multi():
-                output = cls.algorithm(data, kwargs)
-                isgood = cls.is_good(output, kwargs)
-                return(output, isgood)
-            else:
-                data_values = data.get_values()
-                values_out = []
-                isgood_out = []
-                for i_ch in range(data.get_nchannels()):
-                    channel_ph = _EvenlySignal(data_values[:,i_ch], data.get_sampling_freq(), data.get_start_time())
-                    output_ph = cls.algorithm(channel_ph, kwargs)
-                    isgood_ph = cls.is_good(output_ph)
-                    values_out.append(output_ph)
-                    isgood_out.append(isgood_ph)
+        assert isinstance(data.get_values(), _np.ndarray), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
         
-                # if output are signals, compose a multimodal instance
-                if isinstance(values_out[0], _EvenlySignal):
-                    values_out_np = _np.stack([x.get_values() for x in values_out], axis=1)
-                    output = data.clone_properties(values_out_np)
-                    
-                    isgood_out_np = _np.stack([x.get_values() for x in isgood_out], axis=1)
-                    isgood = data.clone_properties(isgood_out_np)
-                    return(output, isgood)
-                else:
-                    return(values_out, isgood_out)
+        
+        output = cls.algorithm(data)
+        isgood = cls.is_good(output)
+        return(output, isgood)
 
 
 class Kurtosis(SignalQualityIndicator):
@@ -79,9 +48,9 @@ class Kurtosis(SignalQualityIndicator):
         k = _sps.kurtosis(data.get_values())
         return(k)
 
-class Entropy(_Indicator):
+class Entropy(_Algorithm):
     def __init__(self, nbins=25, **kwargs):
-        _Indicator.__init__(self, nbins=nbins, **kwargs)
+        _Algorithm.__init__(self, nbins=nbins, **kwargs)
     
     @classmethod
     def algorithm(cls, data, params):
@@ -92,13 +61,13 @@ class Entropy(_Indicator):
         entropy = _sps.entropy(p_data)  # input probabilities to get the entropy 
         return(entropy)
 
-class DerivativeEnergy(_Indicator):
+class DerivativeEnergy(_Algorithm):
     """
     Compute the Derivative Energy
 
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
     
     @classmethod
     def algorithm(cls, data, params):
@@ -106,13 +75,13 @@ class DerivativeEnergy(_Indicator):
         de = _np.sqrt(_np.nanmean(_np.power(_np.diff(x), 2)))
         return(de)
         
-class SpectralPowerRatio(_Indicator):
+class SpectralPowerRatio(_Algorithm):
     """
     Compute the Spectral Power Ratio
 
     """
     def __init__(self, method='ar', bandN=[5,14], bandD=[5,50],**kwargs):
-        _Indicator.__init__(self, method=method, bandN=bandN, bandD=bandD, **kwargs)
+        _Algorithm.__init__(self, method=method, bandN=bandN, bandD=bandD, **kwargs)
 
     @classmethod
     def algorithm(cls, data, params):
@@ -123,7 +92,7 @@ class SpectralPowerRatio(_Indicator):
         p_D = _PowerInBand(bandD[0],bandD[1], params['method'])(data)
         return(p_N/p_D)
 
-class CVSignal(_Indicator):
+class CVSignal(_Algorithm):
     """
     Compute the Coefficient of variation of the signal
     
@@ -131,7 +100,7 @@ class CVSignal(_Indicator):
 
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
     @classmethod
     def algorithm(cls, data, params):
@@ -140,13 +109,13 @@ class CVSignal(_Indicator):
         cv = sd/mean
         return(cv)
 
-class PercentageNAN(_Indicator):
+class PercentageNAN(_Algorithm):
     """
     Compute the Percentage of NaNs
 
     """
     def __init__(self, **kwargs):
-        _Indicator.__init__(self, **kwargs)
+        _Algorithm.__init__(self, **kwargs)
 
     @classmethod
     def algorithm(cls, data, params):

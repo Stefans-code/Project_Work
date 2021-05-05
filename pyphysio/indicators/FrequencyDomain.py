@@ -1,14 +1,14 @@
 # coding=utf-8
-from __future__ import division
+# from __future__ import division
 
-from ..BaseIndicator import Indicator as _Indicator
+from ..BaseAlgorithm import Algorithm as _Algorithm
 from ..tools.Tools import PSD as PSD
 import numpy as _np
 
-__author__ = 'AleB'
+# __author__ = 'AleB'
 
 
-class InBand(_Indicator):
+class InBand(_Algorithm):
     """
     Extract the PSD of a given frequency band
     
@@ -38,18 +38,18 @@ class InBand(_Indicator):
     """
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
-        _Indicator.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-        freq, spec = PSD(**params)(data)
+    def algorithm(self, signal):
+        params = self._params
+        freq, spec = PSD(**params)(signal)
         # freq is sorted so
         i_min = _np.searchsorted(freq, params["freq_min"])
         i_max = _np.searchsorted(freq, params["freq_max"])
         return freq[i_min:i_max], spec[i_min:i_max]
 
 
-class PowerInBand(_Indicator):
+class PowerInBand(_Algorithm):
     """
     Estimate the power in given frequency band
 
@@ -76,15 +76,15 @@ class PowerInBand(_Indicator):
     """
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
-        _Indicator.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
 
-    @classmethod
-    def algorithm(cls, data, params):
-        freq, powers = InBand(**params)(data)
+    def algorithm(self, signal):
+        params = self._params
+        freq, powers = InBand(**params)(signal)
         return _np.sum(powers)
 
 
-class PeakInBand(_Indicator):
+class PeakInBand(_Algorithm):
     """
     Estimate the peak frequency in a given frequency band
 
@@ -111,10 +111,10 @@ class PeakInBand(_Indicator):
     """
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
-        _Indicator.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
     
-    @classmethod
-    def algorithm(cls, data, params):
-        freq, power = InBand(**params)(data)
+    def algorithm(self, signal):
+        params = self._params
+        freq, power = InBand(**params)(signal)
         return freq[_np.argmax(power)]
 

@@ -1,6 +1,4 @@
 # coding=utf-8
-from __future__ import division
-
 from . import ph, TestData, approx
 import numpy as np
 
@@ -18,29 +16,29 @@ class TestSignal(object):
         self.freq2 = 1024
         self.start1 = 3
         self.start2 = 13370003
-        self.nature = "una_bif-fa"
-
+        self.info = {'signal_type' = "ecg"}
+        
         np.random.seed(1234)
         self.x_vals = np.cumsum(np.random.rand(1, self.samples) * 9 + 1).astype(int)
         self.y_vals = np.cumsum(np.random.rand(1, self.samples) - .5) * 100
 
         self.s = ph.EvenlySignal(values=TestData.ecg(),
                                  sampling_freq=self.freq1,
-                                 signal_nature=self.nature,
                                  start_time=self.start1,
+                                 info=self.info
                                  )
 
         self.empty_s = ph.EvenlySignal(values=[],
                                        sampling_freq=self.freq1,
-                                       signal_nature=self.nature,
                                        start_time=self.start1,
+                                       info=self.info,
                                        )
 
         self.us = ph.UnevenlySignal(values=self.y_vals,
                                     x_values=self.x_vals,
                                     sampling_freq=self.freq1,
-                                    signal_nature=self.nature,
                                     start_time=self.start1,
+                                    info=self.info,
                                     x_type='indices'
                                     )
 
@@ -49,8 +47,8 @@ class TestSignal(object):
         ust = ph.UnevenlySignal(values=self.y_vals,
                                 x_values=self.x_vals / self.freq1 + self.start1,
                                 sampling_freq=self.freq1,
-                                signal_nature=self.nature,
                                 start_time=self.start1,
+                                info=self.info,
                                 x_type='instants'
                                 )
 

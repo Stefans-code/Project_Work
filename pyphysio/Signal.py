@@ -3,9 +3,9 @@ from __future__ import division
 import numpy as _np
 from scipy import interpolate as _interp
 from matplotlib.pyplot import plot as _plot, vlines as _vlines, xlabel as _xlabel, ylabel as _ylabel, grid as _grid 
-from matplotlib.pyplot import subplot as _subplot, tight_layout as _tight_layout, subplots_adjust as _subplots_adjust, xlim as _xlim
+from matplotlib.pyplot import subplots as _subplots, tight_layout as _tight_layout, subplots_adjust as _subplots_adjust, xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
 from numbers import Number as _Number
-from pyphysio.Utility import abstractmethod as _abstract, PhUI as _PhUI
+# from pyphysio.Utility import abstractmethod as _abstract
 import copy
 #from pyphysio.filters.Filters import ImputeNAN as _ImputeNAN
 __author__ = 'AleB'
@@ -42,32 +42,26 @@ def from_pickle(path):
 
 
 class Signal(_np.ndarray):
-    _MT_NATURE = "signal_type"
-    _MT_START_TIME = "start_time"
-    _MT_SAMPLING_FREQ = "sampling_freq"
-    _MT_INFO_ATTR = "_pyphysio"
-
-    def __new__(cls, values, sampling_freq, start_time=None, signal_type=""):
+    
+    def __new__(cls, values, sampling_freq, start_time=None, info = {}):
         assert sampling_freq > 0, "The sampling frequency cannot be zero or negative"
         assert start_time is None or isinstance(start_time, _Number), "Start time is not numeric"
+                   
         obj = _np.asarray(values).view(cls)
-                    
-        if len(obj) == 0:
-            _PhUI.i("Creating empty " + cls.__name__)
-            
+        
         obj._pyphysio = {
-            cls._MT_SAMPLING_FREQ: sampling_freq,
-            cls._MT_START_TIME: start_time if start_time is not None else 0,
-            cls._MT_NATURE: signal_type
+            'sampling_freq': sampling_freq,
+            'start_time': start_time if start_time is not None else 0,
+            'info': info
         }
+        
         setattr(obj, "_mutated", False)
         return obj
 
     def __array_finalize__(self, obj):
         # __new__ called if obj is None
-        if obj is not None and hasattr(obj, self._MT_INFO_ATTR):
-            # The cache is not in MT_INFO_ATTR
-            self._pyphysio = getattr(obj, self._MT_INFO_ATTR).copy()
+        if obj is not None and hasattr(obj, '_pyphysio'):
+            self._pyphysio = getattr(obj, '_pyphysio').copy()
 
     def __array_wrap__(self, out_arr, context=None):
         # Just call the parent's
@@ -86,39 +80,48 @@ class Signal(_np.ndarray):
         obj._pyphysio = copy.deepcopy(self.ph)
         return(obj)
     
-    def is_multi(self):
-        return(self.get_nchannels()>1)
-    
     def get_values(self):
         return _np.asarray(self)
+
+    def has_multi_channels(self):
+        return(self.get_nchannels()>1)
     
     def get_nchannels(self):
         if self.ndim>1:
             return(self.shape[1])
         else:
             return(1)
-        
+    
+    def has_multi_components(self):
+        return(self.get_ncomponents()>1)
+    
+    def get_ncomponents(self):
+        if self.ndim>2:
+            return(self.shape[2])
+        else:
+            return(1)
+    
     def get_sampling_freq(self):
-        return self.ph[self._MT_SAMPLING_FREQ]
+        return self.ph['sampling_freq']
 
     def set_sampling_freq(self, value):
         setattr(self, "_mutated", True)
-        self.ph[self._MT_SAMPLING_FREQ] = value
+        self.ph['sampling_freq'] = value
     
     def get_start_time(self):
-        return self.ph[self._MT_START_TIME]
+        return self.ph['start_time']
 
     def set_start_time(self, value):
         setattr(self, "_mutated", True)
-        self.ph[self._MT_START_TIME] = value    
+        self.ph['start_time'] = value    
     
-    def get_signal_type(self):
-        return self.ph[self._MT_NATURE]
+    def get_info(self):
+        return self.ph['info']
 
-    def set_signal_type(self, value):
+    def set_info(self, value):
         setattr(self, "_mutated", True)
-        self.ph[self._MT_NATURE] = value
-    
+        self.ph['info'] = value    
+        
     def get_duration(self):
         return self.get_end_time() - self.get_start_time()
     
@@ -128,54 +131,52 @@ class Signal(_np.ndarray):
             idx=0
         return(idx)
         
-    @_abstract
+    # @_abstract
     def clone_properties(self):
         pass
     
-    @_abstract
+    # @_abstract
     def get_times(self):
         pass
     
-    @_abstract
+    # @_abstract
     def get_end_time(self):
         pass
 
-    @_abstract
+    # @_abstract
     def get_iidx(self, time):
         pass
 
-    @_abstract
+    # @_abstract
     def get_time(self, idx):
         pass
 
-    @_abstract
+    # @_abstract
     def get_time_from_iidx(self, iidx):
         pass
 
-    @_abstract
+    # @_abstract
     def resample(self, fout, kind='linear'):
         pass
 
-    @_abstract
+    # @_abstract
     def segment_idx(self, t_start, t_stop=None):
         pass
 
-    @_abstract
+    # @_abstract
     def segment_iidx(self, t_start, t_stop=None):
         pass
 
-    @_abstract
+    # @_abstract
     def segment_time(self, t_start, t_stop=None):
         pass
 
-    def plot(self, style="", vlines_height=1000):
-        _xlabel("time")
-        _ylabel(self.get_signal_type())
-        _grid()
-        if len(style) > 0 and style[0] == "|":
-            return _vlines(self.get_times(), -vlines_height / 2, vlines_height / 2, style[1:])
-        else:
-            return _plot(self.get_times(), self.get_values(), style)
+    #TODO: make abstract?
+    def plot(self, style=""):
+        ax = _gca()
+        t_ = self.get_times()
+        ax.plot(t_, self, style)
+        
 
     @property
     def pickleable(self):
@@ -195,15 +196,13 @@ class Signal(_np.ndarray):
         f = open(path, "wb")
         dump(self.pickleable, f, protocol=2)
         f.close()
-
-#    def impute_nans(self):
-#        self = ImputeNAN()(self)
-        
+       
     def __repr__(self):
-        return "<signal: " + self.get_signal_type() + ", start_time: " + str(self.get_start_time()) + ">"
+        return f"<start_time: {self.get_start_time()}>"
 
-    def __getslice__(self, i, j):
-        return self.segment_iidx(i, j)
+    #TODO: implement __array_ufunc__
+    # def __getslice__(self, i, j):
+    #     return self.segment_iidx(i, j)
 
 
 class EvenlySignal(Signal):
@@ -213,28 +212,42 @@ class EvenlySignal(Signal):
     Attributes:
     -----------
     
-    data : numpy.array
+    data : numpy.array, (TIME [, CHANNELS [, COMPONENTS]])
         Values of the signal
     sampling_freq : float, >0
         Sampling frequency
     start_time: float,
         Instant of signal start
-    signal_type : str, default = ''
-        Type of signal (e.g. 'ECG', 'EDA')
+    info : dict, default = {}
+        Other info 
     """
 
+    # def __new__(cls, values, sampling_freq, start_time=None, info={}):
+        
+    #     if values.ndim == 1:
+    #         values = values.reshape(-1, 1, 1)
+    #     elif values.ndim == 2:
+    #         values = values.reshape(values.shape[0], values.shape[1], 1)
+
+    #     obj = Signal.__new__(cls, values=values,
+    #                          sampling_freq=sampling_freq,
+    #                          start_time=start_time,
+    #                          info=info)
+
+    #     return obj
+    
     def clone_properties(self, new_values):
         x_new = EvenlySignal(new_values,
                              self.get_sampling_freq(),
                              self.get_start_time(),
-                             self.get_signal_type())
+                             self.get_info())
         return(x_new)
 
     def get_times(self):
-        return _np.arange(len(self)) / self.get_sampling_freq() + self.get_start_time()
+        return _np.arange(self.shape[0]) / self.get_sampling_freq() + self.get_start_time()
 
     def get_end_time(self):
-        return self.get_time(len(self) - 1) + 1. / self.get_sampling_freq()
+        return self.get_time(self.shape[0] - 1) + 1. / self.get_sampling_freq()
 
     def get_iidx(self, time):
         return self.get_idx(time)
@@ -248,7 +261,7 @@ class EvenlySignal(Signal):
     def get_value_t(self, instant):
         values = self.get_values()
         nearest_idx = int(_np.round(self.get_sampling_freq() * (instant - self.get_start_time())))
-        assert nearest_idx < len(self), "Required instant is after the end of the signal"  # return self[-1]
+        assert nearest_idx < self.shape[0], "Required instant is after the end of the signal"  # return self[-1]
         assert nearest_idx >= 0, "Required instant is before the start of the signal"  # return self[0]
         
         return values[nearest_idx]
@@ -276,22 +289,18 @@ class EvenlySignal(Signal):
             signal_out = self.get_values()[::int(ratio)]
         else:
             # The last sample is doubled to allow the new size to be correct
-            indexes = _np.arange(len(self) + 1)
-            indexes_out = _np.arange(len(self) * fout / self.get_sampling_freq()) * ratio
-            self_l = _np.append(self, self[-1])
+            indexes = _np.arange(self.shape[0] + 1)
+            indexes_out = _np.arange(self.shape[0] * fout / self.get_sampling_freq()) * ratio
+            self_l = _np.append(self, _np.expand_dims(self[-1], 0), axis=0)
 
-            if kind == 'cubic':
-                tck = _interp.InterpolatedUnivariateSpline(indexes, self_l)
-            else:
-                tck = _interp.interp1d(indexes, self_l, kind=kind)
+            tck = _interp.interp1d(indexes, self_l, kind=kind, axis=0)
             signal_out = tck(indexes_out)
 
         return EvenlySignal(values=signal_out,
                             sampling_freq=fout,
-                            signal_type=self.get_signal_type(),
-                            start_time=self.get_start_time())
+                            start_time=self.get_start_time(),
+                            info=self.get_info())
 
-    # TRYME
     def segment_idx(self, idx_start, idx_stop=None):
         """
         Segment the signal given the indexes
@@ -310,7 +319,6 @@ class EvenlySignal(Signal):
         """
         return self.segment_iidx(idx_start, idx_stop)
 
-    # TRYME
     def segment_iidx(self, iidx_start, iidx_stop=None):
 
         signal_values = self.get_values()
@@ -326,7 +334,6 @@ class EvenlySignal(Signal):
         out_signal.set_start_time(self.get_time(iidx_start))
         return out_signal
 
-    # TRYME
     def segment_time(self, t_start, t_stop=None):
         """
         Segment the signal given a time interval
@@ -346,17 +353,74 @@ class EvenlySignal(Signal):
 
         return self.segment_idx(self.get_idx(t_start), self.get_idx(t_stop))
 
-    def to_csv(self, filename, comment=''):
-        values = self.get_values()
-        times = self.get_times()
-        header = self.get_signal_type() + ' \n' + 'Fsamp: ' + str(
-            self.get_sampling_freq()) + '\n' + comment + '\nidx,time,value'
+    def get_channel(self, idx_ch):
+        assert self.get_nchannels() > idx_ch, f"Index of the channel {idx_ch}; Signal has {self.get_nchannels()} channels"
+        ch_values = self.get_values()[:, idx_ch]
+        #recover original number of dimensions
+        ch_values = _np.expand_dims(ch_values, 1)
+        return(EvenlySignal(ch_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
+    
+    def get_component(self, idx_comp):
+        assert self.get_ncomponents() > idx_comp, f"Index of the component {idx_comp}; Signal has {self.get_ncomponents()} components"
+        comp_values = self.get_values()[:, :, idx_comp]
+        #recover original number of dimensions
+        comp_values = _np.expand_dims(comp_values, 2)
+        return(EvenlySignal(comp_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
+    
+    # def to_csv(self, filename, comment=''):
+    #     values = self.get_values()
+    #     times = self.get_times()
+    #     header = self.get_signal_type() + ' \n' + 'Fsamp: ' + str(
+    #         self.get_sampling_freq()) + '\n' + comment + '\nidx,time,value'
 
-        _np.savetxt(filename, _np.c_[times, values], delimiter=',', header=header, comments='')
+    #     _np.savetxt(filename, _np.c_[times, values], delimiter=',', header=header, comments='')
 
+
+    def plot(self, style="", ncols=4):
+        fig = _gcf()
+        
+        ndims = self.ndim
+        
+        if ndims ==  1:
+            super().plot(style)
+            
+        else:
+            n_ch = self.get_nchannels()
+            n_comp = self.get_ncomponents()
+            
+            if len(fig.axes)>= n_ch:
+                    axes = fig.axes
+            else:
+                if n_ch>1:
+                    n_cols = ncols
+                    n_rows = int(_np.ceil(n_ch/n_cols))
+                    
+                    fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True)
+                    axes = axes.ravel()
+                else:
+                    fig, axes = _subplots(1, 1, num = fig.number, sharex=True)
+                    axes = [axes]
+        
+            for i_ch in range(n_ch):
+                _sca(axes[i_ch])
+                
+                if n_comp>1:
+                    for i_comp in range(n_comp):
+                        self[:, i_ch, i_comp].plot()
+                else:
+                    self[:, i_ch].plot()
+                _ylabel(i_ch)
+                _grid(True)
+                
+            _xlim(self.get_start_time(), self.get_end_time())
+            _tight_layout()
+            _subplots_adjust(top=0.9, bottom=0.01, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
+        
+        
     def __repr__(self):
         return Signal.__repr__(self)[:-1] + " freq:" + str(self.get_sampling_freq()) + "Hz>\n" + self.view(
             _np.ndarray).__repr__()
+
 
 
 class UnevenlySignal(Signal):
@@ -366,14 +430,14 @@ class UnevenlySignal(Signal):
     Attributes:
     -----------
     
-    data : numpy.array
+    data : numpy.array (TIME [,1 [,1]])
         Values of the signal
     sampling_freq : float, >0
         Sampling frequency
     start_time: float,
         Instant of signal start
-    signal_type : str, default = ''
-        Type of signal (e.g. 'ECG', 'EDA')
+    info : dict, default = {}
+        Other info
     
     
     x_values : numpy.array of int
@@ -387,17 +451,19 @@ class UnevenlySignal(Signal):
         last sample, if None the last sample will last 1. / fsamp.
     """
 
-    _MT_X_INDICES = "x_values"
-    _MT_DURATION = "duration"
-
-    def __new__(cls, values, sampling_freq=1000, start_time=None, signal_type="", x_values=None, x_type='instants',
-                duration=None):
+    def __new__(cls, values, sampling_freq=1000, start_time=None, info={}, 
+                x_values=None, x_type='instants', duration=None):
+        
         assert x_values is not None, "x_values are missing"
         assert x_type in ['indices', 'instants'], "x_type not in ['indices', 'instants']"
         x_values = _np.asarray(x_values)
         assert len(x_values) == len(values), "Length mismatch (y:%d vs. x:%d)" % (len(values), len(x_values))
         assert len(_np.where(_np.diff(x_values) <= 0)[0]) == 0, 'Given x_values are not strictly monotonic'
 
+        #CHECK THAT SIGNAL HAS NOT MULTIPLE CHANNELS OR COMPONENTS
+        assert values.ravel().shape[0] == values.shape[0], "UnevenlySignal does not support multiple channels and/or components"
+        
+        values  = values.ravel()
         
         if x_type == 'indices':
             # Keep indices, set start_time
@@ -424,36 +490,37 @@ class UnevenlySignal(Signal):
         obj = Signal.__new__(cls, values=values,
                              sampling_freq=sampling_freq,
                              start_time=start_time,
-                             signal_type=signal_type)
+                             info=info)
 
         if duration is None:
             duration = min_duration
 
-        obj.ph[cls._MT_X_INDICES] = x_values
-        obj.ph[cls._MT_DURATION] = duration
+        obj.ph['x_values'] = x_values
+        obj.ph['duration'] = duration
         return obj
 
+
+    #TODO: test
     def clone_properties(self, new_values, new_x, new_x_type):
         x_new = UnevenlySignal(new_values,
                                self.get_sampling_freq(),
                                self.get_start_time(),
-                               self.get_signal_type(),
+                               self.get_info(),
                                new_x,
                                new_x_type)
-        # TODO: test clone properties
         return(x_new)
 
     def get_duration(self):
-        return self.ph[UnevenlySignal._MT_DURATION]
+        return self.ph['duration']
 
     def get_end_time(self):
         return self.get_start_time() + self.get_duration()
 
     def get_times(self):
-        return self.ph[self._MT_X_INDICES] / self.get_sampling_freq() + self.get_start_time()
+        return self.ph['x_values'] / self.get_sampling_freq() + self.get_start_time()
 
     def get_indices(self):
-        return self.ph[self._MT_X_INDICES]
+        return self.ph['x_values']
 
     def get_time(self, idx):
         return idx / self.get_sampling_freq() + self.get_start_time() if idx is not None else None
@@ -475,14 +542,14 @@ class UnevenlySignal(Signal):
         else:
             return None
 
-    def to_csv(self, filename, comment=''):
-        values = self.get_values()
-        times = self.get_times()
-        idxs = self.get_indices()
-        header = self.get_signal_type() + ' \n' + 'Fsamp: ' + str(
-            self.get_sampling_freq()) + '\n' + comment + '\nidx,time,value'
+    # def to_csv(self, filename, comment=''):
+    #     values = self.get_values()
+    #     times = self.get_times()
+    #     idxs = self.get_indices()
+    #     header = self.get_signal_type() + ' \n' + 'Fsamp: ' + str(
+    #         self.get_sampling_freq()) + '\n' + comment + '\nidx,time,value'
 
-        _np.savetxt(filename, _np.c_[idxs, times, values], delimiter=',', header=header, comments='')
+    #     _np.savetxt(filename, _np.c_[idxs, times, values], delimiter=',', header=header, comments='')
 
     def to_evenly(self, kind='cubic'):
         """
@@ -500,14 +567,14 @@ class UnevenlySignal(Signal):
 
         assert kind != 'cubic' or len(self) > 3, "At least 4 samples needed for cubic interpolation"
 
-        data_x = self.ph[self._MT_X_INDICES]  # From a constant freq range
+        data_x = self.ph['x_values']  # From a constant freq range
         data_y = self.get_values()
 
         # Cubic if needed
         if kind == 'cubic':
-            tck = _interp.InterpolatedUnivariateSpline(data_x, data_y)
+            tck = _interp.InterpolatedUnivariateSpline(data_x, data_y, axis=0)
         else:
-            tck = _interp.interp1d(data_x, data_y, kind=kind)
+            tck = _interp.interp1d(data_x, data_y, kind=kind, axis=0)
 
         # Exclusive end, same x_value
         x_out = _np.arange(data_x[0], data_x[-1] + 1)
@@ -577,8 +644,8 @@ class UnevenlySignal(Signal):
         return UnevenlySignal(values=self.get_values()[iidx_start:iidx_stop],
                               x_values=self.get_indices()[iidx_start:iidx_stop] - idx_start,
                               sampling_freq=self.get_sampling_freq(),
-                              signal_type=self.get_signal_type(),
                               start_time=self.get_time(idx_start),
+                              info=self.get_info(),
                               x_type='indices',
                               duration=(idx_stop - idx_start) / self.get_sampling_freq())
 
@@ -612,15 +679,20 @@ class UnevenlySignal(Signal):
                               x_values=self.get_indices()[int(iidx_start):int(iidx_stop)]
                               - self.get_indices()[int(iidx_start)],
                               sampling_freq=self.get_sampling_freq(),
-                              signal_type=self.get_signal_type(),
                               start_time=self.get_time_from_iidx(iidx_start),
+                              info=self.get_info(),
                               x_type='indices',
                               duration=(idx_stop - idx_start) / self.get_sampling_freq())
 
+    def plot(self, style=".-"):
+        super().plot(style = style)
+
+        
     def __repr__(self):
         return Signal.__repr__(self)[:-1] + " time resolution:" + str(1 / self.get_sampling_freq()) + "s>\n" + \
                self.get_values().__repr__() + " Times\n:" + self.get_times().__repr__()
 
+'''
 
 class MultiEvenly(EvenlySignal):
     
@@ -645,10 +717,7 @@ class MultiEvenly(EvenlySignal):
         stim = self.get_stim()
         stim.set_start_time(value)
         
-    def get_channel(self, i_ch):
-        ch_values = self.get_values()[:,i_ch]
-        return(EvenlySignal(ch_values, self.get_sampling_freq(), self.get_start_time(), self.get_signal_type()))
-        
+    
     def resample(self, fout, kind='linear'):
         """
         Resample a signal
@@ -735,3 +804,4 @@ class MultiEvenly(EvenlySignal):
 
     def __getslice__(self, i, j):
         return self.segment_iidx(i, j)
+'''

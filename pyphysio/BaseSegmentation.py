@@ -1,13 +1,12 @@
 # coding=utf-8
-from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
+# from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
 from copy import copy as _cpy
 import numpy as _np
-from .Utility import PhUI as _PhUI
-from .BaseAlgorithm import Algorithm as _Algorithm, Cache
-from .Signal import EvenlySignal as _EvenlySignal, UnevenlySignal as _UnevenlySignal
+# from .Utility import PhUI as _PhUI
+from .BaseAlgorithm import Algorithm as _Algorithm
+from .Signal import Signal as _Signal
 
-__author__ = 'AleB'
-
+# __author__ = 'AleB'
 
 class Segment(object):
     """
@@ -55,97 +54,13 @@ class Segment(object):
         return '[%s:%s' % (str(self.get_begin_time()), str(self.get_end_time())) + (
             ":%s]" % self._label if self._label is not None else "]")
 
-
-class SegmentsGenerator(_Algorithm):
-    """
-    Base and abstract class for the windows computation.
-    """
-    __metaclass__ = _ABCMeta
-
-    @_abstract
-    def __init__(self, **kwargs):
-        super(SegmentsGenerator, self).__init__(**kwargs)
-        self._signal = None
-
-    @_abstract
-    def next_segment(self):
-        """
-        Executes a segmentation step.
-        @raise StopIteration: End of the iteration
-        """
-        raise StopIteration()
-
-    @_abstract
-    def init_segmentation(self):
-        """
-        Executes a segmentation step.
-        @raise StopIteration: End of the iteration
-        """
-        raise NotImplementedError()
-
-    # Algorithm Override, no cache
-    def __call__(self, data=None):
-        assert data is not None or self._signal is not None, "No signal specified for " + self.__class__.__name__
-        return self.run(data if data is not None else self._signal, self._params, use_cache=False)
-
-    def __iter__(self):
-        return SegmentationIterator(self)
-
-    @classmethod
-    def algorithm(cls, data, params):
-        o = cls(**params)
-        o._signal = data
-        return o
-
-    @classmethod
-    def is_nature_supported(cls, data):
-        return isinstance(data, _EvenlySignal)
-
-    @classmethod
-    def get_used_params(cls):
-        return []
-
-    def __repr__(self):
-        if self._signal is not None:
-            return super(SegmentsGenerator, self).__repr__() + " over\n" + str(self._signal)
-        else:
-            return super(SegmentsGenerator, self).__repr__()
-
-    #REWRITE the run method for compatibility with MultiEvenly signals
-    #Segments should not work on each channel
-    #But output a sehments with multiple channels
-    #to be processed by the algorithms
-    
-    def run(cls, data, params=None, use_cache=False, **kwargs):
-        """
-        Gets the data from the cache or calculates, caches and returns it.
-        @param data: Source data
-        @type data: TimeSeries
-        @param params: Parameters for the calculator
-        @type params: dict
-        @param use_cache: Whether to use the cache memory or not
-        @type use_cache: bool
-        @return: The value of the feature.
-        """
-        if type(params) is dict:
-            kwargs.update(params)
-        if not isinstance(data.get_values(), _np.ndarray):
-            _PhUI.w("The data must be a Signal (see class EvenlySignal and UnevenlySignal).")
-            use_cache = False
-        if use_cache is True:
-            Cache.cache_check(data)
-            # noinspection PyTypeChecker
-            return Cache.run_cached(data, cls, kwargs)
-        else:        
-            return cls.algorithm(data, kwargs)            
-                    
 class SegmentationIterator(object):
     """
     A generic iterator that is called from each WindowGenerator from the __iter__ method.
     """
 
     def __init__(self, win):
-        assert isinstance(win, SegmentsGenerator)
+        assert isinstance(win, SegmentsWithLabelSignal)
         self._win = _cpy(win)
         self._win.init_segmentation()
 
@@ -155,10 +70,132 @@ class SegmentationIterator(object):
     # Python 2 & users compatibility
     def next(self):
         return self.__next__()
+    
 
+class SegmentsWithLabelSignal(_Algorithm):
+    # Assumed: label signal extended over the end by holding the value
 
-class SegmentationError(Exception):
-    """
-    Generic Segmentation error.
-    """
-    pass
+    def __init__(self, drop_cut=True, drop_mixed=True, **kwargs):
+        _Algorithm.__init__(self, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
+        self._labsig = None
+
+        pass
+
+    def next_segment(self):
+        assert self._labsig is not None, "Can't preview the segments without a signal here."
+        #Use the syntax " + FixedSegments.__name__ + "(**params)(signal)")
+        #raise StopIteration()
+
+        b, e, label = self.next_segment_mix_labels()
+        s = Segment(b, e, label, self._labsig)
+        return s
+
+    # @_abstract
+    def next_times(self):
+        pass
+
+    # Algorithm Override, no cache
+    def __call__(self, data=None):
+        assert data is not None or self._labsig is not None, "No signal specified for " + self.__class__.__name__
+        assert isinstance(data.get_values(), _np.ndarray), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
+        
+        # params = self._params
+        # o = self(**params)
+        # o._signal = data
+        self._labsig = data
+        return self
+    
+        # # return self.run(data if data is not None else self._signal, self._params, use_cache=False)
+        # values_out = _np.apply_along_axis(self.algorithm, 0, data)
+        # return(values_out)
+
+    def __iter__(self):
+        return SegmentationIterator(self)
+
+    # # @classmethod
+    # def algorithm(self, data):
+    #     params = self._params
+    #     o = self(**params)
+    #     o._signal = data
+    #     return o
+
+    def check_drop_and_range(self, s, b, e):
+        drop = True, None, None
+
+        # signal segment bounds
+
+        # full under-range (empty) or full over-range (empty)
+        if e < s.get_start_time() or b >= s.get_end_time():
+            return drop
+
+        # part before start: mixed and shorter (as partially before the first label's begin)
+        if b < s.get_start_time():
+            if self._params['drop_mixed'] or self._params['drop_cut']:
+                # goto next segment (drop)
+                return drop
+            else:
+                # cut to start
+                b = s.get_start_time()
+
+        # part after end: shorter but not mixed (as half after the last label's end)
+        if e > s.get_end_time():
+            if self._params['drop_cut']:
+                # goto next segment (drop)
+                return drop
+            else:
+                # cut to start
+                e = s.get_end_time()
+
+        # Don't drop, inclusive begin time, exclusive end time
+        return False, b, e
+
+    def next_segment_mix_labels(self):
+        label = b = e = None
+        while True:
+            # break    ==> keep
+            # continue ==> drop
+
+            b, e = self.next_times()
+
+            drop, b, e = self.check_drop_and_range(self._labsig, b, e)
+
+            if drop:
+                continue
+
+            if not isinstance(self._labsig, _Signal):
+                label = None
+            else:
+
+                drop, _, _ = self.check_drop_and_range(self._labsig, b, e)
+
+                if drop:
+                    # partially or completely out of labsig range and have to drop it
+                    label = None
+                    continue
+
+                # labels segment bounds, may be < 0 (None < 0)
+                first = self._labsig.get_iidx(b)
+                last = self._labsig.get_iidx(e)
+                
+                if first == last:
+                    last += 1
+
+                lab_seg = self._labsig.segment_iidx(first, last)
+                lab_first = lab_seg[0]
+
+                if len(lab_seg) == 1 or (lab_seg[:1:-1] == lab_first).all(): ###[AB]
+                    label = lab_first
+                else:
+                    if self._params['drop_mixed']:
+                        continue
+                    else:
+                        label = None
+            break
+
+        return b, e, label
+
+    def __repr__(self):
+        if self._labsig is not None:
+            return _Algorithm.__repr__(self) + " over\n" + str(self._labsig)
+        else:
+            return _Algorithm.__repr__(self)

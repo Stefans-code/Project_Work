@@ -3,8 +3,8 @@ import numpy as _np
 from copy import copy as _cpy
 # from numpy import asarray as _asarray
 # from ..Utility import abstractmethod as _abstract
-from .signal import EvenlySignal as _EvenlySignal, Signal as _Signal
-
+from .signal import EvenlySignal as _EvenlySignal, Signal as _Signal, UnevenlySignal as _UnevenlySignal
+# from numbers import Number as _Number
 # __author__ = 'AleB'
 
 class Segment(object):
@@ -256,7 +256,7 @@ class LabelSegments(_Segmenter):
         b = self.timeline.get_time_from_iidx(self._i)
         e = self.timeline.get_time_from_iidx(end)
         self._i = end
-        return b, e, self.timeline[end]
+        return b, e, self.timeline[end-1]
 
 class RandomFixedSegments(_Segmenter):
     """
@@ -337,6 +337,47 @@ def fmap(segmenter, algorithms, signal):
             result_segment['result'] = alg(signal_segment)
             result_algorithm[i_seg] = result_segment
         
-        result[alg.__repr__()] = result_algorithm
-    
+        #if algorithm does not return Signal
+        #(i.e. it returns ndarray), 
+        #we can create a (multidimensional) Signal
+        #from the results:        
+        if not isinstance(result_segment['result'], _Signal):
+            labels = []
+            values = []
+            t = []
+            for k,v in result_algorithm.items():
+                labels.append(v['label'])
+                values.append(v['result'])
+                t_ = v['begin'] + (v['end'] - v['begin']) / 2
+                t.append(t_)
+                
+            values = _np.stack(values, axis=0)
+            
+            if isinstance(segmenter, FixedSegments):
+                #since we used a FixedSegments, we can create an EvenlySignal
+                fsamp = 1/segmenter._step
+                
+                info = {'label': _EvenlySignal(labels, fsamp, t[0]),
+                        'name': alg.__repr__()}
+                
+                info.update(signal.get_info())
+                
+                result[alg.__repr__()] = _EvenlySignal(values, fsamp, t[0], info)
+                
+            else:
+                start_time = signal.get_start_time()
+                fsamp = signal.get_sampling_freq()
+                info = {'label': _UnevenlySignal(_np.array(labels), fsamp, start_time,
+                                                  x_values = _np.array(t),
+                                                  x_type='instants'),
+                        'name': alg.__repr__()}
+                
+                info.update(signal.get_info())
+                
+                result[alg.__repr__()] = _UnevenlySignal(values, fsamp, start_time, info,
+                                                          x_values = _np.array(t),
+                                                          x_type='instants')
+        else:
+            result[alg.__repr__()] = result_algorithm
+            
     return result

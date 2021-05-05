@@ -1,18 +1,14 @@
 # coding=utf-8
-from __future__ import division
 import numpy as _np
 from scipy import interpolate as _interp
-from matplotlib.pyplot import plot as _plot, vlines as _vlines, xlabel as _xlabel, ylabel as _ylabel, grid as _grid 
-from matplotlib.pyplot import subplots as _subplots, tight_layout as _tight_layout, subplots_adjust as _subplots_adjust, xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
-from numbers import Number as _Number
-# from pyphysio.Utility import abstractmethod as _abstract
-import copy
-#from pyphysio.filters.Filters import ImputeNAN as _ImputeNAN
-__author__ = 'AleB'
+from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _subplots,\
+    tight_layout as _tight_layout, subplots_adjust as _subplots_adjust,\
+        xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
 
-# TODO: standard array indexing (signal[idx_start:idx_stop])
-#does not update the t_start
-# TODO: Consider collapsing classes
+from numbers import Number as _Number
+import copy
+
+# !!!: standard array indexing (signal[idx_start:idx_stop])
 
 def from_pickleable(pickle):
     """
@@ -101,25 +97,36 @@ class Signal(_np.ndarray):
         else:
             return(1)
     
+    def get_channel(self, idx_ch):
+        assert self.get_nchannels() > idx_ch, f"Index of the channel {idx_ch}; Signal has {self.get_nchannels()} channels"
+        ch_values = self.get_values()[:, idx_ch]
+        #recover original number of dimensions
+        ch_values = _np.expand_dims(ch_values, 1)
+        return(EvenlySignal(ch_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
+    
+    def get_component(self, idx_comp):
+        assert self.get_ncomponents() > idx_comp, f"Index of the component {idx_comp}; Signal has {self.get_ncomponents()} components"
+        comp_values = self.get_values()[:, :, idx_comp]
+        #recover original number of dimensions
+        comp_values = _np.expand_dims(comp_values, 2)
+        return(EvenlySignal(comp_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
+    
     def get_sampling_freq(self):
         return self.ph['sampling_freq']
 
     def set_sampling_freq(self, value):
-        setattr(self, "_mutated", True)
         self.ph['sampling_freq'] = value
     
     def get_start_time(self):
         return self.ph['start_time']
 
     def set_start_time(self, value):
-        setattr(self, "_mutated", True)
         self.ph['start_time'] = value    
     
     def get_info(self):
         return self.ph['info']
 
     def set_info(self, value):
-        setattr(self, "_mutated", True)
         self.ph['info'] = value    
         
     def get_duration(self):
@@ -171,11 +178,48 @@ class Signal(_np.ndarray):
     def segment_time(self, t_start, t_stop=None):
         pass
 
-    #TODO: make abstract?
-    def plot(self, style=""):
-        ax = _gca()
-        t_ = self.get_times()
-        ax.plot(t_, self, style)
+    def plot(self, style="", ncols=4):
+        fig = _gcf()
+        
+        ndims = self.ndim
+        
+        if ndims ==  1:
+            ax = _gca()
+            t_ = self.get_times()
+            ax.plot(t_, self, style)
+            _grid(True)
+        
+        else:
+            n_ch = self.get_nchannels()
+            n_comp = self.get_ncomponents()
+            
+            if len(fig.axes)>= n_ch:
+                    axes = fig.axes
+            else:
+                if n_ch>1:
+                    n_cols = ncols
+                    n_rows = int(_np.ceil(n_ch/n_cols))
+                    
+                    fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True)
+                    axes = axes.ravel()
+                else:
+                    fig, axes = _subplots(1, 1, num = fig.number, sharex=True)
+                    axes = [axes]
+        
+            for i_ch in range(n_ch):
+                _sca(axes[i_ch])
+                
+                if n_comp>1:
+                    for i_comp in range(n_comp):
+                        self[:, i_ch, i_comp].plot()
+                else:
+                    self[:, i_ch].plot()
+                _ylabel(i_ch)
+                _grid(True)
+                
+            _xlim(self.get_start_time(), self.get_end_time())
+            _tight_layout()
+            _subplots_adjust(top=0.9, bottom=0.01, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
         
 
     @property
@@ -201,9 +245,6 @@ class Signal(_np.ndarray):
         return f"<start_time: {self.get_start_time()}>"
 
     #TODO: implement __array_ufunc__
-    # def __getslice__(self, i, j):
-    #     return self.segment_iidx(i, j)
-
 
 class EvenlySignal(Signal):
     """
@@ -221,20 +262,6 @@ class EvenlySignal(Signal):
     info : dict, default = {}
         Other info 
     """
-
-    # def __new__(cls, values, sampling_freq, start_time=None, info={}):
-        
-    #     if values.ndim == 1:
-    #         values = values.reshape(-1, 1, 1)
-    #     elif values.ndim == 2:
-    #         values = values.reshape(values.shape[0], values.shape[1], 1)
-
-    #     obj = Signal.__new__(cls, values=values,
-    #                          sampling_freq=sampling_freq,
-    #                          start_time=start_time,
-    #                          info=info)
-
-    #     return obj
     
     def clone_properties(self, new_values):
         x_new = EvenlySignal(new_values,
@@ -352,75 +379,10 @@ class EvenlySignal(Signal):
         """
 
         return self.segment_idx(self.get_idx(t_start), self.get_idx(t_stop))
-
-    def get_channel(self, idx_ch):
-        assert self.get_nchannels() > idx_ch, f"Index of the channel {idx_ch}; Signal has {self.get_nchannels()} channels"
-        ch_values = self.get_values()[:, idx_ch]
-        #recover original number of dimensions
-        ch_values = _np.expand_dims(ch_values, 1)
-        return(EvenlySignal(ch_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
     
-    def get_component(self, idx_comp):
-        assert self.get_ncomponents() > idx_comp, f"Index of the component {idx_comp}; Signal has {self.get_ncomponents()} components"
-        comp_values = self.get_values()[:, :, idx_comp]
-        #recover original number of dimensions
-        comp_values = _np.expand_dims(comp_values, 2)
-        return(EvenlySignal(comp_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
-    
-    # def to_csv(self, filename, comment=''):
-    #     values = self.get_values()
-    #     times = self.get_times()
-    #     header = self.get_signal_type() + ' \n' + 'Fsamp: ' + str(
-    #         self.get_sampling_freq()) + '\n' + comment + '\nidx,time,value'
-
-    #     _np.savetxt(filename, _np.c_[times, values], delimiter=',', header=header, comments='')
-
-
-    def plot(self, style="", ncols=4):
-        fig = _gcf()
-        
-        ndims = self.ndim
-        
-        if ndims ==  1:
-            super().plot(style)
-            
-        else:
-            n_ch = self.get_nchannels()
-            n_comp = self.get_ncomponents()
-            
-            if len(fig.axes)>= n_ch:
-                    axes = fig.axes
-            else:
-                if n_ch>1:
-                    n_cols = ncols
-                    n_rows = int(_np.ceil(n_ch/n_cols))
-                    
-                    fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True)
-                    axes = axes.ravel()
-                else:
-                    fig, axes = _subplots(1, 1, num = fig.number, sharex=True)
-                    axes = [axes]
-        
-            for i_ch in range(n_ch):
-                _sca(axes[i_ch])
-                
-                if n_comp>1:
-                    for i_comp in range(n_comp):
-                        self[:, i_ch, i_comp].plot()
-                else:
-                    self[:, i_ch].plot()
-                _ylabel(i_ch)
-                _grid(True)
-                
-            _xlim(self.get_start_time(), self.get_end_time())
-            _tight_layout()
-            _subplots_adjust(top=0.9, bottom=0.01, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
-        
-        
     def __repr__(self):
         return Signal.__repr__(self)[:-1] + " freq:" + str(self.get_sampling_freq()) + "Hz>\n" + self.view(
             _np.ndarray).__repr__()
-
 
 
 class UnevenlySignal(Signal):
@@ -460,10 +422,7 @@ class UnevenlySignal(Signal):
         assert len(x_values) == len(values), "Length mismatch (y:%d vs. x:%d)" % (len(values), len(x_values))
         assert len(_np.where(_np.diff(x_values) <= 0)[0]) == 0, 'Given x_values are not strictly monotonic'
 
-        #CHECK THAT SIGNAL HAS NOT MULTIPLE CHANNELS OR COMPONENTS
-        assert values.ravel().shape[0] == values.shape[0], "UnevenlySignal does not support multiple channels and/or components"
-        
-        values  = values.ravel()
+        assert values.shape[0] == x_values.shape[0], "Length of x_values should be equal to the length of the values"
         
         if x_type == 'indices':
             # Keep indices, set start_time
@@ -501,7 +460,14 @@ class UnevenlySignal(Signal):
 
 
     #TODO: test
-    def clone_properties(self, new_values, new_x, new_x_type):
+    def clone_properties(self, new_values, new_x=None, new_x_type=None):
+        if new_x is not None:
+            assert new_values.shape[0] == new_x.shape[0],\
+                "new_values and new_x shold have the same length"
+        else:
+            new_x = self.ph['x_values']
+            new_x_type = 'indices'
+            
         x_new = UnevenlySignal(new_values,
                                self.get_sampling_freq(),
                                self.get_start_time(),
@@ -542,15 +508,6 @@ class UnevenlySignal(Signal):
         else:
             return None
 
-    # def to_csv(self, filename, comment=''):
-    #     values = self.get_values()
-    #     times = self.get_times()
-    #     idxs = self.get_indices()
-    #     header = self.get_signal_type() + ' \n' + 'Fsamp: ' + str(
-    #         self.get_sampling_freq()) + '\n' + comment + '\nidx,time,value'
-
-    #     _np.savetxt(filename, _np.c_[idxs, times, values], delimiter=',', header=header, comments='')
-
     def to_evenly(self, kind='cubic'):
         """
         Interpolate the UnevenlySignal to obtain an evenly spaced signal
@@ -583,8 +540,8 @@ class UnevenlySignal(Signal):
         # Init new signal
         sig_out = EvenlySignal(values=sig_out,
                                sampling_freq=self.get_sampling_freq(),
-                               signal_type=self.get_signal_type(),
-                               start_time=self.get_time_from_iidx(0))
+                               start_time=self.get_time_from_iidx(0),
+                               info=self.get_info())
 
         return sig_out
 
@@ -642,10 +599,10 @@ class UnevenlySignal(Signal):
             iidx_stop = int(iie) if iie is not None else -1
 
         return UnevenlySignal(values=self.get_values()[iidx_start:iidx_stop],
-                              x_values=self.get_indices()[iidx_start:iidx_stop] - idx_start,
                               sampling_freq=self.get_sampling_freq(),
                               start_time=self.get_time(idx_start),
                               info=self.get_info(),
+                              x_values=self.get_indices()[iidx_start:iidx_stop] - idx_start,
                               x_type='indices',
                               duration=(idx_stop - idx_start) / self.get_sampling_freq())
 
@@ -676,11 +633,10 @@ class UnevenlySignal(Signal):
         idx_start = self.get_indices()[int(iidx_start)]
 
         return UnevenlySignal(values=self.get_values()[int(iidx_start):int(iidx_stop)],
-                              x_values=self.get_indices()[int(iidx_start):int(iidx_stop)]
-                              - self.get_indices()[int(iidx_start)],
                               sampling_freq=self.get_sampling_freq(),
                               start_time=self.get_time_from_iidx(iidx_start),
                               info=self.get_info(),
+                              x_values=self.get_indices()[int(iidx_start):int(iidx_stop)] - self.get_indices()[int(iidx_start)],
                               x_type='indices',
                               duration=(idx_stop - idx_start) / self.get_sampling_freq())
 
@@ -691,117 +647,3 @@ class UnevenlySignal(Signal):
     def __repr__(self):
         return Signal.__repr__(self)[:-1] + " time resolution:" + str(1 / self.get_sampling_freq()) + "s>\n" + \
                self.get_values().__repr__() + " Times\n:" + self.get_times().__repr__()
-
-'''
-
-class MultiEvenly(EvenlySignal):
-    
-    def __new__(cls, values, sampling_freq, start_time=None, signal_type='raw', info = {}):
-        assert sampling_freq > 0, "The sampling frequency cannot be zero or negative"
-        assert start_time is None or isinstance(start_time, _Number), "Start time is not numeric"
-        obj = Signal.__new__(cls, values=values, sampling_freq=sampling_freq, start_time=start_time, signal_type=signal_type)
-        
-        return obj
-
-    def clone_properties(self, new_values):
-        x_new = MultiEvenly(new_values,
-                            self.get_sampling_freq(),
-                            self.get_start_time(),
-                            self.get_signal_type())
-        return(x_new)
-    
-    
-    def set_start_time(self, value):
-        setattr(self, "_mutated", True)
-        self.ph[self._MT_START_TIME] = value  
-        stim = self.get_stim()
-        stim.set_start_time(value)
-        
-    
-    def resample(self, fout, kind='linear'):
-        """
-        Resample a signal
-
-        Parameters
-        ----------
-        fout : float
-            The sampling frequency for resampling
-        kind : str
-            Method for interpolation: 'linear', 'nearest', 'zero', 'slinear', 'quadratic, 'cubic'
-
-        Returns
-        -------
-        resampled_signal : EvenlySignal
-            The resampled signal
-        """
-
-        ratio = self.get_sampling_freq() / fout
-
-        if fout < self.get_sampling_freq() and ratio.is_integer():  # fast interpolation
-            values_out = self.get_values()[::int(ratio),:]
-        else:
-            indexes = _np.arange(len(self) + 1)
-            indexes_out = _np.arange(len(self) * fout / self.get_sampling_freq()) * ratio
-            
-            values = self.get_values()
-            values = _np.vstack([values, values[-1,:]])
-            tck = _interp.interp1d(indexes, values, kind=kind, axis=0)
-            
-            values_out = tck(indexes_out)
-    
-        signal_out = self.clone_properties(values_out)
-        signal_out.set_sampling_freq(fout)
-        return(signal_out)
-        
-
-    # TRYME
-    def segment_iidx(self, iidx_start, iidx_stop=None):
-
-        signal_values = self.get_values()
-
-        if iidx_start is None:
-            iidx_start = 0
-        if iidx_stop is None:
-            iidx_stop = len(self)
-
-        values = signal_values[int(iidx_start):int(iidx_stop),:]
-
-        out_signal = self.clone_properties(values)
-        out_stim = self.get_stim().clone()
-        out_stim = out_stim.segment_iidx(iidx_start, iidx_stop)
-        out_signal.set_stim(out_stim)
-        
-        out_signal.set_start_time(self.get_time(iidx_start))
-        return out_signal
-    
-    
-    def plot(self, style=""):
-        _grid()
-        n_ch = self.get_nchannels()
-    
-        t_start = self.get_start_time()
-        
-        n_rows = int(_np.ceil(n_ch/4))
-        ax1 = _subplot(n_rows, 4, 1)
-        for i_ch in range(n_ch):
-            _subplot(n_rows, 4, i_ch+1, sharex=ax1)
-            self.get_channel(i_ch).plot(style)
-            _ylabel(i_ch)
-            _vlines(t_start, _np.nanmin(self.get_channel(i_ch)), _np.nanmax(self.get_channel(i_ch)), 'k')
-            _grid()
-        _xlim(self.get_start_time(), self.get_end_time())
-        _tight_layout()
-        _subplots_adjust(top=0.9, bottom=0.01, left=0.05, right=0.95, hspace=0.3, wspace=0.25)
-
-    def to_csv(self, filename, comment='', fmt = '%.6f'): 
-        values = self.get_values()
-        times = self.get_times()
-        header = self.get_signal_type() + ' \n' + 'Fsamp: ' + str(self.get_sampling_freq()) + '\n' + comment + '\nidx,time'+''.join([f',ch{x}' for x in range(self.get_nchannels())])
-        _np.savetxt(filename, _np.c_[_np.arange(len(times)), times, values], delimiter=',', header=header, comments='', fmt = fmt)
-
-    def __repr__(self):
-        return f"<start_time: {self.get_start_time()}> freq:  {self.get_sampling_freq()} Hz> {self.view(_np.ndarray).__repr__()}"
-
-    def __getslice__(self, i, j):
-        return self.segment_iidx(i, j)
-'''

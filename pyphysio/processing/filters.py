@@ -39,16 +39,16 @@ class Normalize(_Algorithm):
 
     """
 
-    def __init__(self, norm_method='standard', norm_bias=0, norm_range=1):
+    def __init__(self, norm_method='standard', norm_bias=0, norm_range=1, **kwargs):
         assert norm_method in ['mean', 'standard', 'min', 'maxmin', 'custom'],\
             "norm_method must be one of 'mean', 'standard', 'min', 'maxmin', 'custom'"
         if norm_method == "custom":
             assert norm_range != 0, "norm_range must not be zero"
-        _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range)
+        _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
 
     def algorithm(self, signal):
 
-        from ..indicators.TimeDomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
+        from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
                 
         params = self._params
         method = params['norm_method']

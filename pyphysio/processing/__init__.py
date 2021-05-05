@@ -71,9 +71,9 @@ def algo(function, **kwargs):
     :return: An algorithm class if params is None else a parametrized algorithm instance.
     """
 
-    class Custom(_Algorithm):
+    class Custom(Algorithm):
         def __init__(self, **kwargs):
-            _Algorithm.__init__(self, **kwargs)
+            Algorithm.__init__(self, **kwargs)
 
         def algorithm(self, signal):
             params = self._params

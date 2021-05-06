@@ -28,7 +28,7 @@ class Algorithm(object):
         """
         
         assert isinstance(data, _Signal), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
-            
+        
         values_out = _np.apply_along_axis(self.algorithm, 0, data)
         return(values_out)
 

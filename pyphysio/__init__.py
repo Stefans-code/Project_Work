@@ -18,6 +18,7 @@ from .segmenters import *
 from .signal import *
 from .interactive import Annotate
 
+from .sqi import *
 from .sqi.sqi import *
 #from .tests import TestData
 

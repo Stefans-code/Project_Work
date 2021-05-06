@@ -4,7 +4,7 @@ from copy import copy as _cpy
 # from numpy import asarray as _asarray
 # from ..Utility import abstractmethod as _abstract
 from .signal import EvenlySignal as _EvenlySignal, Signal as _Signal, UnevenlySignal as _UnevenlySignal
-# from numbers import Number as _Number
+from numbers import Number as _Number
 # __author__ = 'AleB'
 
 class Segment(object):
@@ -337,21 +337,32 @@ def fmap(segmenter, algorithms, signal):
             result_segment['result'] = alg(signal_segment)
             result_algorithm[i_seg] = result_segment
         
-        #if algorithm does not return Signal
-        #(i.e. it returns ndarray), 
-        #we can create a (multidimensional) Signal
-        #from the results:        
-        if not isinstance(result_segment['result'], _Signal):
-            labels = []
-            values = []
-            t = []
-            for k,v in result_algorithm.items():
-                labels.append(v['label'])
-                values.append(v['result'])
-                t_ = v['begin'] + (v['end'] - v['begin']) / 2
-                t.append(t_)
-                
+        #the following is to prepare labels and t
+        #that might be used later
+        #(to avoid messy code)
+        labels = []
+        values = []
+        t = []
+        for k,v in result_algorithm.items():
+            labels.append(v['label'])
+            values.append(v['result'])
+            t_ = v['begin'] + (v['end'] - v['begin']) / 2
+            t.append(t_)
+        
+        
+        #if no segments were processed
+        if len(labels) == 0: 
+            result[alg.__repr__()] = result_algorithm
+        
+        #if the algorithm returns a Signal
+        elif isinstance(values[0], _Signal):
+            result[alg.__repr__()] = result_algorithm
+        
+        #if the algorithm returns a numpy array
+        #we create Signals
+        elif isinstance(values[0], _np.ndarray):
             values = _np.stack(values, axis=0)
+            #BE CAREFUL HERE ABOUT THE NUMBER OF DIMS OF THE OUTPUT ARRAY
             
             if isinstance(segmenter, FixedSegments):
                 #since we used a FixedSegments, we can create an EvenlySignal
@@ -377,6 +388,57 @@ def fmap(segmenter, algorithms, signal):
                 result[alg.__repr__()] = _UnevenlySignal(values, fsamp, start_time, info,
                                                           x_values = _np.array(t),
                                                           x_type='instants')
+        
+        #if list or tuple of ndarrays
+        #(it is a special case we can try to manage)
+        #we create a list of Signals
+        elif (isinstance(values[0], list) or isinstance(values[0], tuple)) and \
+            sum([isinstance(x, _np.ndarray) for x in values[0]]) ==  len(values[0]):
+            
+            number_signals = len(values[0])
+            signals_out = []
+            for i_signal in range(number_signals):
+                values_signal = []
+                for v in values:
+                    values_signal.append(v[i_signal])
+                values_signal = _np.stack(values_signal, axis=0)
+                
+                if isinstance(segmenter, FixedSegments):
+                    #since we used a FixedSegments, we can create an EvenlySignal
+                    fsamp = 1/segmenter._step
+                    
+                    info = {'label': _EvenlySignal(labels, fsamp, t[0]),
+                            'name': alg.__repr__()}
+                    
+                    info.update(signal.get_info())
+                    
+                    signals_out.append(_EvenlySignal(values_signal, 
+                                                     fsamp, 
+                                                     t[0], 
+                                                     info))
+                    
+                else:
+                    start_time = signal.get_start_time()
+                    fsamp = signal.get_sampling_freq()
+                    info = {'label': _UnevenlySignal(_np.array(labels), 
+                                                     fsamp, 
+                                                     start_time,
+                                                     x_values = _np.array(t),
+                                                     x_type='instants'),
+                            'name': alg.__repr__()}
+                    
+                    info.update(signal.get_info())
+                    
+                    signals_out.append(_UnevenlySignal(values_signal, 
+                                                       fsamp, 
+                                                       start_time, 
+                                                       info,
+                                                       x_values = _np.array(t),
+                                                       x_type='instants'))
+        
+            result[alg.__repr__()] = signals_out
+        #all other cases
+        #just return the original dictionary
         else:
             result[alg.__repr__()] = result_algorithm
             

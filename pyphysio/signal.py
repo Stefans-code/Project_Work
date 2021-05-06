@@ -197,7 +197,8 @@ class Signal(_np.ndarray):
                     axes = fig.axes
             else:
                 if n_ch>1:
-                    n_cols = ncols
+                    
+                    n_cols = n_ch if n_ch < ncols else ncols
                     n_rows = int(_np.ceil(n_ch/n_cols))
                     
                     fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True)

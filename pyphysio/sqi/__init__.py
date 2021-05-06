@@ -41,22 +41,25 @@ class SignalQualityIndicator(_Algorithm):
         return(values_out, isgood)
 
 class ComputeQuality(_Algorithm):
-    def __init__(self, sqi, segmenter=None, **kwargs):
+    def __init__(self, sqi, segmenter=None, compute_global=True, ratio=1, **kwargs):
         assert len(sqi) > 0
         for sqi_ in sqi:
             assert isinstance(sqi_, SignalQualityIndicator)
 
         assert segmenter is None or isinstance(segmenter, _Segmenter)
-        _Algorithm.__init__(self, sqi=sqi, segmenter=segmenter, **kwargs)
+        _Algorithm.__init__(self, sqi=sqi, segmenter=segmenter,
+                            compute_global=compute_global, ratio=ratio, **kwargs)
         
     
-    def algorithm(self, signal):
+    def __call__(self, signal):
         params = self._params
         
-        #if no segmentation required, create a segmenter with a unique segment
         segmenter = params['segmenter']
         sqi = params['sqi']
+        compute_global = params['compute_global']
+        ratio = params['ratio']
         
+        #if no segmentation required, create a segmenter with a unique segment
         if segmenter is None: 
             segmenter = _FixedSegments(signal.get_duration(), 
                                        drop_cut=False, 
@@ -65,46 +68,45 @@ class ComputeQuality(_Algorithm):
         #COMPUTE SQI
         sqi_values = _fmap(segmenter, sqi, signal)
         
-        #COMPUTE GOOD SIGNALS
+        #get sqi_values and is_good for each sqi
+        sqi_values_ = {}
+        is_good_ = []
+        for k,v in sqi_values.items():
+            sqi_values_[k] = v[0]
+            is_good_.append(v[1])
         
-        #this should return a signal with updated sqi and good_signal in info
-        return(sqi_values)
+        #save sqi only in signal.info
+        signal.update_info('sqi', sqi_values_)
+        
+        #COMPUTE GOOD
+        #---------
+        #first, to be good, all sqi should be good
+        
+        #stack over a new 0 axis
+        is_good_ = _np.stack(is_good_, axis=0)
+        #is good if all sqi (on the 0 axis) are good
+        #i.e. the sum is equal to the number of sqi
+        is_good_ = _np.sum(is_good_, axis=0) == is_good_.shape[0]
+        
+        #---------
+        #now, decide whether to get global or local indications
+        
+        #if only one timepoint, then it is global
+        if is_good_.shape[0] == 1:
+            signal.update_info('good', is_good_)
+        
+        else:
+            if compute_global:
+                #at leat ratio% timepoints should be good
+                is_good_ = _np.sum(is_good_, axis=0, keepdims=True) >= ratio*is_good_.shape[0]
+                signal.update_info('good', is_good_)
+                
+            else:
+                signal.update_info('good', is_good_)
+        
+        
+        #return a signal with updated 'sqi' and 'good' in info
+        return(signal)
     
-    # def compute_good_sqi(nirs):
-    #     assert 'sqi' in nirs.info.keys(), "SQI not computed, please run 'compute_sqi' first"
-    #     sqi_values = nirs.info['sqi']
-    #     sqi_indicators = nirs.info['sqi_indicators']
-        
-    #     #GET GOOD VALUES
-    #     #initialize output matrix
-    #     sqi_good = np.zeros_like(sqi_values).astype(bool)
-    #     sqi_good[:,0:3, :] = True #set segment data to True
-        
-    #     #for all sqi
-    #     for i_sqi, sqi in enumerate(sqi_indicators.keys()):
-    #         th = sqi_thresholds[sqi]
-    #         curr_sqi_values = sqi_values[:, i_sqi+3, :]
-    #         idx_good = np.where((curr_sqi_values>= th[0]) & (curr_sqi_values <= th[1]))
-    #         sqi_good[:, i_sqi+3,:][idx_good] = True
-        
-    #     return(sqi_good)
-    
-    # def compute_good_channels(nirs, ratio=0.9):
-    #     assert 'sqi' in nirs.info.keys(), "SQI not computed, please run 'compute_sqi' first"
-        
-    #     sqi_good = compute_good_sqi(nirs)
-        
-    #     idx_good_channels = []
-    #     for i_ch in range(sqi_good.shape[2]): #for all channels
-    #         sqi_channel = sqi_good[:, :, i_ch]    
-    #         n_good = np.sum(sqi_channel, axis = 0)
-            
-    #         ratio_good = n_good / sqi_channel.shape[0]
-    
-    #         if (ratio_good >= ratio).all():
-    #             idx_good_channels.append(i_ch)
-        
-    #     good_channels = np.repeat(False, sqi_good.shape[2])
-    #     good_channels[idx_good_channels] = True
-    #     nirs.info['good_channels'] = good_channels
-    #     return(nirs)
+    def __repr__(self):
+        return super(ComputeQuality, self).__repr__()

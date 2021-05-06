@@ -123,10 +123,11 @@ class _Segmenter(object):
         return SegmentationIterator(self)
 
     def __repr__(self):
-        if self._labsig is not None:
+        if self.reference is not None:
             message = self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']
             return message + " over\n" + str(self.reference)
         else:
+            message = self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']
             return message
 
 class FixedSegments(_Segmenter):
@@ -291,15 +292,22 @@ class RandomFixedSegments(_Segmenter):
         assert width > 0
         self._N = N
         self._width = width
-        self._i = 0
+        self._i = -1
+        self.tst = None
         
     def _next_segment(self):
-        self._i +=1
         
-        if self._i <= self._N:
+        if self.tst is None: #needs initialization
             t_st = self.reference.get_start_time()
             t_sp = self.reference.get_end_time() - self._width
-            b = _np.random.uniform(t_st, t_sp)
+            tst = _np.random.uniform(t_st, t_sp, self._N)
+
+            #timestamps should be strictly (--> _np.unique) monotonic
+            self.tst = _np.unique(tst[_np.argsort(tst)])
+        
+        self._i += 1
+        if self._i < self._N:
+            b = self.tst[self._i]
             e = b + self._width
             return self.manage_drops(b, e)
         else:

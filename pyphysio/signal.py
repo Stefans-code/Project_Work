@@ -128,7 +128,10 @@ class Signal(_np.ndarray):
 
     def set_info(self, value):
         self.ph['info'] = value    
-        
+    
+    def update_info(self, key, value):
+        self.ph['info'][key] = value
+    
     def get_duration(self):
         return self.get_end_time() - self.get_start_time()
     

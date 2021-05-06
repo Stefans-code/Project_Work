@@ -4,7 +4,7 @@ from copy import copy as _cpy
 # from numpy import asarray as _asarray
 # from ..Utility import abstractmethod as _abstract
 from .signal import EvenlySignal as _EvenlySignal, Signal as _Signal, UnevenlySignal as _UnevenlySignal
-from numbers import Number as _Number
+# from numbers import Number as _Number
 # __author__ = 'AleB'
 
 class Segment(object):
@@ -60,7 +60,7 @@ class _Segmenter(object):
     def __init__(self, timeline=None, drop_cut=True, drop_mixed=True, **kwargs):
         self._params = {}
         self._params['drop_cut'] = drop_cut
-        self._params['drop_mix'] = drop_mixed
+        self._params['drop_mixed'] = drop_mixed
         self._params.update(kwargs)
         self.timeline = timeline
         self.reference = None
@@ -284,17 +284,29 @@ class RandomFixedSegments(_Segmenter):
         Whether to drop segments that are shorter due to the crossing of the signal end.
     """
 
-    def __init__(self, N, width, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
+    def __init__(self, N, width, reference=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
         assert timeline is None or isinstance(timeline, _EvenlySignal),\
             "The parameter 'labels' should be an EvenlySignal."
         super(RandomFixedSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         assert N > 0
         assert width > 0
+        
         self._N = N
         self._width = width
         self._i = -1
-        self.tst = None
+        self.reference = reference
         
+        if reference is None:
+            print('\n\n >>> No reference signal provided: new random segments will be generated for each channel/component. Expect funny results')
+            self.tst = None
+        else:
+            t_st = self.reference.get_start_time()
+            t_sp = self.reference.get_end_time() - self._width
+            tst = _np.random.uniform(t_st, t_sp, self._N)
+
+            #timestamps should be strictly (--> _np.unique) monotonic
+            self.tst = _np.unique(tst[_np.argsort(tst)])
+            
     def _next_segment(self):
         
         if self.tst is None: #needs initialization
@@ -451,3 +463,47 @@ def fmap(segmenter, algorithms, signal):
             result[alg.__repr__()] = result_algorithm
             
     return result
+
+def indicators2df(fmap_results):
+    import pandas as _pd
+
+    k = list(fmap_results.keys())[0]
+    
+    for k,v in fmap_results.items():
+        assert isinstance(v, _Signal), 'Provided fmap_results should be all Signals'
+        
+    ind_sample = fmap_results[k]
+    n_channels = ind_sample.get_nchannels()
+    n_components = ind_sample.get_ncomponents()
+    
+    t = ind_sample.get_times()
+    label = ind_sample.get_info()['label'].get_values()
+    
+    df_all = []
+    for i_comp in range(n_components):
+        for i_chan in range(n_channels):
+            
+            indicator_df = {}
+            indicator_df['time'] = t
+            indicator_df['label'] = label
+    
+            for key in list(fmap_results.keys()):
+                result_key = fmap_results[key]
+            
+                if ind_sample.ndim == 3:
+                    indicator_df[key] = result_key[:, i_chan, i_comp]
+                    indicator_df['component'] = _np.repeat(i_comp+1, len(t))
+                    indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
+                    
+                else:
+                    if ind_sample.ndim == 2:
+                        indicator_df[key] = result_key[:, i_chan]
+                        indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
+                    else:
+                        indicator_df[key] =  result_key
+            
+            df_all.append(_pd.DataFrame(indicator_df))
+    
+    
+    df_all = _pd.concat(df_all, axis = 0)
+    return(df_all)

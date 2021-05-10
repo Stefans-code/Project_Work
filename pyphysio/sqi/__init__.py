@@ -1,6 +1,6 @@
 import numpy as _np
 from ..processing import Algorithm as _Algorithm
-from ..signal import Signal as _Signal
+# from ..signal import Signal as _Signal
 from ..segmenters import _Segmenter,\
     FixedSegments as _FixedSegments
 
@@ -11,8 +11,17 @@ class SignalQualityIndicator(_Algorithm):
     A Signal Quality Indicator is a special class of indicators
     that also returns if the value is within a range.
     Used to check the quality of signals.
+
+    Args:
+        threshold (low, high): The range within which the sqi indicates good quality
+    
+    Returns:
+        result (sqi, isgood): Tuple containing the value of the sqi and if it corresponds to good quality
+    
     """
     def __init__(self, threshold, **kwargs):
+        '''
+        '''
         assert len(threshold)==2
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
         
@@ -29,23 +38,41 @@ class SignalQualityIndicator(_Algorithm):
         return(output)
         
     def __call__(self, data):
-        """
-        Executes the algorithm using the parameters saved by the constructor.
-        @param data: The data.
-        @type data: TimeSeries
-        @return: The result.
-        """
+        
         values_out = super().__call__(data)
         
         isgood = self.is_good(values_out)
         return(values_out, isgood)
 
 class ComputeQuality(_Algorithm):
+    '''
+    Automitize the computation of SQI and the decision about the overall signal quality of a signal.
+    When called on a signal it returns the same signal with added information about the signal quality.
+    
+    
+    @param sqi: The Signal Quality Indicators to be computed
+    @type sqi: List of Signal Quality Indicators
+    
+    @param segmenter: (optional) a Segmenter. If provided, the SQI will be computed on each segment
+    
+    @param compute_global: When a segmenter is provided,
+                           defines how to assess if the signal is good.
+                           If True (default) the quality of the signal is assessed
+                           if False the quality is assessed by segment.
+    @type compute_global: bool
+    
+    @param ratio: float between 0 and 1, (if segmenter is provided and compute_global = True)
+                  portion of segments that should have good SQI to decide that the signal is good 
+                  
+    @return: Signal with added information: 'sqi' the computed SQI, 'good' the decisin about the signal quality.
+    '''
     def __init__(self, sqi, segmenter=None, compute_global=True, ratio=1, **kwargs):
+        
         assert len(sqi) > 0
         for sqi_ in sqi:
             assert isinstance(sqi_, SignalQualityIndicator)
-
+        
+        assert ratio>=0 and ratio <=1
         assert segmenter is None or isinstance(segmenter, _Segmenter)
         _Algorithm.__init__(self, sqi=sqi, segmenter=segmenter,
                             compute_global=compute_global, ratio=ratio, **kwargs)

@@ -11,12 +11,12 @@ import numpy as np
 
 #from pytest import approx as approx
 
-__author__ = 'aleb'
+# __author__ = 'aleb'
 
 
 class TestData(object):
     _sing = None
-    _path = _os.path.join(_os.path.dirname(__file__), "data")
+    _path = _os.path.join(_os.path.dirname(__file__), '..', "data")
     _file = "medical.txt.bz2"
 
     @classmethod

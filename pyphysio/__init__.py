@@ -35,13 +35,13 @@ def update_signal(signal):
 
 class TestData(object):
     _sing = None
-    _path = _os.path.join(_os.path.dirname(__file__), '..', 'test', "data")
+    _path = _os.path.join(_os.path.dirname(__file__), '..', 'tests', "data")
     _file = "medical.txt.bz2"
 
     @classmethod
     def get_data(cls):
         if TestData._sing is None:
-            TestData._sing = _np.genfromtxt(_os.path.join(TestData._path, TestData._file), delimiter="\t")
+            TestData._sing = _np.genfromtxt(_os.path.abspath(_os.path.join(TestData._path, TestData._file)), delimiter="\t")
         return TestData._sing
 
     # The following methods return an array to make it easier to test the Signal wrapping classes

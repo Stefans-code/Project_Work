@@ -8,6 +8,7 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 from numbers import Number as _Number
 import copy
 
+# TODO: indexing should split also infos (eg sqi, good)
 # !!!: standard array indexing (signal[idx_start:idx_stop])
 
 def from_pickleable(pickle):
@@ -66,7 +67,13 @@ class Signal(_np.ndarray):
             return _np.ndarray.__array_wrap__(self, out_arr, context)
         else:
             return out_arr
-
+        
+    def __getitem__(self, item):
+        selected_values = super().__getitem__(item)
+        selected_info = self.__getiteminfo__(self, item)
+        selected_values.set_info(selected_info)
+        return selected_values
+        
     @property
     def ph(self):
         return self._pyphysio
@@ -98,6 +105,7 @@ class Signal(_np.ndarray):
             return(1)
     
     def get_channel(self, idx_ch):
+        assert self.ndim > 1, "Signal has not multiple channels"
         assert self.get_nchannels() > idx_ch, f"Index of the channel {idx_ch}; Signal has {self.get_nchannels()} channels"
         ch_values = self.get_values()[:, idx_ch]
         #recover original number of dimensions
@@ -105,6 +113,7 @@ class Signal(_np.ndarray):
         return(EvenlySignal(ch_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
     
     def get_component(self, idx_comp):
+        assert self.ndim > 2, "Signal has not multiple components"
         assert self.get_ncomponents() > idx_comp, f"Index of the component {idx_comp}; Signal has {self.get_ncomponents()} components"
         comp_values = self.get_values()[:, :, idx_comp]
         #recover original number of dimensions
@@ -129,6 +138,21 @@ class Signal(_np.ndarray):
     def set_info(self, value):
         self.ph['info'] = value    
     
+    def has_good(self):
+        info = self.get_info()
+        return 'good' in info.keys()
+    
+    def get_good(self):
+        info = self.get_info()
+        assert 'good' in info.keys(), "Quality has not been computed yet"
+        is_good = info['good']
+        assert is_good.shape[0] == 1, "Quality has not been computed globally. Please compute global quality first"
+        
+        if is_good.ndim == 1:
+            return(_np.array(_np.where(is_good))[0])
+        else:
+            return(_np.array(_np.where(is_good)[1:]))
+    
     def update_info(self, key, value):
         self.ph['info'][key] = value
     
@@ -143,6 +167,9 @@ class Signal(_np.ndarray):
         
     # @_abstract
     def clone_properties(self):
+        pass
+    
+    def __getiteminfo__(self, item):
         pass
     
     # @_abstract
@@ -169,13 +196,13 @@ class Signal(_np.ndarray):
     def resample(self, fout, kind='linear'):
         pass
 
-    # @_abstract
-    def segment_idx(self, t_start, t_stop=None):
-        pass
+    # # @_abstract
+    # def segment_idx(self, idx_start, idx_stop=None):
+    #     pass
 
-    # @_abstract
-    def segment_iidx(self, t_start, t_stop=None):
-        pass
+    # # @_abstract
+    # def segment_iidx(self, iidx_start, iidx_stop=None):
+    #     pass
 
     # @_abstract
     def segment_time(self, t_start, t_stop=None):
@@ -187,9 +214,17 @@ class Signal(_np.ndarray):
         ndims = self.ndim
         
         if ndims ==  1:
+            if self.has_good():
+                good = self.get_good()
+                
+                print(good.shape)
+                if len(good)>0:
+                    linestyle = '-'
+                else:
+                    linestyle = '--'
             ax = _gca()
             t_ = self.get_times()
-            ax.plot(t_, self, style)
+            ax.plot(t_, self, style, linestyle = linestyle)
             _grid(True)
         
         else:
@@ -332,23 +367,23 @@ class EvenlySignal(Signal):
                             start_time=self.get_start_time(),
                             info=self.get_info())
 
-    def segment_idx(self, idx_start, idx_stop=None):
-        """
-        Segment the signal given the indexes
+    # def segment_idx(self, idx_start, idx_stop=None):
+    #     """
+    #     Segment the signal given the indexes
 
-        Parameters
-        ----------
-        idx_start : int or None
-            The index of the start of the interval
-        idx_stop : int or None
-            The index of the end of the interval. By default is the length of the signal
+    #     Parameters
+    #     ----------
+    #     idx_start : int or None
+    #         The index of the start of the interval
+    #     idx_stop : int or None
+    #         The index of the end of the interval. By default is the length of the signal
 
-        Returns
-        -------
-        portion : EvenlySignal
-            The selected portion
-        """
-        return self.segment_iidx(idx_start, idx_stop)
+    #     Returns
+    #     -------
+    #     portion : EvenlySignal
+    #         The selected portion
+    #     """
+    #     return self.segment_iidx(idx_start, idx_stop)
 
     def segment_iidx(self, iidx_start, iidx_stop=None):
 
@@ -418,7 +453,7 @@ class UnevenlySignal(Signal):
     """
 
     def __new__(cls, values, sampling_freq=1000, start_time=None, info={}, 
-                x_values=None, x_type='instants', duration=None):
+                x_values=None, x_type='instants'):
         
         assert x_values is not None, "x_values are missing"
         assert x_type in ['indices', 'instants'], "x_type not in ['indices', 'instants']"
@@ -432,7 +467,8 @@ class UnevenlySignal(Signal):
             # Keep indices, set start_time
             if start_time is None:
                 start_time = 0
-        else:
+            idx_t = x_values
+        else: #x_type ss instants
             
             # Get indices removing start_time
             if start_time is None:
@@ -442,24 +478,14 @@ class UnevenlySignal(Signal):
             
             # WARN: limitation to 10 decimals due to workaround to prevent wrong cast flooring
             # (e.g. np.floor(0.29 * 100) == 28)
-            x_values = _np.round((x_values - start_time) * sampling_freq, 10).astype(int)
-
-        # adding 1/f cause end_time is exclusive 
-        # Doesn't work when I put the last sample of a signal (we should add 1/fsamp to Signal.get_duration() too)
-        min_duration = (x_values[-1] + 1.) / sampling_freq if len(x_values) > 0 else 0
-        assert duration is None or duration >= min_duration, \
-            "The specified duration is less than the one of the x_values"
+            idx_t = _np.round((x_values - start_time) * sampling_freq, 10).astype(int)
 
         obj = Signal.__new__(cls, values=values,
                              sampling_freq=sampling_freq,
                              start_time=start_time,
                              info=info)
 
-        if duration is None:
-            duration = min_duration
-
-        obj.ph['x_values'] = x_values
-        obj.ph['duration'] = duration
+        obj.ph['idx_t'] = idx_t
         return obj
 
 

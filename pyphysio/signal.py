@@ -52,7 +52,7 @@ class Signal(_np.ndarray):
             'info': info
         }
         
-        setattr(obj, "_mutated", False)
+        # setattr(obj, "_mutated", False)
         return obj
 
     def __array_finalize__(self, obj):
@@ -69,9 +69,13 @@ class Signal(_np.ndarray):
             return out_arr
         
     def __getitem__(self, item):
+        #apply __getitem__ to values (ndarray)
         selected_values = super().__getitem__(item)
-        selected_info = self.__getiteminfo__(self, item)
-        selected_values.set_info(selected_info)
+        selected = self.clone_properties(selected_values)
+        selected = self.__getitem_attrib__(item, selected)
+        return selected
+    
+    def __getitem_attrib__(self, item, selected_values):
         return selected_values
         
     @property
@@ -104,6 +108,7 @@ class Signal(_np.ndarray):
         else:
             return(1)
     
+    #TODO: This will be removed once a good __getitem__function is written
     def get_channel(self, idx_ch):
         assert self.ndim > 1, "Signal has not multiple channels"
         assert self.get_nchannels() > idx_ch, f"Index of the channel {idx_ch}; Signal has {self.get_nchannels()} channels"
@@ -112,6 +117,7 @@ class Signal(_np.ndarray):
         ch_values = _np.expand_dims(ch_values, 1)
         return(EvenlySignal(ch_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
     
+    #TODO: This will be removed once a good __getitem__function is written
     def get_component(self, idx_comp):
         assert self.ndim > 2, "Signal has not multiple components"
         assert self.get_ncomponents() > idx_comp, f"Index of the component {idx_comp}; Signal has {self.get_ncomponents()} components"
@@ -165,12 +171,12 @@ class Signal(_np.ndarray):
             idx=0
         return(idx)
         
-    # @_abstract
-    def clone_properties(self):
-        pass
-    
-    def __getiteminfo__(self, item):
-        pass
+    def clone_properties(self, new_values):
+        x_new = Signal(new_values,
+                       self.get_sampling_freq(),
+                       self.get_start_time(),
+                       self.get_info())
+        return(x_new)
     
     # @_abstract
     def get_times(self):
@@ -212,7 +218,7 @@ class Signal(_np.ndarray):
         fig = _gcf()
         
         ndims = self.ndim
-        
+        linestyle='-'
         if ndims ==  1:
             if self.has_good():
                 good = self.get_good()
@@ -301,6 +307,44 @@ class EvenlySignal(Signal):
     info : dict, default = {}
         Other info 
     """
+    def __getitem_attrib__(self, item, selected):
+        
+        #set start time
+        original_times = self.get_times()
+        item_other = None
+        
+        if isinstance(item, tuple): #more than one axis involved
+            item_0 = item[0]
+            item_other = item[1:]
+        else:
+            item_0 = item
+            
+        new_start_time = original_times.__getitem__(item_0)
+        if not isinstance(item_0, int):
+            new_start_time = new_start_time[0]
+        
+        selected.set_start_time(new_start_time)
+        
+        #set other info
+        info = self.get_info()
+        
+        #ONLY MANAGE THE channels and components
+        #TODO: manage the first axis (time)
+        if isinstance(item_other, tuple):
+            
+            item_new = (slice(None,None,None), *item_other)
+            print(item)
+            if 'sqi' in info.keys():
+                #TODO: MANAGE SQI LIST
+                #otherwise it will probably throw an error
+                info['sqi'] = info['sqi'].__getitem__(item_new)
+                
+            if 'good' in info.keys():
+                info['good'] = info['good'].__getitem__(item_new)
+        
+        selected.set_info(info)
+        
+        return(selected)
     
     def clone_properties(self, new_values):
         x_new = EvenlySignal(new_values,
@@ -417,7 +461,7 @@ class EvenlySignal(Signal):
             The selected portion
         """
 
-        return self.segment_idx(self.get_idx(t_start), self.get_idx(t_stop))
+        return self[self.get_idx(t_start): self.get_idx(t_stop)]
     
     def __repr__(self):
         return Signal.__repr__(self)[:-1] + " freq:" + str(self.get_sampling_freq()) + "Hz>\n" + self.view(

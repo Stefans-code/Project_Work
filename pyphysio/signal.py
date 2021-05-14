@@ -69,8 +69,22 @@ class Signal(_np.ndarray):
             return out_arr
         
     def __getitem__(self, item):
-        #apply __getitem__ to values (ndarray)
-        selected_values = super().__getitem__(item)
+        #TODO if float segment based on time
+        if isinstance(item, slice): #slice based on time, no problem
+            selected_values = super().__getitem__(item)
+            
+        else: #tuple
+            
+            selected_values = super().__getitem__(item)
+        
+            #extracting a timestamp, it is not a signal anymore
+            if isinstance(item[0], int): 
+                return(selected_values)
+            
+            for dim, x in enumerate(item[1:]):
+                if isinstance(x, int):
+                    selected_values = _np.expand_dims(selected_values, dim+1)
+                
         selected = self.clone_properties(selected_values)
         selected = self.__getitem_attrib__(item, selected)
         return selected
@@ -333,7 +347,7 @@ class EvenlySignal(Signal):
         if isinstance(item_other, tuple):
             
             item_new = (slice(None,None,None), *item_other)
-            print(item)
+            # print(len(item), item[0], type(item[0]), item)
             if 'sqi' in info.keys():
                 #TODO: MANAGE SQI LIST
                 #otherwise it will probably throw an error

@@ -8,9 +8,6 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 from numbers import Number as _Number
 import copy
 
-# TODO: indexing should split also infos (eg sqi, good)
-# !!!: standard array indexing (signal[idx_start:idx_stop])
-
 def from_pickleable(pickle):
     """
     Builds a Signal using the pickleable tuple version of it.
@@ -70,27 +67,84 @@ class Signal(_np.ndarray):
         
     def __getitem__(self, item):
         #TODO if float segment based on time
-        if isinstance(item, slice): #slice based on time, no problem
-            selected_values = super().__getitem__(item)
-            
-        else: #tuple
-            
-            selected_values = super().__getitem__(item)
         
-            #extracting a timestamp, it is not a signal anymore
-            if isinstance(item[0], int): 
-                return(selected_values)
-            
-            for dim, x in enumerate(item[1:]):
-                if isinstance(x, int):
-                    selected_values = _np.expand_dims(selected_values, dim+1)
+        #apply __getitem__ to values (ndarray)
+        selected_values = super().__getitem__(item)
+        
+        #extracting only one scalar, just return the scalar
+        #to avoid issues with IDE variable viewers
+        if isinstance(item, tuple):
+            if _np.array([isinstance(x, int) for x in item]).all():
+                return selected_values
                 
+        if isinstance(item, tuple): #slice based on multiple dimensions
+            #if selecting only one index, mantain original number of dims
+            for dim, x in enumerate(item):
+                if isinstance(x, int):
+                    selected_values = _np.expand_dims(selected_values, dim)
+        
+        #add original metadata
         selected = self.clone_properties(selected_values)
+        
+        #process metadata
         selected = self.__getitem_attrib__(item, selected)
         return selected
     
-    def __getitem_attrib__(self, item, selected_values):
-        return selected_values
+    def __getitem_attrib__(self, item, selected):
+        original_sampling_freq = selected.get_sampling_freq()
+        original_start_time = selected.get_start_time()
+        
+        #separate item for the first axis from others
+        item_other = None
+        
+        if isinstance(item, tuple): #more than one axis involved
+            item_0 = item[0]
+            item_other = item[1:]
+        else:
+            item_0 = item
+        
+        #set start time and new sampling freq
+        if isinstance(item_0, int):
+            new_start_time = original_start_time + item_0/original_sampling_freq
+            new_sampling_freq = original_sampling_freq
+        else: #slice
+            new_start_time = original_start_time + item_0.start/original_sampling_freq
+            ratio = item_0.step if item_0.step is not None else 1
+            new_sampling_freq = original_sampling_freq/ratio
+        
+        selected.set_start_time(new_start_time)
+        selected.set_sampling_freq(new_sampling_freq)
+        
+        
+        #=========================
+        # work on metadata in info dict
+        info = selected.get_info()
+        
+        #set sqi if existing
+        #set good if existing
+        #sqi and good should be changed only if working on other dims
+        if isinstance(item_other, tuple):
+            
+            #It ONLY manages the channels and components
+            #TODO: manage the first axis (time)
+            
+            #create a new item that ignores the first dimension
+            item_new = (slice(None,None,None), *item_other)
+            
+            if 'sqi' in info.keys():
+                #TODO: MANAGE SQI LIST
+                #idea: use 4th axis instead of list?
+                
+                #otherwise it will probably throw an error
+                #apply the item_new to the sqi
+                new_sqi = info['sqi'].__getitem__(item_new)
+                selected.update_info('sqi', new_sqi)
+                
+            if 'good' in info.keys():
+                new_good = info['good'].__getitem__(item_new)
+                selected.update_info('good', new_good)
+        
+        return selected
         
     @property
     def ph(self):
@@ -122,24 +176,6 @@ class Signal(_np.ndarray):
         else:
             return(1)
     
-    #TODO: This will be removed once a good __getitem__function is written
-    def get_channel(self, idx_ch):
-        assert self.ndim > 1, "Signal has not multiple channels"
-        assert self.get_nchannels() > idx_ch, f"Index of the channel {idx_ch}; Signal has {self.get_nchannels()} channels"
-        ch_values = self.get_values()[:, idx_ch]
-        #recover original number of dimensions
-        ch_values = _np.expand_dims(ch_values, 1)
-        return(EvenlySignal(ch_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
-    
-    #TODO: This will be removed once a good __getitem__function is written
-    def get_component(self, idx_comp):
-        assert self.ndim > 2, "Signal has not multiple components"
-        assert self.get_ncomponents() > idx_comp, f"Index of the component {idx_comp}; Signal has {self.get_ncomponents()} components"
-        comp_values = self.get_values()[:, :, idx_comp]
-        #recover original number of dimensions
-        comp_values = _np.expand_dims(comp_values, 2)
-        return(EvenlySignal(comp_values, self.get_sampling_freq(), self.get_start_time(), self.get_info()))
-    
     def get_sampling_freq(self):
         return self.ph['sampling_freq']
 
@@ -159,12 +195,13 @@ class Signal(_np.ndarray):
         self.ph['info'] = value    
     
     def has_good(self):
-        info = self.get_info()
-        return 'good' in info.keys()
+        # info = self.get_info()
+        #TODO return if good are global?
+        return 'good' in self.ph['info'].keys()
     
     def get_good(self):
+        assert self.has_good(), "Quality has not been computed yet"
         info = self.get_info()
-        assert 'good' in info.keys(), "Quality has not been computed yet"
         is_good = info['good']
         assert is_good.shape[0] == 1, "Quality has not been computed globally. Please compute global quality first"
         
@@ -179,12 +216,16 @@ class Signal(_np.ndarray):
     def get_duration(self):
         return self.get_end_time() - self.get_start_time()
     
-    def get_idx(self, time):
+    def time2idx(self, time):
         idx = int((time - self.get_start_time()) * self.get_sampling_freq())
         if idx < 0:
             idx=0
         return(idx)
-        
+    
+    def idx2time(self, idx):
+        time = self.get_start_time() + idx/self.get_sampling_freq()
+        return(time)
+    
     def clone_properties(self, new_values):
         x_new = Signal(new_values,
                        self.get_sampling_freq(),
@@ -201,28 +242,8 @@ class Signal(_np.ndarray):
         pass
 
     # @_abstract
-    def get_iidx(self, time):
-        pass
-
-    # @_abstract
-    def get_time(self, idx):
-        pass
-
-    # @_abstract
-    def get_time_from_iidx(self, iidx):
-        pass
-
-    # @_abstract
     def resample(self, fout, kind='linear'):
         pass
-
-    # # @_abstract
-    # def segment_idx(self, idx_start, idx_stop=None):
-    #     pass
-
-    # # @_abstract
-    # def segment_iidx(self, iidx_start, iidx_stop=None):
-    #     pass
 
     # @_abstract
     def segment_time(self, t_start, t_stop=None):
@@ -280,7 +301,6 @@ class Signal(_np.ndarray):
             _tight_layout()
             _subplots_adjust(top=0.9, bottom=0.01, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
         
-
     @property
     def pickleable(self):
         """
@@ -321,74 +341,20 @@ class EvenlySignal(Signal):
     info : dict, default = {}
         Other info 
     """
-    def __getitem_attrib__(self, item, selected):
-        
-        #set start time
-        original_times = self.get_times()
-        item_other = None
-        
-        if isinstance(item, tuple): #more than one axis involved
-            item_0 = item[0]
-            item_other = item[1:]
-        else:
-            item_0 = item
-            
-        new_start_time = original_times.__getitem__(item_0)
-        if not isinstance(item_0, int):
-            new_start_time = new_start_time[0]
-        
-        selected.set_start_time(new_start_time)
-        
-        #set other info
-        info = self.get_info()
-        
-        #ONLY MANAGE THE channels and components
-        #TODO: manage the first axis (time)
-        if isinstance(item_other, tuple):
-            
-            item_new = (slice(None,None,None), *item_other)
-            # print(len(item), item[0], type(item[0]), item)
-            if 'sqi' in info.keys():
-                #TODO: MANAGE SQI LIST
-                #otherwise it will probably throw an error
-                info['sqi'] = info['sqi'].__getitem__(item_new)
-                
-            if 'good' in info.keys():
-                info['good'] = info['good'].__getitem__(item_new)
-        
-        selected.set_info(info)
-        
-        return(selected)
     
-    def clone_properties(self, new_values):
-        x_new = EvenlySignal(new_values,
-                             self.get_sampling_freq(),
-                             self.get_start_time(),
-                             self.get_info())
-        return(x_new)
-
     def get_times(self):
         return _np.arange(self.shape[0]) / self.get_sampling_freq() + self.get_start_time()
 
     def get_end_time(self):
         return self.get_time(self.shape[0] - 1) + 1. / self.get_sampling_freq()
 
-    def get_iidx(self, time):
-        return self.get_idx(time)
-
     def get_time(self, idx):
         return idx / self.get_sampling_freq() + self.get_start_time() if idx is not None else None
 
-    def get_time_from_iidx(self, iidx):
-        return self.get_time(iidx)
-
     def get_value_t(self, instant):
         values = self.get_values()
-        nearest_idx = int(_np.round(self.get_sampling_freq() * (instant - self.get_start_time())))
-        assert nearest_idx < self.shape[0], "Required instant is after the end of the signal"  # return self[-1]
-        assert nearest_idx >= 0, "Required instant is before the start of the signal"  # return self[0]
-        
-        return values[nearest_idx]
+        idx = self.time2idx(instant)
+        return values[idx]
     
     def resample(self, fout, kind='linear'):
         """
@@ -425,39 +391,6 @@ class EvenlySignal(Signal):
                             start_time=self.get_start_time(),
                             info=self.get_info())
 
-    # def segment_idx(self, idx_start, idx_stop=None):
-    #     """
-    #     Segment the signal given the indexes
-
-    #     Parameters
-    #     ----------
-    #     idx_start : int or None
-    #         The index of the start of the interval
-    #     idx_stop : int or None
-    #         The index of the end of the interval. By default is the length of the signal
-
-    #     Returns
-    #     -------
-    #     portion : EvenlySignal
-    #         The selected portion
-    #     """
-    #     return self.segment_iidx(idx_start, idx_stop)
-
-    def segment_iidx(self, iidx_start, iidx_stop=None):
-
-        signal_values = self.get_values()
-
-        if iidx_start is None:
-            iidx_start = 0
-        if iidx_stop is None:
-            iidx_stop = len(self)
-
-        values = signal_values[int(iidx_start):int(iidx_stop)]
-
-        out_signal = self.clone_properties(values)
-        out_signal.set_start_time(self.get_time(iidx_start))
-        return out_signal
-
     def segment_time(self, t_start, t_stop=None):
         """
         Segment the signal given a time interval
@@ -492,7 +425,7 @@ class UnevenlySignal(Signal):
     data : numpy.array (TIME [,1 [,1]])
         Values of the signal
     sampling_freq : float, >0
-        Sampling frequency
+        Sampling frequency, This also sets the precision for the temporal localization of the signal samples
     start_time: float,
         Instant of signal start
     info : dict, default = {}
@@ -508,6 +441,19 @@ class UnevenlySignal(Signal):
     duration: float,
         Duration of the original EvenlySignal, if any. Duration is needed to have information about the duration of the
         last sample, if None the last sample will last 1. / fsamp.
+    
+    Information from x_values and x_type is converted into a signal attribute: idx_t
+    idx_t is the array with the indices that indicate the temporal position of the signal values
+    on an EvenlySignal with the given sampling frequency and start time.
+        
+    IDX: indices of the idx_t attribute [0, 1, 2,   3,  4,  5, ...]
+    idx: values of the idx_t attribute  [1, 3, 10, 13, 20, 55, ...]
+    
+    idx*fsamp give the instants
+    idx[IDX]*fsamp is the timestamp of the IDX-th value of the signal
+    
+    When slicing, indices of the first axis are considered IDXs.
+    
     """
 
     def __new__(cls, values, sampling_freq=1000, start_time=None, info={}, 
@@ -521,12 +467,15 @@ class UnevenlySignal(Signal):
 
         assert values.shape[0] == x_values.shape[0], "Length of x_values should be equal to the length of the values"
         
+        #TODO check how start time is treated
+        #should be that the start time corresponds to the timestamp of the
+        #first sample
         if x_type == 'indices':
             # Keep indices, set start_time
             if start_time is None:
                 start_time = 0
             idx_t = x_values
-        else: #x_type ss instants
+        else: #x_type is instants
             
             # Get indices removing start_time
             if start_time is None:
@@ -546,14 +495,46 @@ class UnevenlySignal(Signal):
         obj.ph['idx_t'] = idx_t
         return obj
 
+    def __getitem__(self, item):
+        
+        #extracting only one scalar, just return the scalar
+        #to avoid issues with IDE variable viewers
+        if isinstance(item, tuple):
+            if _np.array([isinstance(x, int) for x in item]).all():
+                selected = super().__getitem__(item)
+                return(selected)
+        
+        #here we just manage the idx_t, 
+        #then we pass to the superclass methods
+        selected = self.clone_properties(self.get_values())
+        
+        idx_t = self.get_indices()
+        item_0 = item[0] if isinstance(item, tuple) else item
+        
+        new_idx_t = idx_t.__getitem__(item_0)
+        
+        if isinstance(new_idx_t, _Number):
+            new_idx_t = _np.array([0])
+        else:
+            new_idx_t = new_idx_t - new_idx_t[0]
+        
+        selected.ph['idx_t'] = new_idx_t
+        selected = super(UnevenlySignal, selected).__getitem__(item)
+        return(selected)
+        
+    # def __getitem_attrib__(self, item, selected):
+    #     #apply Signal.__getitem_attrib__()
+    #     super().__getitem_attrib__(item, selected)
+        
+        
+    #     return selected
 
-    #TODO: test
     def clone_properties(self, new_values, new_x=None, new_x_type=None):
         if new_x is not None:
             assert new_values.shape[0] == new_x.shape[0],\
                 "new_values and new_x shold have the same length"
         else:
-            new_x = self.ph['x_values']
+            new_x = self.ph['idx_t']
             new_x_type = 'indices'
             
         x_new = UnevenlySignal(new_values,
@@ -564,37 +545,64 @@ class UnevenlySignal(Signal):
                                new_x_type)
         return(x_new)
 
-    def get_duration(self):
-        return self.ph['duration']
-
     def get_end_time(self):
-        return self.get_start_time() + self.get_duration()
+        return self.get_start_time() + (1+self.get_indices()[-1])/self.get_sampling_freq()
 
     def get_times(self):
-        return self.ph['x_values'] / self.get_sampling_freq() + self.get_start_time()
+        return self.ph['idx_t'] / self.get_sampling_freq() + self.get_start_time()
 
     def get_indices(self):
-        return self.ph['x_values']
+        return self.ph['idx_t']
 
-    def get_time(self, idx):
-        return idx / self.get_sampling_freq() + self.get_start_time() if idx is not None else None
+    def IDX2time(self, IDX):
+        idx = self.IDX2idx(IDX)
+        time = super().idx2time(idx)
+        return time
+    
+    def time2IDX(self, time):
+        idx = super().time2idx(time)
+        IDX = self.idx2IDX(idx)
+        return IDX
+    
+    
+    def idx2IDX(self, idx):
+        '''
+        Return the nearest index of the 0 axis
+        to the IDX-th index of the idx_t attibute
 
-    def get_time_from_iidx(self, iidx):
-        if len(self) == 0:
-            return self.get_start_time()
-        elif int(iidx) < len(self):
-            return self.get_indices()[int(iidx)] / self.get_sampling_freq() + self.get_start_time()
-        else:
-            return self.get_time_from_iidx(-1)
+        Parameters
+        ----------
+        IDX : int
+            Index of the idx_t.
 
-    def get_iidx(self, time):
-        return self.get_iidx_from_idx((time - self.get_start_time()) * self.get_sampling_freq())
+        Returns
+        -------
+        idx. the nearest index of the 0 axis to IDX
 
-    def get_iidx_from_idx(self, idx):
-        if idx >= self.get_indices()[0]:
-            return int(_np.searchsorted(self.get_indices(), idx))
-        else:
-            return None
+        '''
+        idx_t = self.get_indices()
+        #the index corresponding to IDX should not be after the target idx
+        IDX = _np.where((idx_t - idx)<=0)[-1]
+        return(IDX)
+    
+
+    def IDX2idx(self, IDX):
+        '''
+        Return the idx-th value of the signal indices (idx_t attribute)    
+        
+        Parameters
+        ----------
+        idx : int
+            Index of the idx_t to be returned.
+
+        Returns
+        -------
+        IDX. The idx-th value of the signal indices
+        '''
+
+        idx_t = self.get_indices()
+        idx = idx_t[IDX]
+        return(idx)
 
     def to_evenly(self, kind='cubic'):
         """
@@ -652,13 +660,17 @@ class UnevenlySignal(Signal):
         portion : UnvenlySignal
             The selected portion
         """
-
-        return self.segment_idx(self.get_idx(t_start) if t_start is not None else None,
-                                self.get_idx(t_stop) if t_stop is not None else None)
+        idx_start = self.time2idx(t_start)
+        IDX_start = self.idx2IDX(idx_start)
+        
+        idx_stop = self.time2idx(t_stop)
+        IDX_stop = self.idx2IDX(idx_stop)
+        
+        return self[IDX_start:IDX_stop]
 
     def segment_idx(self, idx_start, idx_stop=None):
         """
-        Segment the signal given the indexes
+        Segment the signal using the indices of the idx_t attribute
 
         Parameters
         ----------
@@ -672,62 +684,11 @@ class UnevenlySignal(Signal):
         portion : UnvenlySignal
             The selected portion
         """
-        if idx_start is None:
-            idx_start = 0
-        if idx_stop is None:
-            idx_stop = self.get_indices()[-1]
-
-        iib = self.get_iidx_from_idx(idx_start)
-        iie = self.get_iidx_from_idx(idx_stop)
-
-        if iib is None and iie is None:
-            iidx_start = iidx_stop = idx_start = idx_stop = 0
-        else:
-            iidx_start = int(iib) if iib is not None else 0
-            iidx_stop = int(iie) if iie is not None else -1
-
-        return UnevenlySignal(values=self.get_values()[iidx_start:iidx_stop],
-                              sampling_freq=self.get_sampling_freq(),
-                              start_time=self.get_time(idx_start),
-                              info=self.get_info(),
-                              x_values=self.get_indices()[iidx_start:iidx_stop] - idx_start,
-                              x_type='indices',
-                              duration=(idx_stop - idx_start) / self.get_sampling_freq())
-
-    def segment_iidx(self, iidx_start, iidx_stop=None):
-        """
-        Segment the signal given the inner indexes
-
-        Parameters
-        ----------
-        iidx_start : int
-            The index of the start of the interval
-        iidx_stop : float
-            The index of the end of the interval. By default is the end of the signal
-
-        Returns
-        -------
-        portion : UnvenlySignal
-            The selected portion
-        """
-        if iidx_stop is None:
-            iidx_stop = len(self)
-        if iidx_start is None:
-            iidx_start = 0
-        if iidx_stop < len(self):
-            idx_stop = self.get_indices()[int(iidx_stop)]
-        else:
-            idx_stop = self.get_indices()[-1] + 1
-        idx_start = self.get_indices()[int(iidx_start)]
-
-        return UnevenlySignal(values=self.get_values()[int(iidx_start):int(iidx_stop)],
-                              sampling_freq=self.get_sampling_freq(),
-                              start_time=self.get_time_from_iidx(iidx_start),
-                              info=self.get_info(),
-                              x_values=self.get_indices()[int(iidx_start):int(iidx_stop)] - self.get_indices()[int(iidx_start)],
-                              x_type='indices',
-                              duration=(idx_stop - idx_start) / self.get_sampling_freq())
-
+        IDX_start = self.idx2IDX(idx_start)
+        IDX_stop = self.idx2IDX(idx_stop)
+        
+        return self[IDX_start:IDX_stop]
+    
     def plot(self, style=".-"):
         super().plot(style = style)
 

@@ -254,8 +254,8 @@ class LabelSegments(_Segmenter):
         while end < len(self.timeline) and self.timeline[self._i] == self.timeline[end]:
             end += 1
         
-        b = self.timeline.get_time_from_iidx(self._i)
-        e = self.timeline.get_time_from_iidx(end)
+        b = self.timeline.idx2time(self._i)
+        e = self.timeline.idx2time(end)
         self._i = end
         return b, e, self.timeline[end-1]
 

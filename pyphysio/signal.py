@@ -408,7 +408,7 @@ class EvenlySignal(Signal):
             The selected portion
         """
 
-        return self[self.get_idx(t_start): self.get_idx(t_stop)]
+        return self[self.time2idx(t_start): self.time2idx(t_stop)]
     
     def __repr__(self):
         return Signal.__repr__(self)[:-1] + " freq:" + str(self.get_sampling_freq()) + "Hz>\n" + self.view(
@@ -474,14 +474,12 @@ class UnevenlySignal(Signal):
             # Keep indices, set start_time
             if start_time is None:
                 start_time = 0
-            idx_t = x_values
-        else: #x_type is instants
+            assert _np.array([isinstance(x, int) for x in x_values]).all(), "x_values should be integers when x_type is instants"
+            idx_t = _np.array(x_values).astype(int)
             
-            # Get indices removing start_time
-            if start_time is None:
-                start_time = x_values[0]
-            else:
-                assert start_time <= x_values[0], "More than one sample at or before start_time"
+        else: #x_type is instants
+            assert start_time is None, "start_time should be None when x_values are instants"
+            start_time = x_values[0]
             
             # WARN: limitation to 10 decimals due to workaround to prevent wrong cast flooring
             # (e.g. np.floor(0.29 * 100) == 28)
@@ -636,7 +634,7 @@ class UnevenlySignal(Signal):
         # Init new signal
         sig_out = EvenlySignal(values=sig_out,
                                sampling_freq=self.get_sampling_freq(),
-                               start_time=self.get_time_from_iidx(0),
+                               start_time=self.get_start_time(0),
                                info=self.get_info())
 
         return sig_out

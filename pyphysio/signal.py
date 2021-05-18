@@ -467,14 +467,12 @@ class UnevenlySignal(Signal):
 
         assert values.shape[0] == x_values.shape[0], "Length of x_values should be equal to the length of the values"
         
-        #TODO check how start time is treated
-        #should be that the start time corresponds to the timestamp of the
         #first sample
         if x_type == 'indices':
             # Keep indices, set start_time
             if start_time is None:
                 start_time = 0
-            assert _np.array([isinstance(x, int) for x in x_values]).all(), "x_values should be integers when x_type is instants"
+            assert _np.array([isinstance(x, _np.integer) for x in x_values]).all(), "x_values should be integers when x_type is indices"
             idx_t = _np.array(x_values).astype(int)
             
         else: #x_type is instants
@@ -517,6 +515,7 @@ class UnevenlySignal(Signal):
             new_idx_t = new_idx_t - new_idx_t[0]
         
         selected.ph['idx_t'] = new_idx_t
+        
         selected = super(UnevenlySignal, selected).__getitem__(item)
         return(selected)
         
@@ -534,7 +533,7 @@ class UnevenlySignal(Signal):
         else:
             new_x = self.ph['idx_t']
             new_x_type = 'indices'
-            
+
         x_new = UnevenlySignal(new_values,
                                self.get_sampling_freq(),
                                self.get_start_time(),
@@ -580,7 +579,7 @@ class UnevenlySignal(Signal):
         '''
         idx_t = self.get_indices()
         #the index corresponding to IDX should not be after the target idx
-        IDX = _np.where((idx_t - idx)<=0)[-1]
+        IDX = _np.where((idx_t - idx)<=0)[0][-1]
         return(IDX)
     
 
@@ -663,7 +662,6 @@ class UnevenlySignal(Signal):
         
         idx_stop = self.time2idx(t_stop)
         IDX_stop = self.idx2IDX(idx_stop)
-        
         return self[IDX_start:IDX_stop]
 
     def segment_idx(self, idx_start, idx_stop=None):

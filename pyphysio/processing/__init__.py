@@ -1,6 +1,35 @@
 from ..signal import Signal as _Signal
 import numpy as _np
 
+
+def apply_on_signals(alg, signal):
+    print(alg)
+    print(type(signal))
+    
+    signal_out = []
+    
+    for i_component in range(signal.get_ncomponents()):
+        component_out = []
+        
+        for i_channel in range(signal.get_nchannels()):
+            channel_data = signal[:, i_channel, i_component]
+            print(channel_data.shape)
+            channel_out = alg(channel_data)
+            if channel_out.ndim == 0:
+                print('dims 0')
+                #result is a scalar
+                channel_out = _np.array([channel_out]).reshape(1,1,1)
+            print(channel_out.shape)
+            component_out.append(channel_out)
+        
+        component_out = _np.concatenate(component_out, axis = 1)
+        print(component_out.shape)
+        signal_out.append(component_out)
+    
+    signal_out = _np.concatenate(signal_out, axis = 2)
+    # print(signal_out.shape)
+    return(signal_out)
+            
 class Algorithm(object):
     """
     This is the algorithm container super class. It should be used only to be extended.
@@ -35,7 +64,7 @@ class Algorithm(object):
         #this would fuck up everithing and we need to manage this
         ndims_in = data.ndim
         shape_in = data.shape
-        values_out = _np.apply_along_axis(self.algorithm, 0, data)
+        values_out = apply_on_signals(self.algorithm, data)
         
         ndims_out = values_out.ndim
         shape_out = values_out.shape
@@ -43,7 +72,9 @@ class Algorithm(object):
         if ndims_in != ndims_out:
             #TODO: check that shape is the same (except axis 0)
             values_out = _np.expand_dims(values_out, 0)
-        return(values_out)
+            
+        signal_out = data.clone_properties(values_out)
+        return(signal_out)
 
     def __repr__(self):
         return self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']

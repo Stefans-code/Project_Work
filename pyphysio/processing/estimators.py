@@ -154,6 +154,8 @@ class BeatFromECG(_Algorithm):
         params = self._params
         bpm_max, delta, k = params["bpm_max"], params["delta"], params["k"]
         fmax = bpm_max / 60
+        
+        print(signal.shape)
 
         if delta == 0:
             delta = k * _SignalRange(win_len=2 / fmax, win_step=0.5 / fmax, smooth=False)(signal)

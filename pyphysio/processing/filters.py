@@ -47,9 +47,11 @@ class Normalize(_Algorithm):
         _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
 
     def algorithm(self, signal):
-
+        
         from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
-                
+        
+        # print(signal.shape)
+        
         params = self._params
         method = params['norm_method']
         if method == "mean":
@@ -62,8 +64,6 @@ class Normalize(_Algorithm):
             return (signal - _Min(signal)) / (_Max(signal) - _Min(signal))
         elif method == "custom":
             return (signal - params['norm_bias']) / params['norm_range']
-
-
 
 class IIRFilter(_Algorithm):
     """
@@ -120,7 +120,7 @@ class IIRFilter(_Algorithm):
 
         b, a = _filter_design.iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
 
-        sig_filtered = signal.clone_properties(_filtfilt(b, a, signal.get_values()))
+        sig_filtered = signal.clone_properties(_filtfilt(b, a, signal.get_values().ravel()))
 
         if _np.isnan(sig_filtered[0]):
             print('Filter parameters allow no solution. Returning original signal.')

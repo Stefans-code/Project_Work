@@ -692,7 +692,7 @@ class UnevenlySignal(Signal):
 
         assert kind != 'cubic' or len(self) > 3, "At least 4 samples needed for cubic interpolation"
 
-        data_x = self.ph['x_values']  # From a constant freq range
+        data_x = self.ph['idx_t']  # From a constant freq range
         data_y = self.get_values()
 
         # Cubic if needed
@@ -708,7 +708,7 @@ class UnevenlySignal(Signal):
         # Init new signal
         sig_out = EvenlySignal(values=sig_out,
                                sampling_freq=self.get_sampling_freq(),
-                               start_time=self.get_start_time(0),
+                               start_time=self.get_start_time(),
                                info=self.get_info())
 
         return sig_out

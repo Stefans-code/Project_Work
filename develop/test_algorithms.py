@@ -6,37 +6,64 @@ import pyphysio as ph
 # create two signals
 fsamp = 10
 
-signal = ph.EvenlySignal(np.random.uniform(size=(1000, 5, 2)), fsamp)
+signal = ph.EvenlySignal(np.random.uniform(size=(10)), fsamp)
+
+#%%
+signal_ = ph.Mean()(signal)
+
+#print(signal_.shape)
 
 #%%
 signal_ = ph.Normalize()(signal)
 
+#%%
+signal.plot()
+signal_.plot()
 print(signal_.shape)
 
+#%%
+signal_ = ph.SignalRange(win_len=1, win_step=0.5, smooth=True)(signal)
+print(signal_.shape)
+
+plt.plot(signal[:,0, 2])
+plt.plot(signal_[:,0, 2])
 
 #%%
-signal_ = ph.SignalRange(win_len=2 / 2, win_step=0.5 / 2, smooth=False)(signal)
+signal_vals = np.stack([np.sin(2*np.pi*x*np.arange(0, 10, 0.05)) for x in np.arange(10)], axis=1)
 
-# In[ ]:
+signal = ph.EvenlySignal(signal_vals, 20)
+freq, pwd = ph.PSD('fft')(signal)
+plt.plot(freq[:,0], pwd)
+
+#%%
+import pyphysio as ph
+import numpy as np
 from pyphysio import TestData
 from pyphysio import EvenlySignal
 
 ecg_data = TestData.ecg()
-eda_data = TestData.eda()
+# eda_data = TestData.eda()
 
 # create two signals
 fsamp = 2048
 tstart_ecg = 15
-tstart_eda = 5
+# tstart_eda = 5
 
-ecg = EvenlySignal(values = ecg_data, 
+ecg_ch = np.stack([ecg_data, 1+ecg_data, 2+ecg_data], 1)
+ecg_comp = np.stack([ecg_ch, 2*ecg_ch], 2)
+
+ecg = EvenlySignal(values = ecg_comp, 
                    sampling_freq = fsamp, 
                    start_time = tstart_ecg)
 
+# ecg = ecg[:10000]
 
 # In[ ]:
+# create two signals
+# fsamp = 10
 
-# ibi = ph.BeatFromECG()(ecg)
+# signal = ph.EvenlySignal(np.random.uniform(size=(10)), fsamp)
+ibi = ph.BeatFromECG()(ecg)
 
 
 
@@ -45,7 +72,7 @@ ecg = EvenlySignal(values = ecg_data,
 
 
 # apply a Filter
-ecg_filtered = lowpass_50(ecg)
+ecg_filtered = ph.Normalize()(ecg)
 
 
 # In[4]:

@@ -47,11 +47,8 @@ class Normalize(_Algorithm):
         _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
 
     def algorithm(self, signal):
-        
         from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
-        
-        # print(signal.shape)
-        
+        print('norm', signal.shape)
         params = self._params
         method = params['norm_method']
         if method == "mean":

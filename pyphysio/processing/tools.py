@@ -83,6 +83,8 @@ class PeakDetection(_Algorithm):
 
     
     def algorithm(self, signal):
+        # print('>>>peak')
+        # print(signal.shape)
         params = self._params
         refractory = params['refractory']
         if refractory == 0:  # if 0 then do not skip samples
@@ -263,7 +265,8 @@ class SignalRange(_Algorithm):
         fsamp = signal.get_sampling_freq()
         idx_len = int(win_len * fsamp)
         idx_step = int(win_step * fsamp)
-
+        
+        # print('>>> signalrange')
         if len(signal) < idx_len:
             print("Input signal is shorter than the window length.")
             return _np.max(signal) - _np.min(signal)
@@ -282,7 +285,7 @@ class SignalRange(_Algorithm):
             if smooth:
                 win_len = int(win_len*2*fsamp)
                 deltas = _np.convolve(deltas, _np.ones(win_len)/win_len, mode='same')
-
+            # print('<<< signalrange')
             return deltas
 
 class PSD(_Algorithm):

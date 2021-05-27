@@ -151,24 +151,26 @@ class BeatFromECG(_Algorithm):
         _Algorithm.__init__(self, bpm_max=bpm_max, delta=delta, k=k)
 
     def algorithm(self, signal):
+        # print('ibi', signal.shape)
         params = self._params
         bpm_max, delta, k = params["bpm_max"], params["delta"], params["k"]
         fmax = bpm_max / 60
-        
-        print(signal.shape)
 
         if delta == 0:
             delta = k * _SignalRange(win_len=2 / fmax, win_step=0.5 / fmax, smooth=False)(signal)
-
+        
+        # print('delta')
         #adjust for delta values equal to 0
         idx_delta_zeros = _np.where(delta==0)[0]
         idx_delta_nozeros = _np.where(delta>0)[0]
         delta[idx_delta_zeros] = _np.min(delta[idx_delta_nozeros])
         
         refractory = 1 / fmax
-
+        
+        # print(signal.shape)
         maxp, minp, maxv, minv = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal)
-
+        
+        # print('here', maxp, minp, maxv, minv )
         if maxp[0] == 0:
             maxp = maxp[1:]
 
@@ -182,8 +184,7 @@ class BeatFromECG(_Algorithm):
                               sampling_freq=fsamp,
                               start_time=signal.get_start_time(),
                               x_values=idx_ibi,
-                              x_type='indices',
-                              duration=signal.get_duration())
+                              x_type='indices')
         
         return ibi
 

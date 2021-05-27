@@ -5,7 +5,7 @@ fsamp = 10
 start_time = 0
 values = np.random.uniform(size=(1000,5,3))
 
-#%%
+#%
 signal = ph.EvenlySignal(values, fsamp, start_time)
 print(info_evenly(signal))
 
@@ -23,6 +23,18 @@ print(info_evenly(signal_))
 
 #%%
 signal_ = signal[100:480,0,0]
+print(info_evenly(signal_))
+
+#%%
+signal_ = signal[100,0,0]
+print(type(signal_))
+
+#%%
+signal_ = signal[100]
+print(info_evenly(signal_))
+
+#%%
+signal_ = signal[100, 3, :]
 print(info_evenly(signal_))
 
 #%%

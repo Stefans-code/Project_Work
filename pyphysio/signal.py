@@ -44,12 +44,13 @@ class Signal(_np.ndarray):
         #convert values to ndarray
         values = _np.asarray(values)
         
-        # a "simple" signal
-        # will have at least one channel and one component
-        if values.ndim == 1:
-            values = _np.expand_dims(values, 1)
-        if values.ndim == 2:
-            values = _np.expand_dims(values, 2)
+        # R2
+        # # a "simple" signal
+        # # will have at least one channel and one component
+        # if values.ndim == 1:
+        #     values = _np.expand_dims(values, 1)
+        # if values.ndim == 2:
+        #     values = _np.expand_dims(values, 2)
         
         obj = _np.asarray(values).view(cls)
         
@@ -76,16 +77,23 @@ class Signal(_np.ndarray):
             return out_arr
         
     def __getitem__(self, item):
+        # print(item, self.shape)
         #TODO if float segment based on time
         
         #apply __getitem__ to values (ndarray)
         values = self.get_values()
         selected_values = values.__getitem__(item)
-        
+
         #but this is a signal, so we need additional steps
         #to ensure the result is still a valid signal
         #- fixing out dims
         #- processing attributes
+        
+        # try to catch issue with the np.apply_along_axis
+        # which uses ellipsis and changes the shape
+        if isinstance(item, tuple) and Ellipsis in item:
+            return self.clone_properties(selected_values)
+            
         
         #If we are selecting an index on all axis
         #we are extracting only one scalar
@@ -93,25 +101,45 @@ class Signal(_np.ndarray):
         #This is also to avoid issues with IDE variable viewers
         if isinstance(item, tuple):
             if _np.array([isinstance(x, int) for x in item]).all():
+                # print(0)
                 return selected_values
-                
-        #item is a tuple --> slice based on multiple dimensions
-        #(also try to catch for np.apply_along_axis issue 
-        # with ellipsis and transpose)
-        if isinstance(item, tuple) and Ellipsis not in item: 
-            
-            #if selecting only one index (=int) on an axis
-            #expand the dimension to mantain the original number of dims
-            for dim, x in enumerate(item):
-                if isinstance(x, int):
-                    selected_values = _np.expand_dims(selected_values, dim)
         
+        # item is a tuple --> slice based on multiple dimensions
+        #++++++++++++++++++++++            
+        #If selecting only one timepoint (=int on 0 axis)
+        #maintain original number of dimensions
+        if isinstance(item, tuple) and Ellipsis not in item:
+            # print(1)
+            if isinstance(item[0], int):
+                # print('getitem', 2)
+                selected_values = _np.expand_dims(selected_values, 0)
+                
+        if isinstance(item, int):
+            # print(2)
+            selected_values = _np.expand_dims(selected_values, 0)
+        #++++++++++++++++++++++
+        
+        # R2
+        # item is a tuple --> slice based on multiple dimensions
+        # (also try to catch for np.apply_along_axis issue 
+        # with ellipsis and transpose)
+        # if isinstance(item, tuple) and Ellipsis not in item: 
+            # #if selecting only one index (=int) on an axis
+            # #expand the dimension to mantain the original number of dims
+            # for dim, x in enumerate(item):
+            #     if isinstance(x, int):
+            #         selected_values = _np.expand_dims(selected_values, dim)
+        
+        # print(selected_values.shape)
         #Create a pyphysio Signal 
         #add attributes from the original signal
+        # print(selected_values.shape)
+        
         selected = self.clone_properties(selected_values)
         
         #process metadata
         selected = self.__getitem_attrib__(item, selected)
+        # print(selected.shape)
         return selected
     
     def __getitem_attrib__(self, item, selected):
@@ -148,7 +176,6 @@ class Signal(_np.ndarray):
         selected.set_start_time(new_start_time)
         selected.set_sampling_freq(new_sampling_freq)
         
-        
         #=========================
         # work on metadata in info dict
         info = selected.get_info()
@@ -182,7 +209,7 @@ class Signal(_np.ndarray):
                 # for s in info['good'].keys():
                 new_good = info['good'].__getitem__(item_new)
                 selected.update_info('good', new_good)
-        
+
         return selected
         
     @property

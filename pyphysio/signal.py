@@ -40,7 +40,17 @@ class Signal(_np.ndarray):
     def __new__(cls, values, sampling_freq, start_time=None, info = {}):
         assert sampling_freq > 0, "The sampling frequency cannot be zero or negative"
         assert start_time is None or isinstance(start_time, _Number), "Start time is not numeric"
-                   
+        
+        #convert values to ndarray
+        values = _np.asarray(values)
+        
+        # a "simple" signal
+        # will have at least one channel and one component
+        if values.ndim == 1:
+            values = _np.expand_dims(values, 1)
+        if values.ndim == 2:
+            values = _np.expand_dims(values, 2)
+        
         obj = _np.asarray(values).view(cls)
         
         obj._pyphysio = {
@@ -69,21 +79,35 @@ class Signal(_np.ndarray):
         #TODO if float segment based on time
         
         #apply __getitem__ to values (ndarray)
-        selected_values = super().__getitem__(item)
+        values = self.get_values()
+        selected_values = values.__getitem__(item)
         
-        #extracting only one scalar, just return the scalar
-        #to avoid issues with IDE variable viewers
+        #but this is a signal, so we need additional steps
+        #to ensure the result is still a valid signal
+        #- fixing out dims
+        #- processing attributes
+        
+        #If we are selecting an index on all axis
+        #we are extracting only one scalar
+        #then just return the scalar and avoid processing the attributes
+        #This is also to avoid issues with IDE variable viewers
         if isinstance(item, tuple):
             if _np.array([isinstance(x, int) for x in item]).all():
                 return selected_values
                 
-        if isinstance(item, tuple): #slice based on multiple dimensions
-            #if selecting only one index, mantain original number of dims
+        #item is a tuple --> slice based on multiple dimensions
+        #(also try to catch for np.apply_along_axis issue 
+        # with ellipsis and transpose)
+        if isinstance(item, tuple) and Ellipsis not in item: 
+            
+            #if selecting only one index (=int) on an axis
+            #expand the dimension to mantain the original number of dims
             for dim, x in enumerate(item):
                 if isinstance(x, int):
                     selected_values = _np.expand_dims(selected_values, dim)
         
-        #add original metadata
+        #Create a pyphysio Signal 
+        #add attributes from the original signal
         selected = self.clone_properties(selected_values)
         
         #process metadata
@@ -91,6 +115,7 @@ class Signal(_np.ndarray):
         return selected
     
     def __getitem_attrib__(self, item, selected):
+        selected = selected.clone()
         original_sampling_freq = selected.get_sampling_freq()
         original_start_time = selected.get_start_time()
         
@@ -107,8 +132,16 @@ class Signal(_np.ndarray):
         if isinstance(item_0, int):
             new_start_time = original_start_time + item_0/original_sampling_freq
             new_sampling_freq = original_sampling_freq
+        elif item_0 is Ellipsis:
+            new_start_time = original_start_time
+            new_sampling_freq = original_sampling_freq
+        elif item_0 is None:
+            new_start_time = original_start_time
+            new_sampling_freq = original_sampling_freq
         else: #slice
-            new_start_time = original_start_time + item_0.start/original_sampling_freq
+            start = item_0.start if item_0.start is not None else 0
+            new_start_time = original_start_time + start/original_sampling_freq
+            
             ratio = item_0.step if item_0.step is not None else 1
             new_sampling_freq = original_sampling_freq/ratio
         
@@ -137,10 +170,16 @@ class Signal(_np.ndarray):
                 
                 #otherwise it will probably throw an error
                 #apply the item_new to the sqi
-                new_sqi = info['sqi'].__getitem__(item_new)
+                new_sqi = {}
+                for s in info['sqi'].keys():
+                    sqi = info['sqi'][s].clone()
+                    new_sqi[s] = sqi.__getitem__(item_new)
+                    
                 selected.update_info('sqi', new_sqi)
                 
             if 'good' in info.keys():
+                # new_good = {}
+                # for s in info['good'].keys():
                 new_good = info['good'].__getitem__(item_new)
                 selected.update_info('good', new_good)
         
@@ -175,6 +214,15 @@ class Signal(_np.ndarray):
             return(self.shape[2])
         else:
             return(1)
+    
+    def is_onedim(self):
+        if self.ndim == 1:
+            return True
+        if self.has_multi_channels():
+            return False
+        if self.has_multi_components():
+            return False
+        return True
     
     def get_sampling_freq(self):
         return self.ph['sampling_freq']
@@ -227,11 +275,12 @@ class Signal(_np.ndarray):
         return(time)
     
     def clone_properties(self, new_values):
-        x_new = Signal(new_values,
-                       self.get_sampling_freq(),
-                       self.get_start_time(),
-                       self.get_info())
-        return(x_new)
+        # x_new = self.__class__(new_values,
+        #                        self.get_sampling_freq(),
+        #                        self.get_start_time(),
+        #                        self.get_info())
+        # return(x_new)
+        pass
     
     # @_abstract
     def get_times(self):
@@ -249,34 +298,47 @@ class Signal(_np.ndarray):
     def segment_time(self, t_start, t_stop=None):
         pass
 
-    def plot(self, style="", ncols=4):
+    def plot(self, marker=None, ncols=4):
         fig = _gcf()
         
-        ndims = self.ndim
-        linestyle='-'
-        if ndims ==  1:
+        #if single signal, then plot
+        if self.is_onedim():
+            
+            #TODO if existing figure has many axes, 
+            #replicate the plot on each axis
+            
+            #if good then use asolid line
+            #else use a dotted line
+            linestyle='solid'
             if self.has_good():
                 good = self.get_good()
-                
-                print(good.shape)
-                if len(good)>0:
-                    linestyle = '-'
-                else:
-                    linestyle = '--'
+                if len(good)==0:
+                    linestyle = 'dotted'
+            
+            #plot the signal
             ax = _gca()
             t_ = self.get_times()
-            ax.plot(t_, self, style, linestyle = linestyle)
+            v_ = self.get_values()
+            if marker is None:
+                ax.plot(t_, _np.squeeze(v_), linestyle = linestyle)
+            else:
+                ax.plot(t_, _np.squeeze(v_), marker, linestyle = linestyle)
             _grid(True)
         
         else:
+            
             n_ch = self.get_nchannels()
             n_comp = self.get_ncomponents()
-            
+
+            #if existing figure has enough number of axes
+            #use the figure
             if len(fig.axes)>= n_ch:
-                    axes = fig.axes
-            else:
+                axes = fig.axes
+            
+            #else create a new figure 
+            else: 
                 if n_ch>1:
-                    
+                    #compute number of cols and rows and create a new figure
                     n_cols = n_ch if n_ch < ncols else ncols
                     n_rows = int(_np.ceil(n_ch/n_cols))
                     
@@ -285,21 +347,23 @@ class Signal(_np.ndarray):
                 else:
                     fig, axes = _subplots(1, 1, num = fig.number, sharex=True)
                     axes = [axes]
-        
+            
+            #recursive calls to signal.plot()
+            #for each channel and component
             for i_ch in range(n_ch):
                 _sca(axes[i_ch])
                 
                 if n_comp>1:
                     for i_comp in range(n_comp):
-                        self[:, i_ch, i_comp].plot()
+                        self[:, i_ch, i_comp].plot(marker=marker)
                 else:
-                    self[:, i_ch].plot()
+                    self[:, i_ch].plot(marker=marker)
                 _ylabel(i_ch)
                 _grid(True)
                 
             _xlim(self.get_start_time(), self.get_end_time())
             _tight_layout()
-            _subplots_adjust(top=0.9, bottom=0.01, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
+            _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
         
     @property
     def pickleable(self):
@@ -323,7 +387,7 @@ class Signal(_np.ndarray):
     def __repr__(self):
         return f"<start_time: {self.get_start_time()}>"
 
-    #TODO: implement __array_ufunc__
+    #TODO: implement __array_ufunc__ ?
 
 class EvenlySignal(Signal):
     """
@@ -355,6 +419,13 @@ class EvenlySignal(Signal):
         values = self.get_values()
         idx = self.time2idx(instant)
         return values[idx]
+    
+    def clone_properties(self, new_values):
+        x_new = self.__class__(new_values,
+                               self.get_sampling_freq(),
+                               self.get_start_time(),
+                               self.get_info())
+        return(x_new)
     
     def resample(self, fout, kind='linear'):
         """
@@ -459,15 +530,20 @@ class UnevenlySignal(Signal):
     def __new__(cls, values, sampling_freq=1000, start_time=None, info={}, 
                 x_values=None, x_type='instants'):
         
+        obj = Signal.__new__(cls, values=values,
+                             sampling_freq=sampling_freq,
+                             start_time=start_time,
+                             info=info)
+
         assert x_values is not None, "x_values are missing"
         assert x_type in ['indices', 'instants'], "x_type not in ['indices', 'instants']"
-        x_values = _np.asarray(x_values)
+        
+        x_values = _np.array(x_values).ravel()
         assert len(x_values) == len(values), "Length mismatch (y:%d vs. x:%d)" % (len(values), len(x_values))
         assert len(_np.where(_np.diff(x_values) <= 0)[0]) == 0, 'Given x_values are not strictly monotonic'
-
-        assert values.shape[0] == x_values.shape[0], "Length of x_values should be equal to the length of the values"
-        
-        #first sample
+            
+        #manage idx_t
+        #and consistent start_time
         if x_type == 'indices':
             # Keep indices, set start_time
             if start_time is None:
@@ -483,26 +559,24 @@ class UnevenlySignal(Signal):
             # (e.g. np.floor(0.29 * 100) == 28)
             idx_t = _np.round((x_values - start_time) * sampling_freq, 10).astype(int)
 
-        obj = Signal.__new__(cls, values=values,
-                             sampling_freq=sampling_freq,
-                             start_time=start_time,
-                             info=info)
-
+        obj.ph['start_time'] = start_time
         obj.ph['idx_t'] = idx_t
         return obj
 
     def __getitem__(self, item):
+        #first we need to process the idx_t attribute
+        #then we can pass to the Signal.__getitem__
+        #otherwise an error will be thrown due to length mismatch
+        #between values and x_values
         
-        #extracting only one scalar, just return the scalar
-        #to avoid issues with IDE variable viewers
-        if isinstance(item, tuple):
-            if _np.array([isinstance(x, int) for x in item]).all():
-                selected = super().__getitem__(item)
-                return(selected)
+        # #extracting only one scalar, just return the scalar
+        # #to avoid issues with IDE variable viewers
+        # if isinstance(item, tuple):
+        #     if _np.array([isinstance(x, int) for x in item]).all():
+        #         selected = super().__getitem__(item)
+        #         return(selected)
         
-        #here we just manage the idx_t, 
-        #then we pass to the superclass methods
-        selected = self.clone_properties(self.get_values())
+        selected = self.clone()
         
         idx_t = self.get_indices()
         item_0 = item[0] if isinstance(item, tuple) else item
@@ -518,6 +592,7 @@ class UnevenlySignal(Signal):
         
         selected = super(UnevenlySignal, selected).__getitem__(item)
         return(selected)
+        
         
     # def __getitem_attrib__(self, item, selected):
     #     #apply Signal.__getitem_attrib__()
@@ -685,8 +760,8 @@ class UnevenlySignal(Signal):
         
         return self[IDX_start:IDX_stop]
     
-    def plot(self, style=".-"):
-        super().plot(style = style)
+    def plot(self, marker="."):
+        super().plot(marker = marker)
 
         
     def __repr__(self):

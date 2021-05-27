@@ -29,7 +29,20 @@ class Algorithm(object):
         
         assert isinstance(data, _Signal), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
         
+        #when applying non numpy methods (is it true?)
+        #apply_along_axis generates arrays with shape (1,:,n_samples)
+        #where the number of dimensions is the number of samples of the original signal
+        #this would fuck up everithing and we need to manage this
+        ndims_in = data.ndim
+        shape_in = data.shape
         values_out = _np.apply_along_axis(self.algorithm, 0, data)
+        
+        ndims_out = values_out.ndim
+        shape_out = values_out.shape
+        
+        if ndims_in != ndims_out:
+            #TODO: check that shape is the same (except axis 0)
+            values_out = _np.expand_dims(values_out, 0)
         return(values_out)
 
     def __repr__(self):

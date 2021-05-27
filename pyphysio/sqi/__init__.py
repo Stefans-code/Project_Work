@@ -1,6 +1,5 @@
 import numpy as _np
 from ..processing import Algorithm as _Algorithm
-# from ..signal import Signal as _Signal
 from ..segmenters import _Segmenter,\
     FixedSegments as _FixedSegments
 
@@ -35,13 +34,23 @@ class SignalQualityIndicator(_Algorithm):
             output = _np.zeros_like(sqi_values)
             idx_good = _np.where((sqi_values >= threshold[0]) & (sqi_values <= threshold[1]))
             output[idx_good] = 1
+            
         return(output)
         
     def __call__(self, data):
+        #when applying non numpy methods (is it true?)
+        #apply_along_axis generates arrays with shape (1,:,n_samples)
+        #where the number of dimensions is the number of samples of the original signal
+        #this would fuck up everithing and we need to manage this
+        # if _np.max(data.shape) == data.ravel().shape[0]:
+        #     data = data.clone_properties(data.get_values().ravel())
+        #     values_out = _np.array(self.algorithm(data))
+        # else:
+        #     values_out = _np.apply_along_axis(self.algorithm, 0, data)
         
         values_out = super().__call__(data)
-        
         isgood = self.is_good(values_out)
+        
         return(values_out, isgood)
 
 class ComputeQuality(_Algorithm):
@@ -103,7 +112,7 @@ class ComputeQuality(_Algorithm):
             is_good_.append(v[1])
         
         #save sqi only in signal.info
-        signal.update_info('sqi', sqi_values_)
+        signal.update_info('sqi', sqi_values_)  
         
         #COMPUTE GOOD
         #---------
@@ -115,21 +124,18 @@ class ComputeQuality(_Algorithm):
         #i.e. the sum is equal to the number of sqi
         is_good_ = _np.sum(is_good_, axis=0) == is_good_.shape[0]
         
+        sqi_key = list(sqi_values.keys())[0]
         #---------
         #now, decide whether to get global or local indications
-        
-        #if only one timepoint, then it is global
-        if is_good_.shape[0] == 1:
-            signal.update_info('good', is_good_)
-        
-        else:
-            if compute_global:
-                #at leat ratio% timepoints should be good
-                is_good_ = _np.sum(is_good_, axis=0, keepdims=True) >= ratio*is_good_.shape[0]
-                signal.update_info('good', is_good_)
+        if compute_global:
+            #at leat ratio% timepoints should be good
+            is_good_ = _np.sum(is_good_, axis=0, keepdims=True) >= ratio*is_good_.shape[0]
+            is_good_signal = sqi_values_[sqi_key].clone_properties(is_good_)
+            signal.update_info('good', is_good_signal)
                 
-            else:
-                signal.update_info('good', is_good_)
+        else:
+            is_good_signal = sqi_values_[sqi_key].clone_properties(is_good_)
+            signal.update_info('good', is_good_signal)
         
         
         #return a signal with updated 'sqi' and 'good' in info

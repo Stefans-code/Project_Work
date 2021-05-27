@@ -41,7 +41,10 @@ class InBand(_Algorithm):
 
     def algorithm(self, signal):
         params = self._params
+
         freq, spec = PSD(**params)(signal)
+        freq = freq.ravel()
+        spec = spec.ravel()
         # freq is sorted so
         i_min = _np.searchsorted(freq, params["freq_min"])
         i_max = _np.searchsorted(freq, params["freq_max"])
@@ -79,8 +82,11 @@ class PowerInBand(_Algorithm):
 
     def algorithm(self, signal):
         params = self._params
-        freq, powers = InBand(**params)(signal)
-        return _np.sum(powers)
+        freq, powers = PSD(**params)(signal)
+        i_min = _np.searchsorted(freq, params["freq_min"])
+        i_max = _np.searchsorted(freq, params["freq_max"])
+        return _np.sum(powers[i_min:i_max] )
+    
 
 
 class PeakInBand(_Algorithm):

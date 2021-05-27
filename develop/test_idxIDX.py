@@ -16,11 +16,14 @@ def info(s_):
     print(s_.get_duration())
 
 #%%    
-signal = ph.UnevenlySignal(np.random.uniform(size=(1000, 5, 3)), 10,
+signal = ph.UnevenlySignal(np.random.uniform(size=(1000, 4, 3)), 10,
                            # start_time = 100,
                            x_values = np.arange(0, 100, 0.1),
                            x_type='instants')
 
+# signal.ph['info']['good'] = np.array([[0,1,2]])
+
+signal.plot()
 #%%
 s_ = signal.segment_time(30, 34.5)
 info(s_)

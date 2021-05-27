@@ -352,7 +352,9 @@ class PSD(_Algorithm):
         assert isinstance(signal, _EvenlySignal), "The PSD can be computed on EvenlySignals only. Consider interpolating the signal: signal.resample(fsamp)"
 
         fsamp = signal.get_sampling_freq()
-
+        
+        signal = signal.get_values().ravel()
+        
         if remove_mean:
             signal = signal - _np.mean(signal)
 
@@ -363,7 +365,7 @@ class PSD(_Algorithm):
             freqs, psd = _welch(signal, fsamp, window=window, return_onesided=True, nfft=nfft)
 
         elif method == 'ar':
-            print("Using AR method: results might not be comparable with other methods")
+            # print("Using AR method: results might not be comparable with other methods")
             #methods derived from: https://github.com/mpastell/pyageng
             def autocorr(x, lag=30):
                 c = _np.correlate(x, x, 'full')
@@ -419,10 +421,12 @@ class PSD(_Algorithm):
             
             min_order = params['min_order']
             max_order = params['max_order']
-
+            
             if len(signal) <= max_order:
-                print("Input signal too short: try another 'method', a lower 'max_order', or a longer signal")
-                return [], []
+                # print("Input signal too short: try another 'method', a lower 'max_order', or a longer signal")
+                freqs = _np.linspace(start=0, stop=fsamp / 2, num=1024)
+                p = _np.repeat(_np.nan, 1024)
+                return _np.squeeze(freqs), _np.squeeze(p)
 
             orders = _np.arange(min_order, max_order + 1)
             aics = [AIC_yule(signal, x) for x in orders]
@@ -443,7 +447,7 @@ class PSD(_Algorithm):
         # NORMALIZE
         if normalize:
             psd /= _np.sum(psd)
-        return freqs, psd
+        return _np.squeeze(freqs), _np.squeeze(psd)
 
 class Wavelet(_Algorithm):
     """

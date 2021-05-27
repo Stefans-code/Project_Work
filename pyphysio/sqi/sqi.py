@@ -15,7 +15,7 @@ class Kurtosis(_SignalQualityIndicator):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
 
     def algorithm(self, data):
-        k = _sps.kurtosis(data.get_values())
+        k = _sps.kurtosis(data.get_values().ravel())
         return(k)
 
 class Entropy(_SignalQualityIndicator):
@@ -27,9 +27,9 @@ class Entropy(_SignalQualityIndicator):
         if _np.isnan(data).all():
             return(_np.nan)
         nbins=params['nbins']
-        p_data = _np.histogram(data, bins=nbins)[0]/len(data) # calculates the probabilities
-        entropy = _sps.entropy(p_data)  # input probabilities to get the entropy 
-        return(entropy)
+        p_data = _np.histogram(data.get_values().ravel().reshape(-1,1), bins=nbins)[0]/len(data) # calculates the probabilities
+        entropy = _sps.entropy(_np.array(p_data))  # input probabilities to get the entropy 
+        return entropy
 
 class DerivativeEnergy(_SignalQualityIndicator):
     """
@@ -41,7 +41,7 @@ class DerivativeEnergy(_SignalQualityIndicator):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
     
     def algorithm(self, data):
-        x = data.get_values()
+        x = data.get_values().ravel()
         de = _np.sqrt(_np.nanmean(_np.power(_np.diff(x), 2)))
         return(de)
         

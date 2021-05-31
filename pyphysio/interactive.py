@@ -201,11 +201,9 @@ class Annotate(object):
             
         self.ibi_ok =  _UnevenlySignal(values=self.peaks_v,
                                        sampling_freq=self.ibi.get_sampling_freq(),
-                                       start_time=self.ibi.get_start_time(),
                                        info=self.ibi.get_info(),
                                        x_values=self.peaks_t,
-                                       x_type='instants',
-                                       duration=duration)
+                                       x_type='instants')
     def __call__(self):
         return self.ibi_ok
     

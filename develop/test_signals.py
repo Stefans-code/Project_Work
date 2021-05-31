@@ -34,7 +34,7 @@ signal_ = signal[100]
 print(info_evenly(signal_))
 
 #%%
-signal_ = signal[100, 3, :]
+signal_ = signal[100, 3]
 print(info_evenly(signal_))
 
 #%%

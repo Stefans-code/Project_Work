@@ -79,67 +79,46 @@ class Signal(_np.ndarray):
     def __getitem__(self, item):
         # print(item, self.shape)
         #TODO if float segment based on time
-        
+
         #apply __getitem__ to values (ndarray)
         values = self.get_values()
         selected_values = values.__getitem__(item)
-
-        #but this is a signal, so we need additional steps
-        #to ensure the result is still a valid signal
-        #- fixing out dims
-        #- processing attributes
         
-        # try to catch issue with the np.apply_along_axis
-        # which uses ellipsis and changes the shape
+        #try to catch Ellipsis issue with the np.apply_along_axis
+        #which uses ellipsis and changes the shape
         if isinstance(item, tuple) and Ellipsis in item:
-            return self.clone_properties(selected_values)
-            
+            return(self.clone_properties(selected_values))
         
-        #If we are selecting an index on all axis
-        #we are extracting only one scalar
-        #then just return the scalar and avoid processing the attributes
-        #This is also to avoid issues with IDE variable viewers
+        #If we are selecting an index on all axis 
+        #then we are extracting only one scalar:
+        #just return the scalar and avoid processing the attributes
+        #(This is also to avoid issues with IDE variable viewers)
         if isinstance(item, tuple):
             if _np.array([isinstance(x, int) for x in item]).all():
-                # print(0)
                 return selected_values
-        
-        # item is a tuple --> slice based on multiple dimensions
-        #++++++++++++++++++++++            
-        #If selecting only one timepoint (=int on 0 axis)
-        #maintain original number of dimensions
-        if isinstance(item, tuple) and Ellipsis not in item:
-            # print(1)
-            if isinstance(item[0], int):
-                # print('getitem', 2)
-                selected_values = _np.expand_dims(selected_values, 0)
                 
-        if isinstance(item, int):
-            # print(2)
-            selected_values = _np.expand_dims(selected_values, 0)
-        #++++++++++++++++++++++
-        
-        # R2
-        # item is a tuple --> slice based on multiple dimensions
-        # (also try to catch for np.apply_along_axis issue 
-        # with ellipsis and transpose)
-        # if isinstance(item, tuple) and Ellipsis not in item: 
-            # #if selecting only one index (=int) on an axis
-            # #expand the dimension to mantain the original number of dims
-            # for dim, x in enumerate(item):
-            #     if isinstance(x, int):
-            #         selected_values = _np.expand_dims(selected_values, dim)
-        
-        # print(selected_values.shape)
-        #Create a pyphysio Signal 
-        #add attributes from the original signal
-        # print(selected_values.shape)
-        
         selected = self.clone_properties(selected_values)
         
+        #but this is a signal, so we need additional steps
+        #to ensure the result is still a valid signal
+        
+        #1- processing attributes
         #process metadata
         selected = self.__getitem_attrib__(item, selected)
-        # print(selected.shape)
+        
+        #2- fixing dimensions
+        #If selecting only one timepoint (=int on 0 axis)
+        #maintain original number of dimensions
+        if isinstance(item, tuple):
+            if isinstance(item[0], int):
+                selected = _np.expand_dims(selected, 0)
+        
+        #If selecting only one timepoint (=int on 0 axis)
+        #(but no slicing on other axes)
+        #maintain original number of dimensions
+        if isinstance(item, int):
+            selected = _np.expand_dims(selected, 0)
+        
         return selected
     
     def __getitem_attrib__(self, item, selected):
@@ -557,6 +536,8 @@ class UnevenlySignal(Signal):
     def __new__(cls, values, sampling_freq=1000, start_time=None, info={}, 
                 x_values=None, x_type='instants'):
         
+        #TODO: if indices, x_values should always start at 0
+        #check that UEvenly signals are created accordingly
         obj = Signal.__new__(cls, values=values,
                              sampling_freq=sampling_freq,
                              start_time=start_time,
@@ -590,43 +571,44 @@ class UnevenlySignal(Signal):
         obj.ph['idx_t'] = idx_t
         return obj
 
+    #!!!
     def __getitem__(self, item):
-        #first we need to process the idx_t attribute
-        #then we can pass to the Signal.__getitem__
-        #otherwise an error will be thrown due to length mismatch
-        #between values and x_values
-        
-        # #extracting only one scalar, just return the scalar
-        # #to avoid issues with IDE variable viewers
-        # if isinstance(item, tuple):
-        #     if _np.array([isinstance(x, int) for x in item]).all():
-        #         selected = super().__getitem__(item)
-        #         return(selected)
-        
-        selected = self.clone()
-        
+
+        #there are some numpy functions that fuck the shape of the signal
+        #and generate errors with the slicing of the signals
+        #catch these issues and just return a numpy.ndarray object
         idx_t = self.get_indices()
+        n_samples = self.shape[0]
+        if len(idx_t) != n_samples:
+            #apply __getitem__ to values (ndarray)
+            values = self.get_values()
+            selected_values = values.__getitem__(item)
+            return(selected_values)
+
+        #first we need to process the idx_t attribute            
         item_0 = item[0] if isinstance(item, tuple) else item
-        
         new_idx_t = idx_t.__getitem__(item_0)
-        
+
         if isinstance(new_idx_t, _Number):
+            offset_time = new_idx_t/self.get_sampling_freq()
             new_idx_t = _np.array([0])
         else:
+            offset_time = new_idx_t[0]/self.get_sampling_freq()
             new_idx_t = new_idx_t - new_idx_t[0]
         
+        #we need to (?) create a new signal here
+        selected = self.clone()
         selected.ph['idx_t'] = new_idx_t
-        
+
+        #then we can pass to the Signal.__getitem__
+        #(otherwise an error will be thrown due to length mismatch
+        #between values and x_values)
         selected = super(UnevenlySignal, selected).__getitem__(item)
+        
+        #manage start time
+        selected.set_start_time(self.get_start_time() + offset_time)
         return(selected)
         
-        
-    # def __getitem_attrib__(self, item, selected):
-    #     #apply Signal.__getitem_attrib__()
-    #     super().__getitem_attrib__(item, selected)
-        
-        
-    #     return selected
 
     def clone_properties(self, new_values, new_x=None, new_x_type=None):
         if new_x is not None:

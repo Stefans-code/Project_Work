@@ -106,15 +106,16 @@ class BeatFromBP(_Algorithm):
         # STAGE 3 - FINALIZE computing IBI
         ibi_values = _np.diff(true_peaks) / fsamp
         ibi_values = _np.r_[ibi_values[0], ibi_values]
-        idx_ibi = _np.array(true_peaks)
+        idx_ibi = _np.array(true_peaks).astype(int)
+        t0 = signal.get_times()[idx_ibi[0]]
+        idx_ibi = idx_ibi - idx_ibi[0]
 
         ibi = _UnevenlySignal(values=ibi_values,
                               sampling_freq=fsamp,
-                              start_time=signal.get_start_time(),
-                              info = signal.get_info(),
+                              start_time=t0,
+                              info=signal.get_info(),
                               x_values=idx_ibi,
-                              x_type='indices',
-                              duration=signal.get_duration())
+                              x_type='indices')
         return ibi
 
 
@@ -359,8 +360,9 @@ class PhasicEstim(_Algorithm):
         idx_grid = _np.arange(0, len(driver_no_peak) - 1, grid_size * fsamp)
         idx_grid = _np.r_[idx_grid, len(driver_no_peak) - 1]
 
-        driver_grid = _UnevenlySignal(driver_no_peak[idx_grid], sampling_freq = fsamp, start_time= signal.get_start_time(), info=signal.get_info(),
-                                      x_values=idx_grid, x_type='indices', duration=signal.get_duration())
+        driver_grid = _UnevenlySignal(driver_no_peak[idx_grid], sampling_freq = fsamp, 
+                                      start_time= signal.get_start_time(), info=signal.get_info(),
+                                      x_values=idx_grid, x_type='indices')
         tonic = driver_grid.to_evenly(kind='cubic')
 
         phasic = signal - tonic
@@ -417,8 +419,10 @@ class Energy(_Algorithm):
         energy[-1] = energy[-2]
 
         idx_interp = _np.r_[0, windows + round(idx_len / 2), len(signal)-1]
-        energy_out = _UnevenlySignal(energy, signal.get_sampling_freq(), start_time = signal.get_start_time(), x_values=idx_interp,
-                                     x_type='indices', duration=signal.get_duration()).to_evenly('linear')
+        energy_out = _UnevenlySignal(energy, signal.get_sampling_freq(), 
+                                     start_time = signal.get_start_time(), 
+                                     x_values=idx_interp,
+                                     x_type='indices').to_evenly('linear')
 
         if smooth:
             energy_out = _ConvolutionalFilter(irftype='gauss', win_len=2, normalize=True)(energy_out)

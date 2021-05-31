@@ -15,6 +15,15 @@ def check(signal, shape=(1000, 5, 3), fsamp=100, starttime=0):
     assert signal.time2idx(starttime) == 0
     assert signal.idx2time(0) == starttime
 
+
+def info(s):
+    print(type(s))
+    print('shape\n', s.shape)
+    print('dfsamp \n', s.get_sampling_freq())
+    
+    print('values \n', s.get_values()[:2])
+    print('values shape\n', s.get_values().shape)
+
 def info_evenly(s):
     print(type(s))
     print('shape\n', s.shape)

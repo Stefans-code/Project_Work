@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # plt.ioff()
 # from numpy.matrixlib.defmatrix import matrix  # this raises all the right alarm bells
 
-from test_utils import generate_evenly, info_evenly, check
+from test_utils import generate_evenly, info_evenly, check, info
 
 np.random.seed(10)
 fsamp = 10
@@ -30,24 +30,26 @@ signal = generate_evenly((1000,2), fsamp)
 
 # #%%
 #%%
-sqi = [ph.Kurtosis([0,1], name='K'),
-       ph.Entropy([0,1], name='E'),
-       ph.DerivativeEnergy([0,1], name='DE')]
+algorithms = [ph.Kurtosis([0,1], name='K'),
+              ph.Entropy([0,1], name='E'),
+              ph.DerivativeEnergy([0,1], name='DE')]
 
 segmenter = ph.FixedSegments(5, drop_cut=False, drop_mixed=False)
 compute_global = True
 ratio = 0.9
 
-signal = ph.ComputeQuality(sqi,
+signal = ph.ComputeQuality(algorithms,
                            segmenter=segmenter,
                            compute_global = compute_global,
                            ratio=ratio)(signal)
 info = signal.get_info()
+
 print(info['sqi']['K'].shape)
 print(info['good'].shape)
 type(info['sqi']['K'])
 type(info['good'])
 
+#%%
 s = signal[:, 0]
 info_s = s.get_info()
 print(info_s['sqi']['K'].shape)

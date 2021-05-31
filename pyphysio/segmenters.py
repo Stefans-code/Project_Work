@@ -377,21 +377,16 @@ def fmap(segmenter, algorithms, signal):
         
         #if the algorithm returns a Signal
         elif isinstance(values[0], _Signal):
-            print(1)
             result[alg.__repr__()] = result_algorithm
         
         #if the algorithm returns a numpy array
         #we create Signals
         elif isinstance(values[0], _np.ndarray):
-            print(2)
-            print(values[0].shape)
             
-            values = _np.concatenate(values, axis=0)
+            values = _np.stack(values, axis=0)
             #BE CAREFUL HERE ABOUT THE NUMBER OF DIMS OF THE OUTPUT ARRAY
-            print(values.shape)
             
             if isinstance(segmenter, FixedSegments):
-                print(3)
                 #since we used a FixedSegments, we can create an EvenlySignal
                 fsamp = 1/segmenter._step
                 
@@ -403,7 +398,6 @@ def fmap(segmenter, algorithms, signal):
                 result[alg.__repr__()] = _EvenlySignal(values, fsamp, t[0], info)
                 
             else:
-                print(4)
                 fsamp = signal.get_sampling_freq()
                 info = {'label': _UnevenlySignal(labels, fsamp,
                                                  x_values = _np.array(t),
@@ -428,7 +422,7 @@ def fmap(segmenter, algorithms, signal):
                 values_signal = []
                 for v in values:
                     values_signal.append(v[i_signal])
-                values_signal = _np.concatenate(values_signal, axis=0)
+                values_signal = _np.stack(values_signal, axis=0)
                 
                 if isinstance(segmenter, FixedSegments):
                     print(6)

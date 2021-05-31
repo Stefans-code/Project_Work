@@ -861,5 +861,4 @@ class FixIBI(_Algorithm):
                                sampling_freq = signal.get_sampling_freq(), 
                                start_time = signal.get_start_time(),
                                info = signal.get_info(), 
-                               x_values=idx_ibi, x_type='indices', 
-                               duration=signal.get_duration())
+                               x_values=idx_ibi, x_type='indices')

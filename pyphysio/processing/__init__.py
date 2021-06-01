@@ -1,5 +1,6 @@
 from ..signal import Signal as _Signal
 import numpy as _np
+import numpy.ma as _ma
 
 
 def apply_on_signals(alg, signal):
@@ -57,7 +58,7 @@ class Algorithm(object):
         """
         
         assert isinstance(data, _Signal), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
-        values_out = _np.apply_along_axis(self.algorithm, 0, data)
+        values_out = _ma.apply_along_axis(self.algorithm, 0, data)
         return(values_out)
 
     def __repr__(self):

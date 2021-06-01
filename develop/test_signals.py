@@ -18,6 +18,10 @@ signal_ = signal[:100,0]
 print(info_evenly(signal_))
 
 #%%
+signal_ = signal[::2,0]
+print(info_evenly(signal_))
+
+#%%
 signal_ = signal[:100,0,0]
 print(info_evenly(signal_))
 
@@ -46,11 +50,12 @@ start_time = 0
 values = np.random.uniform(size=(1000,5,3))
 
 x_indices = np.arange(1000)
-x_values = x_indices/fsamp
 
 signal = ph.UnevenlySignal(values, fsamp, start_time,
                            x_values = x_indices,
                            x_type = 'indices')
+
+#%%
 print(info_ue(signal))
 
 #%%
@@ -74,5 +79,5 @@ signal_ = signal.segment_time(55.3, 80)
 print(info_ue(signal_))
 
 #%%
-signal_ = signal.segment_idx(55, 80)
+signal_ = signal.segment_IDX(55, 80)
 print(info_ue(signal_))

@@ -15,7 +15,7 @@ print(signal_.shape)
 print(type(signal_))
 
 #%%
-signal_ = ph.Normalize()(signal)
+signal_ = ph.Normalize(norm_method='custom')(signal)
 info(signal_)
 
 #%%

@@ -179,11 +179,14 @@ class BeatFromECG(_Algorithm):
 
         ibi_values = _np.diff(maxp) / fsamp
         ibi_values = _np.r_[ibi_values[0], ibi_values]
-        idx_ibi = _np.array(maxp)
+        idx_ibi = _np.array(maxp).astype(int)
+        
+        new_start_time = signal.get_start_time() + idx_ibi[0]/signal.get_sampling_freq()
+        idx_ibi = idx_ibi - idx_ibi[0]
 
         ibi = _UnevenlySignal(values=ibi_values,
                               sampling_freq=fsamp,
-                              start_time=signal.get_start_time(),
+                              start_time=new_start_time,
                               x_values=idx_ibi,
                               x_type='indices')
         

@@ -15,6 +15,20 @@ def check(signal, shape=(1000, 5, 3), fsamp=100, starttime=0):
     assert signal.time2idx(starttime) == 0
     assert signal.idx2time(0) == starttime
 
+def info_ue(s_):
+    print(type(s_))
+    print(s_.shape)
+    print(s_.get_indices()[:10])
+    print(s_.get_indices()[-10:])
+    
+    print(s_.get_times()[:10])
+    print(s_.get_times()[-10:])
+    
+    print(s_.get_start_time())
+    print(s_.get_end_time())
+    
+    print(s_.get_duration())
+
 
 def info(s):
     print(type(s))

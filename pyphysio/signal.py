@@ -84,11 +84,6 @@ class Signal(_np.ndarray):
         values = self.get_values()
         selected_values = values.__getitem__(item)
         
-        #try to catch Ellipsis issue with the np.apply_along_axis
-        #which uses ellipsis and changes the shape
-        if isinstance(item, tuple) and Ellipsis in item:
-            return(self.clone_properties(selected_values))
-        
         #If we are selecting an index on all axis 
         #then we are extracting only one scalar:
         #just return the scalar and avoid processing the attributes
@@ -96,7 +91,13 @@ class Signal(_np.ndarray):
         if isinstance(item, tuple):
             if _np.array([isinstance(x, int) for x in item]).all():
                 return selected_values
-                
+            
+        #try to catch Ellipsis issue with the np.apply_along_axis
+        #which uses ellipsis and changes the shape
+        #avoid processing attributes and just return the signal
+        if isinstance(item, tuple) and Ellipsis in item:
+            return(self.clone_properties(selected_values))
+        
         selected = self.clone_properties(selected_values)
         
         #but this is a signal, so we need additional steps
@@ -122,7 +123,7 @@ class Signal(_np.ndarray):
         return selected
     
     def __getitem_attrib__(self, item, selected):
-        selected = selected.clone()
+        # selected = selected.clone()
         original_sampling_freq = selected.get_sampling_freq()
         original_start_time = selected.get_start_time()
         
@@ -573,19 +574,37 @@ class UnevenlySignal(Signal):
 
     #!!!
     def __getitem__(self, item):
-
-        #there are some numpy functions that fuck the shape of the signal
-        #and generate errors with the slicing of the signals
-        #catch these issues and just return a numpy.ndarray object
+        #first, apply __getitem__ to values (ndarray)
+        values = self.get_values()
+        selected_values = values.__getitem__(item)
+        
+        #If we are selecting an index on all axis 
+        #then we are extracting only one scalar:
+        #just return the scalar and avoid processing the attributes
+        #(This is also to avoid issues with IDE variable viewers)
+        if isinstance(item, tuple):
+            if _np.array([isinstance(x, int) for x in item]).all():
+                return selected_values
+        
+        #ISSUE 1 [Is it solved?]
+        #There are some numpy functions (eg median)
+        #that fuck the shape of the signal
+        #and would generate errors with the slicing of the idx_t
+        #catch these issues by comparing the len of values and idx_t
+        #and just return a numpy.ndarray object
+        # idx_t = self.get_indices()
+        # n_samples = self.shape[0]
+        # # print(len(idx_t))
+        # # print(idx_t)
+        # # print(n_samples, self.shape)
+        # if len(idx_t) != n_samples:
+        #     print('issue1')
+        #     return(selected_values)
+        
+        #We already processed the values before,        
+        #here we process the idx_t attribute
+        #considering only the selection on the 0 axis
         idx_t = self.get_indices()
-        n_samples = self.shape[0]
-        if len(idx_t) != n_samples:
-            #apply __getitem__ to values (ndarray)
-            values = self.get_values()
-            selected_values = values.__getitem__(item)
-            return(selected_values)
-
-        #first we need to process the idx_t attribute            
         item_0 = item[0] if isinstance(item, tuple) else item
         new_idx_t = idx_t.__getitem__(item_0)
 
@@ -596,28 +615,63 @@ class UnevenlySignal(Signal):
             offset_time = new_idx_t[0]/self.get_sampling_freq()
             new_idx_t = new_idx_t - new_idx_t[0]
         
-        #we need to (?) create a new signal here
-        selected = self.clone()
-        selected.ph['idx_t'] = new_idx_t
-
-        #then we can pass to the Signal.__getitem__
-        #(otherwise an error will be thrown due to length mismatch
-        #between values and x_values)
-        selected = super(UnevenlySignal, selected).__getitem__(item)
+        #ISSUE 2
+        #try to catch Ellipsis issue with some np functions
+        #which uses ellipsis and changes the shape
+        if isinstance(item, tuple) and Ellipsis in item:
+            if len(selected_values.shape) == 0:
+                return(self.clone_properties(_np.array([selected_values]),
+                                             _np.array([new_idx_t[0]]),
+                                             'indices'))
+            elif len(idx_t) == len(selected_values):
+                return(self.clone_properties(selected_values,
+                                             new_idx_t,
+                                             'indices'))
+            else:
+                assert len(selected_values) == len(new_idx_t), "why here?"
+                return(selected_values)
+                
         
-        #manage start time
+        #to understand when it is not working:
+        assert len(selected_values) == len(new_idx_t)
+        
+        selected = self.clone_properties(selected_values,
+                                         new_idx_t,
+                                         'indices')
+        
+        #but this is a signal, so we need additional steps
+        #to ensure the result is still a valid signal
+        
+        #1- processing attributes
+        #process metadata
+        selected = self.__getitem_attrib__(item, selected)
+        
+        #2- fixing dimensions
+        #If selecting only one timepoint (=int on 0 axis)
+        #maintain original number of dimensions
+        if isinstance(item, tuple):
+            if isinstance(item[0], int):
+                selected = _np.expand_dims(selected, 0)
+        
+        #If selecting only one timepoint (=int on 0 axis)
+        #(but no slicing on other axes)
+        #maintain original number of dimensions
+        if isinstance(item, int):
+            selected = _np.expand_dims(selected, 0)
+        
+        #manage start time which was changed in __getitem_attrib__
         selected.set_start_time(self.get_start_time() + offset_time)
         return(selected)
         
-
-    def clone_properties(self, new_values, new_x=None, new_x_type=None):
-        if new_x is not None:
-            assert new_values.shape[0] == new_x.shape[0],\
+    def __getitem_attrib__(self, item, selected):
+        return super().__getitem_attrib__(item, selected)
+        
+    def clone_properties(self, new_values, new_x, new_x_type):
+        assert new_x is not None
+        assert new_x_type is not None
+        assert new_values.shape[0] == new_x.shape[0],\
                 "new_values and new_x shold have the same length"
-        else:
-            new_x = self.ph['idx_t']
-            new_x_type = 'indices'
-
+        
         x_new = UnevenlySignal(new_values,
                                self.get_sampling_freq(),
                                self.get_start_time(),

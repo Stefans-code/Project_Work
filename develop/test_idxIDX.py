@@ -1,19 +1,7 @@
 import pyphysio as ph
 import numpy as np
 
-def info(s_):
-    print(type(s_))
-    print(s_.shape)
-    print(s_.get_indices()[:10])
-    print(s_.get_indices()[-10:])
-    
-    print(s_.get_times()[:10])
-    print(s_.get_times()[-10:])
-    
-    print(s_.get_start_time())
-    print(s_.get_end_time())
-    
-    print(s_.get_duration())
+from test_utils import info_ue
 
 #%%    
 signal = ph.UnevenlySignal(np.random.uniform(size=(1000, 4, 3)), 10,
@@ -31,19 +19,19 @@ print(np.median(signal))
 #%%
 s_ = signal.segment_time(30, 34.5)
 
-info(s_)
+info_ue(s_)
 # info(signal)
 
 #%%
 s_ = signal[300: 345]
 
-info(s_)
+info_ue(s_)
 # info(signal)
 
 #%%
 s_ = signal.segment_idx(300,  345)
 
-info(s_)
+info_ue(s_)
 # info(signal)
 
 #%%    
@@ -52,17 +40,22 @@ signal = ph.UnevenlySignal(np.random.uniform(size=(1000, 4, 3)), 10,
                            x_values = np.arange(0, 2000, 2),
                            x_type='indices')
 
-info(signal)
+info_ue(signal)
+
 #%%
 s_ = signal.segment_time(30, 34.5)
 
-info(s_)
+info_ue(s_)
 # info(signal)
 
 #%%
 s_ = signal[300: 345]
 
-info(s_)
+info_ue(s_)
 # info(signal)
 
 #%%
+s_ = signal.segment_idx(300,  345)
+
+info_ue(s_)
+# info(signal)

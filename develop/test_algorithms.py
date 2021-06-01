@@ -61,55 +61,24 @@ ecg = EvenlySignal(values = ecg_comp,
 ecg_filtered = ph.Normalize()(ecg)
 
 
-# In[4]:
+#%%
+info(ecg_filtered)
 
-
-ecg_filtered.shape
-
-
-# In[ ]:
-
-
-ecg.plot()
-
-
-# In[ ]:
-
-
-ecg_filtered.shape
-
-
-# In[ ]:
-
-
-#plot
+#%%
 ecg.plot()
 ecg_filtered.plot()
 
-
-# ### 2.2 Estimators
-# Estimators are algorithms which aim at extracting the information of interest from the input signal, thus returning a new signal which has a different **`signal_nature`**. 
-# 
-# The name *`Estimators`* recalls the fact that the information extraction depends on the value of the algorithm parameters which might not be known *a-priori*. Thus the result should be considered as an estimate of the real content of information of the input signal.
-
 #%%
-# create an Estimator
-import pyphysio.processing.estimators as est
-
 ecg = EvenlySignal(values = ecg_data, 
                    sampling_freq = fsamp, 
                    start_time = tstart_ecg)
 
-ibi_ecg = est.BeatFromECG()
-
+ibi_ecg = ph.BeatFromECG()
 ibi = ibi_ecg(ecg)
 
 #%%
-
-
 rmssd = ph.RMSSD()
 HF = ph.PowerInBand(interp_freq=4, freq_max=0.4, freq_min=0.15, method = 'ar')
-
 
 rmssd_ = rmssd(ibi)
 HF_ = HF(ibi.resample(4)) #resampling is needed to compute the Power Spectrum Density

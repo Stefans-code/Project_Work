@@ -15,6 +15,7 @@ signal = ph.UnevenlySignal(np.random.uniform(size=(1000, 4, 3)), 10,
 # info(signal)
 
 print(np.median(signal))
+result = np.median(signal, axis=0)
 
 #%%
 s_ = signal.segment_time(30, 34.5)
@@ -59,3 +60,7 @@ s_ = signal.segment_idx(300,  345)
 
 info_ue(s_)
 # info(signal)
+
+#%%
+s_ = ph.Normalize()(signal)
+info_ue(s_)

@@ -586,20 +586,22 @@ class UnevenlySignal(Signal):
             if _np.array([isinstance(x, int) for x in item]).all():
                 return selected_values
         
-        #ISSUE 1 [Is it solved?]
+        #ISSUE 1
         #There are some numpy functions (eg median)
         #that fuck the shape of the signal
         #and would generate errors with the slicing of the idx_t
         #catch these issues by comparing the len of values and idx_t
         #and just return a numpy.ndarray object
-        # idx_t = self.get_indices()
-        # n_samples = self.shape[0]
-        # # print(len(idx_t))
-        # # print(idx_t)
-        # # print(n_samples, self.shape)
-        # if len(idx_t) != n_samples:
-        #     print('issue1')
-        #     return(selected_values)
+        idx_t = self.get_indices()
+        n_samples = self.shape[0]
+        if len(idx_t) != n_samples:
+            print('issue1')
+            print(item)
+            print(len(idx_t))
+            print(idx_t)
+            print(n_samples, self.shape)
+            print(self.shape)
+            return(selected_values)
         
         #We already processed the values before,        
         #here we process the idx_t attribute
@@ -607,7 +609,7 @@ class UnevenlySignal(Signal):
         idx_t = self.get_indices()
         item_0 = item[0] if isinstance(item, tuple) else item
         new_idx_t = idx_t.__getitem__(item_0)
-
+        
         if isinstance(new_idx_t, _Number):
             offset_time = new_idx_t/self.get_sampling_freq()
             new_idx_t = _np.array([0])

@@ -1,12 +1,13 @@
 # coding=utf-8
 # from __future__ import division
 import numpy as _np
+import numpy.ma as _ma
 import scipy.stats as _stats
 from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_design as _filter_design, \
     deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve
 # from matplotlib.pyplot import plot as _plot
 from . import Algorithm as _Algorithm
-from ..signal import UnevenlySignal as _UnevenlySignal
+from ..signal import Signal as _Signal
 # from ..Utility import abstractmethod as _abstract
 from .tools import SignalRange
 from collections import Sequence
@@ -59,7 +60,8 @@ class Normalize(_Algorithm):
         elif method == "maxmin":
             return (signal - _Min(signal)) / (_Max(signal) - _Min(signal))
         elif method == "custom":
-            return (signal - params['norm_bias']) / params['norm_range']
+            result = (signal - params['norm_bias']) / params['norm_range']
+            return result
 
 class IIRFilter(_Algorithm):
     """
@@ -101,7 +103,7 @@ class IIRFilter(_Algorithm):
         _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, ftype=ftype)
 
     def algorithm(self, signal):
-        assert not isinstance(signal, _UnevenlySignal), 'Filtering Unevenly signal is undefined.'
+        assert not signal.is_masked(), 'Filtering masked signal is undefined.'
         
         params = self._params
         fsamp = signal.get_sampling_freq()
@@ -165,7 +167,7 @@ class FIRFilter(_Algorithm):
         _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, wtype=wtype)
 
     def algorithm(self, signal):
-        assert not isinstance(signal, _UnevenlySignal), 'Filtering Unevenly signal is undefined.'
+        assert not signal.is_masked(), 'Filtering masked signal is undefined.'
         
         params = self._params
         fsamp = signal.get_sampling_freq()
@@ -202,7 +204,7 @@ class FIRFilter(_Algorithm):
         if N%2 ==0:
             N+=1
         b = _firwin(N, wp, width=Dsamp, window=wtype, pass_zero=pass_zero)
-        sig_filtered = signal.clone_properties(_convolve(signal.get_values(), b, mode='same'))
+        sig_filtered = signal.clone_properties(_convolve(signal.get_values().ravel(), b, mode='same'))
 
         if _np.isnan(sig_filtered[0]):
             print('Filter parameters allow no solution. Returning original signal.')
@@ -234,7 +236,7 @@ class KalmanFilter(_Algorithm):
             
         P = 1
         
-        x_out = signal.get_values().copy()
+        x_out = signal.get_values().ravel().copy()
         for k in range(1,sz):
                 x_ = x_out[k-1]
                 P_ = P + Q
@@ -274,7 +276,7 @@ class ImputeNAN(_Algorithm):
         win_len = params['win_len']*signal.get_sampling_freq()
         allnan = params['allnan']
         
-        s = signal.get_values().copy()
+        s = signal.get_values().ravel().copy()
         if _np.isnan(s).all():
             if allnan == 'nan':
                 return(signal)
@@ -341,19 +343,21 @@ class RemoveSpikes(_Algorithm):
         method = params['method']
         fs = signal.get_sampling_freq()
         
-        sig_diff = abs(signal[N:] - signal[:-N])
+        
+        s = signal.get_values().ravel().copy()
+        sig_diff = abs(s[N:] - s[:-N])
         ds_mean = _np.nanmean(sig_diff)
         
         idx_spikes = _np.where(sig_diff>K*ds_mean)[0]+N//2
-        spikes = _np.zeros(len(signal))
+        spikes = _np.zeros(len(s))
         spikes[idx_spikes] = 1
         win = _np.ones(1+int(2*dilate*fs))
         spikes = _np.convolve(spikes, win, 'same')
         idx_spikes = _np.where(spikes>0)[0]
         
-        x_out = signal.get_values().copy()
+        x_out = signal.get_values().ravel().copy()
         
-        #TODO add linear connector method
+        #TODO check linear connector method
         if method == 'linear':
             diff_idx_spikes = _np.diff(idx_spikes)
             new_spike = _np.where(diff_idx_spikes > 1)[0] + 1
@@ -369,7 +373,6 @@ class RemoveSpikes(_Algorithm):
                 
                 x_out[IDX_START:IDX_STOP+1] = coefficient*_np.arange(L) + x_start
         else:
-                
             for IDX in idx_spikes:
                 delta = x_out[IDX] - x_out[IDX-1]
                 x_out[IDX:] = x_out[IDX:] - D*delta
@@ -409,8 +412,9 @@ class DenoiseEDA(_Algorithm):
         threshold = params['threshold']
         win_len = params['win_len']
 
+        s = signal.get_values().ravel().copy()
         # remove fluctiations
-        noise = ConvolutionalFilter(irftype='triang', win_len=win_len, normalize=True)(abs(_np.diff(signal)))
+        noise = ConvolutionalFilter(irftype='triang', win_len=win_len, normalize=True)(abs(_np.diff(s)))
 
         # identify noisy portions
         idx_ok = _np.where(noise <= threshold)[0]
@@ -422,12 +426,12 @@ class DenoiseEDA(_Algorithm):
         if idx_ok[-1] != len(signal) - 1:
             idx_ok = _np.r_[idx_ok, len(signal) - 1].astype(int)
 
-        denoised = _UnevenlySignal(signal[idx_ok], signal.get_sampling_freq(),
-                                   start_time = signal.get_start_time(),
-                                   x_values=idx_ok, x_type='indices')
+        denoised = _Signal(signal[idx_ok], signal.get_sampling_freq(),
+                           start_time = signal.get_start_time(),
+                           x_values=idx_ok, x_type='indices')
 
         # interpolation
-        signal_out = denoised.to_evenly('linear')
+        signal_out = denoised.fill('linear')
         return signal_out
 
 
@@ -504,8 +508,10 @@ class ConvolutionalFilter(_Algorithm):
         # NORMALIZE
         if normalize:
             irf = irf / _np.sum(irf)
-            
-        signal_ = _np.r_[_np.ones(n) * signal[0], signal, _np.ones(n) * signal[-1]]  # TESTME
+        
+        s = signal.get_values().ravel().copy()
+        
+        signal_ = _np.r_[_np.ones(n) * s[0], s, _np.ones(n) * s[-1]]  # TESTME
 
         signal_f = _np.convolve(signal_, irf, mode='same')
 
@@ -539,7 +545,6 @@ class DeConvolutionalFilter(_Algorithm):
     """
 
     def __init__(self, irf, normalize=True, deconv_method='sps'):
-        # TODO (Andrea): "check that irf[0]>0 to avoid scipy BUG" is it normal? Need to put a check?
         assert deconv_method in ['fft', 'sps'], "Deconvolution method not valid"
         _Algorithm.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
 
@@ -549,20 +554,21 @@ class DeConvolutionalFilter(_Algorithm):
         normalize = params["normalize"]
         deconvolution_method = params["deconv_method"]
 
+        s = signal.get_values().ravel().copy()
         if normalize:
             irf = irf / _np.sum(irf)
         if deconvolution_method == 'fft':
-            l = len(signal)
-            fft_signal = _np.fft.fft(signal, n=l)
+            l = len(s)
+            fft_signal = _np.fft.fft(s, n=l)
             fft_irf = _np.fft.fft(irf, n=l)
             out = _np.fft.ifft(fft_signal / fft_irf)
         elif deconvolution_method == 'sps':
             print('sps based deconvolution needs to be tested. Use carefully.')
-            out, _ = _deconvolve(signal, irf)
+            out, _ = _deconvolve(s, irf)
         else:
             print('Deconvolution method not implemented. Returning original signal.')
-            out = signal.get_values()
+            out = s
 
-        out_signal = signal.clone_properties(abs(out))
+        out_signal = signal.clone_properties(out)
 
         return out_signal

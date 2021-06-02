@@ -58,8 +58,35 @@ class Algorithm(object):
         """
         
         assert isinstance(data, _Signal), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
+        # print('--call--')
         values_out = _ma.apply_along_axis(self.algorithm, 0, data)
-        return(values_out)
+        if values_out.ndim == data.ndim:
+            if values_out.mask.ndim == values_out.data.ndim:
+                return data.clone_properties(values_out.data, 
+                                             values_out.mask)
+            else:
+                return data.clone_properties(values_out.data,
+                                             _np.zeros_like(values_out.data).astype(bool))
+        else:
+            if values_out.ndim == (data.ndim - 1):
+                # print('returning a scalar')
+                return values_out
+            if values_out.ndim == (data.ndim + 1):
+                # print('returning a list')
+                # print(values_out.shape)
+                # print(values_out.data.shape)
+                # print(values_out.mask.shape)
+                result = []
+                for i in range(values_out.shape[0]):
+                    if values_out.mask.ndim == values_out.data.ndim:
+                        result.append(data.clone_properties(values_out.data[i,:], 
+                                                            values_out.mask[i,:]))
+                    else:
+                        result.append(data.clone_properties(values_out.data[i,:], 
+                                                            _np.zeros_like(values_out.data[i,:]).astype(bool))) 
+                return result
+            else:
+                return values_out
 
     def __repr__(self):
         return self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']

@@ -5,7 +5,7 @@
 import matplotlib.pyplot as plt
 import numpy as _np
 from .indicators.timedomain import Min, Max
-from .signal import UnevenlySignal as _UnevenlySignal
+from .signal import Signal as _Signal
 
 class _MouseSelectionFilter(object):
     def __init__(self, onselect):
@@ -72,13 +72,10 @@ class Annotate(object):
         self.max += self.margin
         self.min -= self.margin
 
-        if isinstance(ibi, _UnevenlySignal):
-            self.peaks_t = self.ibi.get_times()
-            self.peaks_v = self.ibi.get_values()
-        else:
-            self.peaks_t = _np.empty(0)
-            self.peaks_v = _np.empty(0)
-
+        
+        self.peaks_t = self.ibi.get_times()
+        self.peaks_v = self.ibi.get_values()
+        
         self.p_sig.plot(self.ecg.get_times(), self.ecg.get_values(), 'b')
 
         self.p_res.plot(self.peaks_t, self.peaks_v, 'b'),
@@ -195,15 +192,12 @@ class Annotate(object):
         # do not change!
         self.peaks_v = _np.diff(self.peaks_t)
         self.peaks_v = _np.r_[self.peaks_v[0], self.peaks_v]
-                    
-        duration = self.ibi.get_duration() if isinstance(ibi, _UnevenlySignal) \
-            else self.ecg.get_duration()
             
-        self.ibi_ok =  _UnevenlySignal(values=self.peaks_v,
-                                       sampling_freq=self.ibi.get_sampling_freq(),
-                                       info=self.ibi.get_info(),
-                                       x_values=self.peaks_t,
-                                       x_type='instants')
+        self.ibi_ok =  _Signal(values=self.peaks_v,
+                               sampling_freq=self.ibi.get_sampling_freq(),
+                               info=self.ibi.get_info(),
+                               x_values=self.peaks_t,
+                               x_type='instants')
     def __call__(self):
         return self.ibi_ok
     

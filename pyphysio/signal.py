@@ -37,15 +37,104 @@ def from_pickle(path):
 
 
 class Signal(_ma.MaskedArray):
-    def __new__(self, values, sampling_freq=1, start_time=0, info={}, mask = None):
-        assert sampling_freq > 0, "The sampling frequency cannot be zero or negative"
-        assert isinstance(sampling_freq, _Number), "The sampling frequency is not numeric"
-        assert isinstance(start_time, _Number), "Start time is not numeric"
+    """
+    Signal
+    
+    Attributes:
+    -----------
+    
+    data : numpy.array (TIME [,1 [,1]])
+        Values of the signal
+    sampling_freq : float, >0
+        Sampling frequency, This also sets the precision for the temporal localization of the signal samples
+    start_time: float,
+        Instant of signal start
+    info : dict, default = {}
+        Other info
+    mask : ndarray of bools
+        The mask with False when the index corresponds to a sample
+    
+    x_values : numpy.array of int
+        Instants, or indices when the values are measured.
+    x_type : str
+        Type of x values given.
+        Can be 'indices' or 'instants'
+
+    Information from sampling_freq, x_values and x_type is converted into a mask
+    instants when the mask is False indicate the temporal position of the signal values
+    on an EvenlySignal with the given sampling frequency and start time.
+    
+    idx: indices of the EvenlySignal
+    IDX: indices of the non masked samples[0, 189, 213, 454,  ...]
+    IDX is the result of self.get_indices()
+    
+    idx*fsamp gives the instants
+    idx[IDX]*fsamp is the timestamp of the IDX-th value of the signal
+    
+    When slicing, indices of the first axis are considered idxs.
+    
+    """
+    def __new__(self, values, sampling_freq=1, start_time = 0, info={}, mask=None,
+                x_values = None, x_type='indices'):
         
-        if mask is None:
-            mask = _np.zeros_like(values).astype(bool)
+        #TODO assert max dims = 3
+        
+        if mask is not None:
             
-        obj = _ma.array(data=values, mask=mask).view(self)
+            if mask.sum() != 0: #we are defining UE using mask, x_values should be none
+                assert x_values is None, "When defining masked values, x_values should be none"
+            
+            #TODO we should check that mask is uniform across dimensions
+            #TODO: check that shapes are compatible
+            data = values
+            
+        elif x_values is not None: #we are defining UE using x_values
+            assert x_type in ['indices', 'instants'], "x_type not in ['indices', 'instants']"
+        
+            assert len(x_values) == len(values), "Length mismatch (y:%d vs. x:%d)" % (len(values), len(x_values))
+            assert len(_np.where(_np.diff(x_values) <= 0)[0]) == 0, 'Given x_values are not strictly monotonic'
+        
+            if x_type == 'instants':
+                assert start_time<= x_values[0], 'the first instant is before the start_time'
+            
+            #we avoid initial masked values,
+            #by updating the start_time and x_values
+            
+            #compute the size of the supporting EvenlySignal
+            if x_type == 'indices':
+                start_time = start_time + x_values[0]/sampling_freq
+                x_values = x_values - x_values[0]
+                size_0 = x_values[-1] + 1
+            else:
+                start_time = x_values[0]
+                size_0 = int(_np.ceil(sampling_freq*(x_values[-1] - start_time))) + 1
+        
+            #compute non masked indices
+            if x_type == 'indices':
+                idx_0 = x_values
+            else:
+                idx_0 = _np.round(sampling_freq*(x_values - start_time)).astype(int)
+            
+            #creating output shape
+            values_shape = list(values.shape)
+            new_shape = values_shape
+            new_shape[0] = size_0
+            new_shape = tuple(new_shape)
+            
+            #create data of the Signal
+            data = _np.empty(new_shape)
+            data[idx_0] = values
+            
+            #create mask
+            mask = _np.ones(new_shape)
+            mask[idx_0] = 0
+            mask = mask.astype(bool)
+            
+        else:
+            data = values
+            mask = _np.zeros_like(values).astype(bool)
+
+        obj = _ma.array(data=data, mask=mask).view(self)
         obj._pyphysio = {'sampling_freq': sampling_freq,
                          'start_time': start_time,
                          'info': info}
@@ -73,7 +162,18 @@ class Signal(_ma.MaskedArray):
         else:
             self._fill_value = _np.nan
 
+    def clone_properties(self, new_values, new_mask=None, x_values=None,x_type=None):
+        x_new = Signal(new_values,
+                       self.get_sampling_freq(),
+                       self.get_start_time(),
+                       self.get_info(),
+                       new_mask,
+                       x_values,
+                       x_type)
+        return(x_new)
+        
     def __getitem__(self, item):
+        # print(item)
         sampling_frequency = self._pyphysio['sampling_freq']
         start_time = self._pyphysio['start_time']
         info = self._pyphysio['info']
@@ -86,34 +186,31 @@ class Signal(_ma.MaskedArray):
         selected_values = values.__getitem__(item)
         selected_mask = mask.__getitem__(item)
         
-        #If we are selecting an index on all axis 
-        #then we are extracting only one scalar:
-        #just return the scalar and avoid processing the attributes
-        #(This is also to avoid issues with IDE variable viewers)
         if isinstance(item, tuple):
-            print(1)
-            if _np.array([isinstance(x, int) for x in item]).all():
+            #If we are selecting an index on all axis 
+            #then we are extracting only one scalar:
+            #just return the scalar and avoid processing the attributes
+            #(This is also to avoid issues with IDE variable viewers)
+            if (len(item) == self.ndim) and _np.array([isinstance(x, int) for x in item]).all():
+                # print(1)
                 return _ma.MaskedArray(data = selected_values,
                                        mask = selected_mask,
                                        fill_value = self._fill_value)
         
-        #If we are selecting on 0 axis using a list/ndarray
-        #then we lose the temporal dimension
-        #just return the selected masked array
-        if isinstance(item, tuple):
-            print('1b')
+            #If we are selecting on 0 axis using a list/ndarray
+            #then we lose the temporal dimension
+            #just return the selected masked array
+            
             if (isinstance(item[0], list)) or (isinstance(item[0], _np.ndarray)):
+                # print(2)
                 return _ma.MaskedArray(data = selected_values,
                                        mask = selected_mask,
                                        fill_value = self._fill_value)
-            
-        #1- fixing dimensions
-        #If selecting only one timepoint (=int on 0 axis)
-        #maintain original number of dimensions
-        if isinstance(item, tuple):
-            print(2)
+
+            #If selecting only one timepoint (=int on 0 axis)
+            #maintain original number of dimensions
             if isinstance(item[0], int):
-                print(3)
+                # print(3)
                 selected_values = _ma.expand_dims(selected_values, 0)
                 selected_mask = _ma.expand_dims(selected_mask, 0)
 
@@ -121,10 +218,9 @@ class Signal(_ma.MaskedArray):
         #(but no slicing on other axes)
         #maintain original number of dimensions
         if isinstance(item, int):
-            print(4)
+            # print(4)
             selected_values = _ma.expand_dims(selected_values, 0)
             selected_mask = _ma.expand_dims(selected_mask, 0)
-        
         
         #######################
         # process temporal metadata
@@ -159,19 +255,25 @@ class Signal(_ma.MaskedArray):
         
         ######################
         # finalize
+        # print(selected_values.shape)
+        # print(selected_mask.shape)
+        # print(new_sampling_freq, new_start_time)
         selected = self.__class__(selected_values, 
                                   new_sampling_freq,
                                   new_start_time,
                                   info,                                  
                                   mask = selected_mask)
-        
+        # print(type(selected))
         #process info
         selected = self.__getitem_attrib__(selected, item)
+        # print(type(selected))
         
         return selected
     
     def __getitem_attrib__(self, selected, item):
-        #separate item for the first axis from others
+        # print('--getitem_attrib--')
+        # print(type(selected))
+        # separate item for the first axis from others
         item_other = None
         
         if isinstance(item, tuple): #more than one axis involved
@@ -214,18 +316,135 @@ class Signal(_ma.MaskedArray):
                 selected.update_info('good', new_good)
         
         return selected
+    
+    def get_indices(self):
+        selection = list(_np.zeros(self.ndim).astype(int))
+        selection[0] = slice(None, None, None)
+        selection = tuple(selection)
+        # print(selection)
+        mask_0 = self._mask.__getitem__(selection)
+        indices = _np.where(~mask_0)[0]
+        return indices
+    
+    def get_values(self):
+        indices = self.get_indices()
+        values = self.data[indices]
+        return values
+    
+    def get_times(self):
+        indices = self.get_indices()
+        return indices / self.get_sampling_freq() + self.get_start_time()
+
+    def get_end_time(self):
+        return self.get_start_time() + (1+self.get_indices()[-1])/self.get_sampling_freq()
+    
+    def idx2time(self, idx):
+        return idx / self.get_sampling_freq() + self.get_start_time() if idx is not None else None
+
+    def time2idx(self, time):
+        idx = int((time - self.get_start_time()) * self.get_sampling_freq())
+        if idx < 0:
+            idx=0
+        return(idx)
+
+    def idx2IDX(self, idx):
+        '''
+        Return the nearest non masked index before the given idx 
         
+        Parameters
+        ----------
+        idx : int
+            Target index
+
+        Returns
+        -------
+        idx. the nearest index of the 0 axis to IDX
+
+        '''
+        idx_t = self.get_indices()
+        #the index corresponding to IDX should not be after the target idx
+        IDX = _np.where((idx_t - idx)<=0)[0][-1]
+        return(IDX)
+    
+
+    def IDX2idx(self, IDX):
+        '''
+        Return the IDX-th non masked index
+        
+        Parameters
+        ----------
+        IDX : int
+            Index of the non masked index to be returned.
+
+        Returns
+        -------
+        idx. The IDX-th non masked index
+        '''
+
+        idx_t = self.get_indices()
+        idx = idx_t[IDX]
+        return(idx)
+    
+    def IDX2time(self, IDX):
+        idx = self.IDX2idx(IDX)
+        time = super().idx2time(idx)
+        return time
+    
+    def time2IDX(self, time):
+        idx = super().time2idx(time)
+        IDX = self.idx2IDX(idx)
+        return IDX
+    
+    def segment_time(self, t_start, t_stop=None):
+        """
+        Segment the signal given a time interval
+
+        Parameters
+        ----------
+        t_start : float
+            The instant of the start of the interval
+        t_stop : float 
+            The instant of the end of the interval. By default is the end of the signal
+
+        Returns
+        -------
+        portion : UnvenlySignal
+            The selected portion
+        """
+        idx_start = self.time2idx(t_start)
+        idx_stop = self.time2idx(t_stop)
+        return self[idx_start:idx_stop]
+    
+    def segment_IDX(self, IDX_start, IDX_stop=None):
+        """
+        Segment the signal using the indices of the non masked indices
+
+        Parameters
+        ----------
+        IDX_start : int
+            index of the non masked index to start
+        IDX_stop : float
+            index of the non masked index to stop
+
+        Returns
+        -------
+        portion : UnvenlySignal
+            The selected portion
+        """
+        idx_start = self.IDX2idx(IDX_start)
+        idx_stop = self.IDX2idx(IDX_stop)
+        
+        return self[idx_start:idx_stop]
+    
     @property
     def ph(self):
         return self._pyphysio
 
     def clone(self):
-        obj = self.copy()
-        obj._pyphysio = copy.deepcopy(self.ph)
-        obj._mask = copy.deepcopy(self._mask)
-        obj._fill_value = copy.deepcopy(self._fill_value)
-        return(obj)
-    
+        #TODO CHECK
+        print('using Signal.clone(); might not work properly')
+        return copy.deepcopy(self)
+        
 
     def has_multi_channels(self):
         return(self.get_nchannels()>1)
@@ -273,7 +492,6 @@ class Signal(_ma.MaskedArray):
         self.ph['info'] = info
     
     def has_good(self):
-        # info = self.get_info()
         #TODO return if good are global?
         return 'good' in self.ph['info'].keys()
     
@@ -293,34 +511,98 @@ class Signal(_ma.MaskedArray):
     
     def get_duration(self):
         return self.get_end_time() - self.get_start_time()
-    
-    def time2idx(self, time):
-        idx = int((time - self.get_start_time()) * self.get_sampling_freq())
-        if idx < 0:
-            idx=0
-        return(idx)
-    
-    def idx2time(self, idx):
-        time = self.get_start_time() + idx/self.get_sampling_freq()
-        return(time)
-    
-    def clone_properties(self, new_values, new_mask):
-        pass
-    
-    def get_values(self):
-        pass
-    
-    def get_times(self):
-        pass
-    
-    def get_end_time(self):
-        pass
 
+    def is_masked(self):
+        return(self.mask.sum()>0)
+    
+    def fill(self, kind='cubic'):
+        """
+        Fill the masked values using interpolation
+        
+        Parameters
+        ----------
+        kind : str
+            Method for interpolation: 'linear', 'nearest', 'zero', 'slinear', 'quadratic, 'cubic'
+
+        Returns
+        -------
+        signal: Signal
+            The signal without masked values
+        """
+        
+        if not self.is_masked():
+            return self.clone()
+        
+        #add a sample at the end to avoid errors
+        values = self.get_values()
+        values = _np.append(values, values[[-1]], axis=0)
+        indices = self.get_indices()
+        indices = _np.append(indices, indices[[-1]]+1, axis=0)
+        
+        assert kind != 'cubic' or len(values) > 3, "At least 4 samples needed for cubic interpolation"
+
+        tck = _interp.interp1d(indices, values, kind=kind, axis=0)
+
+        # Exclusive end, same x_value
+        indices_out = _np.arange(self.data.shape[0])
+        # print(indices_out)
+        sig_out = tck(indices_out)
+
+        # Init new signal
+        sig_out = Signal(values=sig_out,
+                         sampling_freq=self.get_sampling_freq(),
+                         start_time=self.get_start_time(),
+                         info=self.get_info(),
+                         mask=None)
+
+        return sig_out
+    
     def resample(self, fout, kind='linear'):
-        pass
+        """
+        Resample a signal
 
-    def segment_time(self, t_start, t_stop=None):
-        pass
+        Parameters
+        ----------
+        fout : float
+            The sampling frequency for resampling
+        kind : str
+            Method for interpolation: 'linear', 'nearest', 'zero', 'slinear', 'quadratic, 'cubic'
+
+        Returns
+        -------
+        resampled_signal : Signal
+            The resampled signal
+        """
+        
+        if self.is_masked():
+            self_interp = self.fill()
+        else:
+            self_interp = self.clone()
+            
+        ratio = self_interp.get_sampling_freq() / fout
+
+        if fout < self_interp.get_sampling_freq() and ratio.is_integer():  # fast downsampling
+            return self_interp[::int(ratio)]
+        
+        else:
+            #add a sample at the end to avoid errors
+            values = self_interp.get_values()
+            values = _np.append(values, values[[-1]], axis=0)
+            indices = self_interp.get_indices()
+            indices = _np.append(indices, indices[[-1]]+1, axis=0)
+            indices_out = _np.arange(self_interp.shape[0] * fout / self_interp.get_sampling_freq()) * ratio
+            
+            print(indices.shape)
+            print(values.shape)
+            print(indices[-1], indices_out[-1])
+            tck = _interp.interp1d(indices, values, kind=kind, axis=0)
+            signal_out = tck(indices_out)
+
+        return Signal(values=signal_out,
+                      sampling_freq=fout,
+                      start_time=self_interp.get_start_time(),
+                      info=self_interp.get_info(),
+                      mask=None)
 
     def plot(self, marker=None, ncols=4):
         fig = _gcf()
@@ -343,7 +625,12 @@ class Signal(_ma.MaskedArray):
             ax = _gca()
             t_ = self.get_times()
             v_ = self.get_values()
+            
             if marker is None:
+                if self.is_masked(): 
+                    marker = '.'
+            
+            if marker is None:                
                 ax.plot(t_, _np.squeeze(v_), linestyle = linestyle)
             else:
                 ax.plot(t_, _np.squeeze(v_), marker, linestyle = linestyle)
@@ -409,385 +696,26 @@ class Signal(_ma.MaskedArray):
         f.close()
        
     def __repr__(self):
-        return f"<start_time: {self.get_start_time()}>"
+        return self.get_values().__repr__() + '\n'+\
+            f'{self.get_sampling_freq()} Hz \n'+\
+                f'{self.get_start_time()} s \n'
 
-    
-class EvenlySignal(Signal):
-    """
-    Evenly spaced signal
-    
-    Attributes:
-    -----------
-    
-    data : numpy.array, (TIME [, CHANNELS [, COMPONENTS]])
-        Values of the signal
-    sampling_freq : float, >0
-        Sampling frequency
-    start_time: float,
-        Instant of signal start
-    info : dict, default = {}
-        Other info 
-    """
-    def __new__(self, values, sampling_freq=1, start_time=0, info={}, mask=None):
-        if mask is not None:
-            assert mask.sum() == 0
-        obj = super().__new__(self, values, sampling_freq, start_time, info, None)
-        return obj
-        
-    def get_values(self):
-        return(self.data)
-    
-    def get_times(self):
-        return _np.arange(self.shape[0]) / self.get_sampling_freq() + self.get_start_time()
+#%%
+# import numpy as np
 
-    def get_end_time(self):
-        return self.get_time(self.shape[0] - 1) + 1. / self.get_sampling_freq()
+# signal_values = np.arange(100)
+# fsamp = 10
+# tstart = 0 
 
-    def get_time(self, idx):
-        return idx / self.get_sampling_freq() + self.get_start_time() if idx is not None else None
+# ## create an Unevenly signal defining the instants
+# x_values_time = np.arange(100)/fsamp
+# x_values_time[-1] = 12.5
+# x_values_time += 10
 
-    def get_value_t(self, instant):
-        values = self.get_values()
-        idx = self.time2idx(instant)
-        return values[idx]
-    
-    def clone_properties(self, new_values):
-        x_new = EvenlySignal(new_values,
-                             self.get_sampling_freq(),
-                             self.get_start_time(),
-                             self.get_info(),
-                             None)
-        return(x_new)
-    
-    def resample(self, fout, kind='linear'):
-        """
-        Resample a signal
+# s_fake_time = Signal(values = signal_values, 
+#                      sampling_freq = fsamp, 
+#                      start_time = tstart,
+#                      x_values = x_values_time, 
+#                      x_type = 'instants')
 
-        Parameters
-        ----------
-        fout : float
-            The sampling frequency for resampling
-        kind : str
-            Method for interpolation: 'linear', 'nearest', 'zero', 'slinear', 'quadratic, 'cubic'
-
-        Returns
-        -------
-        resampled_signal : EvenlySignal
-            The resampled signal
-        """
-
-        ratio = self.get_sampling_freq() / fout
-
-        if fout < self.get_sampling_freq() and ratio.is_integer():  # fast interpolation
-            signal_out = self.get_values()[::int(ratio)]
-        else:
-            # The last sample is doubled to allow the new size to be correct
-            indexes = _np.arange(self.shape[0] + 1)
-            indexes_out = _np.arange(self.shape[0] * fout / self.get_sampling_freq()) * ratio
-            self_l = _np.append(self, _np.expand_dims(self[-1], 0), axis=0)
-
-            tck = _interp.interp1d(indexes, self_l, kind=kind, axis=0)
-            signal_out = tck(indexes_out)
-
-        return EvenlySignal(values=signal_out,
-                            sampling_freq=fout,
-                            start_time=self.get_start_time(),
-                            info=self.get_info(),
-                            mask=None)
-
-    def segment_time(self, t_start, t_stop=None):
-        """
-        Segment the signal given a time interval
-
-        Parameters
-        ----------
-        t_start : float
-            The instant of the start of the interval
-        t_stop : float 
-            The instant of the end of the interval. By default is the end of the signal
-
-        Returns
-        -------
-        portion : EvenlySignal
-            The selected portion
-        """
-
-        return self[self.time2idx(t_start): self.time2idx(t_stop)]
-    
-    def __repr__(self):
-        return Signal.__repr__(self)[:-1] + " freq:" + str(self.get_sampling_freq()) + "Hz>\n" + self.view(
-            _np.ndarray).__repr__()
-
-
-class UnevenlySignal(Signal):
-    """
-    Unevenly spaced signal
-    
-    Attributes:
-    -----------
-    
-    data : numpy.array (TIME [,1 [,1]])
-        Values of the signal
-    sampling_freq : float, >0
-        Sampling frequency, This also sets the precision for the temporal localization of the signal samples
-    start_time: float,
-        Instant of signal start
-    info : dict, default = {}
-        Other info
-    mask : ndarray of bools
-        The mask with False when the index corresponds to a sample
-    
-    x_values : numpy.array of int
-        Instants, or indices when the values are measured.
-    x_type : str
-        Type of x values given.
-        Can be 'indices' or 'instants'
-
-    Information from sampling_freq, x_values and x_type is converted into a mask
-    instants when the mask is False indicate the temporal position of the signal values
-    on an EvenlySignal with the given sampling frequency and start time.
-    
-    idx: indices of the EvenlySignal
-    IDX: indices of the non masked samples[0, 189, 213, 454,  ...]
-    IDX is the result of self.get_indices()
-    
-    idx*fsamp gives the instants
-    idx[IDX]*fsamp is the timestamp of the IDX-th value of the signal
-    
-    When slicing, indices of the first axis are considered IDXs.
-    
-    """
-
-    def __new__(self, values, sampling_freq=1, start_time = 0, info={}, mask=None,
-                x_values = None, x_type='indices'):
-        
-        #for compatibility
-        if mask is not None:
-            assert x_values is None, "When defining UE with mask, x_values should be none"
-            #TODO we should check that mask is uniform across dimensions
-            obj = _ma.array(data=values, mask=mask).view(self)
-            obj._pyphysio = {'sampling_freq': sampling_freq,
-                             'start_time': start_time,
-                             'info': info}
-            obj._mask = mask
-            obj._fill_value = _np.nan
-            return obj
-        
-        assert x_values is not None, "x_values are missing"
-        assert x_type in ['indices', 'instants'], "x_type not in ['indices', 'instants']"
-        
-        assert len(x_values) == len(values), "Length mismatch (y:%d vs. x:%d)" % (len(values), len(x_values))
-        assert len(_np.where(_np.diff(x_values) <= 0)[0]) == 0, 'Given x_values are not strictly monotonic'
-        
-        if x_type == 'instants':
-            assert start_time<= x_values[0], 'the first instant is before the start_time'
-        
-        #compute the size of the supporting EvenlySignal
-        if x_type == 'indices':
-            size_0 = x_values[-1] + 1
-        else:
-            size_0 = int(_np.ceil(sampling_freq*(x_values[-1] - start_time)))+1
-        
-        #compute non masked indices
-        if x_type == 'indices':
-            idx_0 = x_values
-        else:
-            idx_0 = _np.round(sampling_freq*(x_values - start_time)).astype(int)
-            
-        values_shape = list(values.shape)
-        new_shape = values_shape
-        new_shape[0] = size_0
-        new_shape = tuple(new_shape)
-        
-        #create values of supporting EvenlySignal
-        new_values = _np.empty(new_shape)
-        new_values[idx_0] = values
-        
-        #create mask
-        mask = _np.ones(new_shape)
-        mask[idx_0] = 0
-        mask = mask.astype(bool)
-        
-        print(new_values.shape)
-        print(mask.shape)
-        
-        obj = _ma.array(data=new_values, mask=mask).view(self)
-        obj._pyphysio = {'sampling_freq': sampling_freq,
-                         'start_time': start_time,
-                         'info': info}
-        obj._mask = mask
-        obj._fill_value = _np.nan
-        return obj
-
-        
-    def clone_properties(self, new_values, new_x, new_x_type, mask):
-        x_new = UnevenlySignal(new_values,
-                               self.get_sampling_freq(),
-                               self.get_start_time(),
-                               self.get_info(),
-                               mask,
-                               new_x,
-                               new_x_type)
-        return(x_new)
-
-    def get_end_time(self):
-        return self.get_start_time() + (1+self.get_indices()[-1])/self.get_sampling_freq()
-
-    def get_values(self):
-        indices = self.get_indices()
-        values = self.data[indices]
-        return values
-    
-    def get_times(self):
-        indices = self.get_indices()
-        return indices / self.get_sampling_freq() + self.get_start_time()
-
-    def get_indices(self):
-        selection = list(_np.zeros(self.ndim).astype(int))
-        selection[0] = slice(None, None, None)
-        selection = tuple(selection)
-        # print(selection)
-        mask_0 = self._mask.__getitem__(selection)
-        indices = _np.where(~mask_0)[0]
-        return indices
-
-    def IDX2time(self, IDX):
-        idx = self.IDX2idx(IDX)
-        time = super().idx2time(idx)
-        return time
-    
-    def time2IDX(self, time):
-        idx = super().time2idx(time)
-        IDX = self.idx2IDX(idx)
-        return IDX
-    
-    
-    def idx2IDX(self, idx):
-        '''
-        Return the nearest non masked index before the given idx 
-        
-        Parameters
-        ----------
-        idx : int
-            Target index
-
-        Returns
-        -------
-        idx. the nearest index of the 0 axis to IDX
-
-        '''
-        idx_t = self.get_indices()
-        #the index corresponding to IDX should not be after the target idx
-        IDX = _np.where((idx_t - idx)<=0)[0][-1]
-        return(IDX)
-    
-
-    def IDX2idx(self, IDX):
-        '''
-        Return the IDX-th non masked index
-        
-        Parameters
-        ----------
-        IDX : int
-            Index of the non masked index to be returned.
-
-        Returns
-        -------
-        idx. The IDX-th non masked index
-        '''
-
-        idx_t = self.get_indices()
-        idx = idx_t[IDX]
-        return(idx)
-
-    def to_evenly(self, kind='cubic'):
-        """
-        Interpolate the UnevenlySignal to obtain an evenly spaced signal
-        Parameters
-        ----------
-        kind : str
-            Method for interpolation: 'linear', 'nearest', 'zero', 'slinear', 'quadratic, 'cubic'
-
-        Returns
-        -------
-        interpolated_signal: ndarray
-            The interpolated signal
-        """
-
-        assert kind != 'cubic' or len(self) > 3, "At least 4 samples needed for cubic interpolation"
-
-        data_x = self.ph['idx_t']  # From a constant freq range
-        data_y = self.get_values()
-
-        # Cubic if needed
-        if kind == 'cubic':
-            tck = _interp.InterpolatedUnivariateSpline(data_x, data_y, axis=0)
-        else:
-            tck = _interp.interp1d(data_x, data_y, kind=kind, axis=0)
-
-        # Exclusive end, same x_value
-        x_out = _np.arange(data_x[0], data_x[-1] + 1)
-        sig_out = tck(x_out)
-
-        # Init new signal
-        sig_out = EvenlySignal(values=sig_out,
-                               sampling_freq=self.get_sampling_freq(),
-                               start_time=self.get_start_time(),
-                               info=self.get_info())
-
-        return sig_out
-
-    def resample(self, fout, kind='linear'):
-        return self.to_evenly(kind).resample(fout, kind)
-
-    def segment_time(self, t_start, t_stop=None):
-        """
-        Segment the signal given a time interval
-
-        Parameters
-        ----------
-        t_start : float
-            The instant of the start of the interval
-        t_stop : float 
-            The instant of the end of the interval. By default is the end of the signal
-
-        Returns
-        -------
-        portion : UnvenlySignal
-            The selected portion
-        """
-        idx_start = self.time2idx(t_start)
-        IDX_start = self.idx2IDX(idx_start)
-        
-        idx_stop = self.time2idx(t_stop)
-        IDX_stop = self.idx2IDX(idx_stop)
-        return self[IDX_start:IDX_stop]
-
-    def segment_IDX(self, IDX_start, IDX_stop=None):
-        """
-        Segment the signal using the indices of the non masked indices
-
-        Parameters
-        ----------
-        IDX_start : int
-            index of the non masked index to start
-        IDX_stop : float
-            index of the non masked index to stop
-
-        Returns
-        -------
-        portion : UnvenlySignal
-            The selected portion
-        """
-        idx_start = self.IDX2idx(IDX_start)
-        idx_stop = self.IDX2idx(IDX_stop)
-        
-        return self[idx_start:idx_stop]
-    
-    def plot(self, marker="."):
-        super().plot(marker = marker)
-
-        
-    def __repr__(self):
-        return Signal.__repr__(self)[:-1] + " time resolution:" + str(1 / self.get_sampling_freq()) + "s>\n" + \
-               self.get_values().__repr__() + " Times\n:" + self.get_times().__repr__()
+# s_fake_time_evenly = s_fake_time.fill(kind = 'linear')

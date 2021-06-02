@@ -6,8 +6,11 @@ start_time = 0
 values = np.random.uniform(size=(1000,5,3))
 
 #%
-signal = ph.EvenlySignal(values, fsamp, start_time)
-print(info_evenly(signal))
+signal = ph.Signal(values, fsamp, start_time)
+print(info_unevenly(signal))
+
+#%%
+sig_ = signal.resample(100,'cubic')
 
 #%%
 signal_ = signal[:100]
@@ -39,7 +42,7 @@ print(info_evenly(signal_))
 
 #%%
 signal_ = signal[100, 3]
-print(type(signal_))
+print(info_evenly(signal_))
 
 #%%
 import pyphysio as ph
@@ -49,14 +52,15 @@ fsamp = 10
 start_time = 0
 values = np.random.uniform(size=(1000,5,3))
 
-x_indices = np.arange(1000)
+x_indices = np.arange(0, 2000, 2)
 
-signal = ph.UnevenlySignal(values, fsamp, start_time,
-                           x_values = x_indices,
-                           x_type = 'indices')
+signal = ph.Signal(values, fsamp, start_time,
+                   x_values = x_indices,
+                   x_type = 'indices')
 
+sig = signal.fill()
 #%%
-print(info_ue(signal))
+print(info_unevenly(signal))
 
 #%%
 signal_ = signal[:100]
@@ -76,7 +80,7 @@ print(info_ue(signal_))
 
 #%%
 signal_ = signal.segment_time(55.3, 80)
-print(info_ue(signal_))
+print(info_unevenly(signal_))
 
 #%%
 signal_ = signal.segment_IDX(55, 80)

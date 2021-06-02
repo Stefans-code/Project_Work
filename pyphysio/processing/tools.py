@@ -1,12 +1,13 @@
 # coding=utf-8
 # from __future__ import division
 import numpy as _np
+import numpy.ma as _ma
 from scipy.signal import welch as _welch, periodogram as _periodogram, freqz as _freqz
 import pycwt.wavelet as wave
 from scipy import linalg as _linalg
 
 from . import Algorithm as _Algorithm
-from ..signal import UnevenlySignal as _UnevenlySignal, EvenlySignal as _EvenlySignal
+from ..signal import Signal as _Signal
 
 class Diff(_Algorithm):
     """
@@ -39,10 +40,10 @@ class Diff(_Algorithm):
         sig_1 = signal[:-degree]
         sig_2 = signal[degree:]
 
-        out = _EvenlySignal(values=sig_2 - sig_1,
-                            sampling_freq=signal.get_sampling_freq(),
-                            info=signal.get_info(),
-                            start_time=signal.get_start_time() + degree / signal.get_sampling_freq())
+        out = _Signal(values=sig_2 - sig_1,
+                      sampling_freq=signal.get_sampling_freq(),
+                      info=signal.get_info(),
+                      start_time=signal.get_start_time() + degree / signal.get_sampling_freq())
 
         return out
     
@@ -83,8 +84,7 @@ class PeakDetection(_Algorithm):
 
     
     def algorithm(self, signal):
-        # print('>>>peak')
-        # print(signal.shape)
+
         params = self._params
         refractory = params['refractory']
         if refractory == 0:  # if 0 then do not skip samples
@@ -104,18 +104,18 @@ class PeakDetection(_Algorithm):
         if scalar:
             d = delta
 
-        
+        s = signal.get_values().ravel()
         if not scalar and len(delta) != len(signal):
             print("delta vector's length differs from signal's one, returning empty.")
         else:
             mn_pos_candidate = mx_pos_candidate = 0
-            mn_candidate = mx_candidate = signal[0]
+            mn_candidate = mx_candidate = s[0]
 
             i_activation_min = 0
             i_activation_max = 0
 
-            for i in range(1, len(signal)):
-                sample = signal[i]
+            for i in range(1, len(s)):
+                sample = s[i]
                 if not scalar:
                     d = delta[i]
 
@@ -352,7 +352,7 @@ class PSD(_Algorithm):
         normalize = params['normalize']
         remove_mean = params['remove_mean']
 
-        assert isinstance(signal, _EvenlySignal), "The PSD can be computed on EvenlySignals only. Consider interpolating the signal: signal.resample(fsamp)"
+        assert not signal.is_masked(), "The PSD cannot be computed on masked signals"
 
         fsamp = signal.get_sampling_freq()
         
@@ -546,6 +546,7 @@ class Maxima(_Algorithm):
             return idx_maxs, maxs
         elif method == 'windowing':
             fsamp = signal.get_sampling_freq()
+            
             winlen = int(params['win_len'] * fsamp)
             winstep = int(params['win_step'] * fsamp)
 
@@ -554,7 +555,6 @@ class Maxima(_Algorithm):
 
             idx_maxs = [_np.nan]
             maxs = [_np.nan]
-
             if winlen < len(signal):
                 idx_start = _np.arange(0, len(signal) - winlen + 1, winstep)
             else:
@@ -617,7 +617,7 @@ class Minima(_Algorithm):
     
     def algorithm(self, signal):
         params = self._params
-        idx_mins, mins = Maxima(**params)(-signal.copy())
+        idx_mins, mins = Maxima(**params)(signal.clone_properties(-signal))
         return idx_mins, -1 * mins
 
 class BootstrapEstimation(_Algorithm):
@@ -787,7 +787,7 @@ class BeatOutliers(_Algorithm):
         cache, sensitivity, ibi_median = params["cache"], params["sensitivity"], params["ibi_median"]
 
         if ibi_median == 0:
-            ibi_expected = float(_np.median(signal))
+            ibi_expected = float(_ma.median(signal))
         else:
             ibi_expected = float(ibi_median)
 
@@ -844,8 +844,6 @@ class FixIBI(_Algorithm):
     
     def algorithm(self, signal):
         params = self._params
-        assert isinstance(signal,
-                          _UnevenlySignal), "IBI can only be represented by an UnevenlySignal, %s found." % type(signal)
         
         id_bad = params['id_bad_ibi']
         if len(id_bad) == 0:
@@ -857,8 +855,8 @@ class FixIBI(_Algorithm):
         ibi_nobad = _np.delete(ibi, id_bad)
         idx_ibi = idx_ibi_nobad.astype(int)
         ibi = ibi_nobad
-        return _UnevenlySignal(values = ibi, 
-                               sampling_freq = signal.get_sampling_freq(), 
-                               start_time = signal.get_start_time(),
-                               info = signal.get_info(), 
-                               x_values=idx_ibi, x_type='indices')
+        return _Signal(values = ibi, 
+                       sampling_freq = signal.get_sampling_freq(), 
+                       start_time = signal.get_start_time(),
+                       info = signal.get_info(), 
+                       x_values=idx_ibi, x_type='indices')

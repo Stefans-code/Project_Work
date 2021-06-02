@@ -2,7 +2,7 @@
 # from __future__ import division
 import numpy as _np
 from . import Algorithm as _Algorithm
-from ..signal import UnevenlySignal as _UnevenlySignal, EvenlySignal as _EvenlySignal
+from ..signal import Signal as _Signal
 from .filters import IIRFilter as _IIRFilter, DeConvolutionalFilter as _DeConvolutionalFilter, \
     ConvolutionalFilter as _ConvolutionalFilter
 from .tools import SignalRange as _SignalRange, PeakDetection as _PeakDetection, Minima as _Minima, \
@@ -59,8 +59,11 @@ class BeatFromBP(_Algorithm):
         # STAGE 1 - EXTRACT BEAT POSITION SIGNAL
         # filtering
         signal_f = _IIRFilter(fp=1.2 * fmax, fs=3 * fmax, ftype='ellip')(signal)
+        
         # find range for the adaptive peak detection
         delta = 0.5 * _SignalRange(win_len=1.5 / fmax, win_step=1 / fmax)(signal_f)
+        
+        delta = _np.array(delta)
         
         #adjust for delta values equal to 0
         idx_delta_zeros = _np.where(delta==0)[0]
@@ -68,14 +71,15 @@ class BeatFromBP(_Algorithm):
         delta[idx_delta_zeros] = _np.min(delta[idx_delta_nozeros])
         
         # detection of candidate peaks
-        maxp, minp, ignored, ignored = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal_f)
-
+        maxp, _, _, _ = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal_f)
+        maxp = _np.array(maxp).ravel()
+        
         if maxp[0] == 0:
             maxp = maxp[1:]
 
         # STAGE 2 - IDENTIFY PEAKS using the signal derivative
         # compute the signal derivative
-        dxdt = _Diff()(signal)
+        dxdt = _np.array(_Diff()(signal))
 
         true_peaks = []
         # for each candidate peak find the correct peak
@@ -92,9 +96,12 @@ class BeatFromBP(_Algorithm):
             obs = dxdt[start_:stop_]
             peak_obs = _np.argmax(obs)
             true_obs = dxdt[start_ + peak_obs: stop_]
-
+            
+            true_obs = signal.clone_properties(abs(true_obs))
+            
             # find the 'first minimum' (zero) the derivative (peak)
-            idx_mins, mins = _Minima(win_len=0.1, win_step=0.025, method='windowing')(abs(true_obs))
+            idx_mins, _ = _Minima(win_len=0.1, win_step=0.025, method='windowing')(true_obs)
+            idx_mins = _np.array(idx_mins).ravel()
 
             if len(idx_mins) >= 1:
                 peak = idx_mins[0]
@@ -110,12 +117,12 @@ class BeatFromBP(_Algorithm):
         t0 = signal.get_times()[idx_ibi[0]]
         idx_ibi = idx_ibi - idx_ibi[0]
 
-        ibi = _UnevenlySignal(values=ibi_values,
-                              sampling_freq=fsamp,
-                              start_time=t0,
-                              info=signal.get_info(),
-                              x_values=idx_ibi,
-                              x_type='indices')
+        ibi = _Signal(values=ibi_values,
+                      sampling_freq=fsamp,
+                      start_time=t0,
+                      info=signal.get_info(),
+                      x_values=idx_ibi,
+                      x_type='indices')
         return ibi
 
 
@@ -159,6 +166,7 @@ class BeatFromECG(_Algorithm):
 
         if delta == 0:
             delta = k * _SignalRange(win_len=2 / fmax, win_step=0.5 / fmax, smooth=False)(signal)
+            delta = _np.array(delta)
         
         # print('delta')
         #adjust for delta values equal to 0
@@ -169,9 +177,9 @@ class BeatFromECG(_Algorithm):
         refractory = 1 / fmax
         
         # print(signal.shape)
-        maxp, minp, maxv, minv = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal)
+        maxp, _, _, _ = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal)
+        maxp = _np.array(maxp).ravel()
         
-        # print('here', maxp, minp, maxv, minv )
         if maxp[0] == 0:
             maxp = maxp[1:]
 
@@ -184,11 +192,11 @@ class BeatFromECG(_Algorithm):
         new_start_time = signal.get_start_time() + idx_ibi[0]/signal.get_sampling_freq()
         idx_ibi = idx_ibi - idx_ibi[0]
 
-        ibi = _UnevenlySignal(values=ibi_values,
-                              sampling_freq=fsamp,
-                              start_time=new_start_time,
-                              x_values=idx_ibi,
-                              x_type='indices')
+        ibi = _Signal(values=ibi_values,
+                      sampling_freq=fsamp,
+                      start_time=new_start_time,
+                      x_values=idx_ibi,
+                      x_type='indices')
         
         return ibi
 
@@ -246,7 +254,7 @@ class DriverEstim(_Algorithm):
             _np.max(bateman_second_half) - _np.min(bateman_second_half))
 
         signal_in = _np.r_[bateman_first_half, signal.get_values(), bateman_second_half]
-        signal_in = _EvenlySignal(signal_in, fsamp)
+        signal_in = _Signal(signal_in, fsamp)
 
         # deconvolution
         driver = _DeConvolutionalFilter(irf=bateman, normalize=True, deconv_method='fft')(signal_in)
@@ -255,7 +263,7 @@ class DriverEstim(_Algorithm):
         # gaussian smoothing
         driver = _ConvolutionalFilter(irftype='gauss', win_len=_np.max([0.2, 1 / fsamp]) * 8, normalize=True)(driver)
 
-        driver = _EvenlySignal(driver, sampling_freq=fsamp, start_time=signal.get_start_time(),info=signal.get_info())
+        driver = _Signal(driver, sampling_freq=fsamp, start_time=signal.get_start_time(),info=signal.get_info())
         return driver
 
     @staticmethod
@@ -363,10 +371,10 @@ class PhasicEstim(_Algorithm):
         idx_grid = _np.arange(0, len(driver_no_peak) - 1, grid_size * fsamp)
         idx_grid = _np.r_[idx_grid, len(driver_no_peak) - 1]
 
-        driver_grid = _UnevenlySignal(driver_no_peak[idx_grid], sampling_freq = fsamp, 
-                                      start_time= signal.get_start_time(), info=signal.get_info(),
-                                      x_values=idx_grid, x_type='indices')
-        tonic = driver_grid.to_evenly(kind='cubic')
+        driver_grid = _Signal(driver_no_peak[idx_grid], sampling_freq = fsamp, 
+                              start_time= signal.get_start_time(), info=signal.get_info(),
+                              x_values=idx_grid, x_type='indices')
+        tonic = driver_grid.fill(kind='cubic')
 
         phasic = signal - tonic
 
@@ -422,10 +430,10 @@ class Energy(_Algorithm):
         energy[-1] = energy[-2]
 
         idx_interp = _np.r_[0, windows + round(idx_len / 2), len(signal)-1]
-        energy_out = _UnevenlySignal(energy, signal.get_sampling_freq(), 
-                                     start_time = signal.get_start_time(), 
-                                     x_values=idx_interp,
-                                     x_type='indices').to_evenly('linear')
+        energy_out = _Signal(energy, signal.get_sampling_freq(), 
+                             start_time = signal.get_start_time(), 
+                             x_values=idx_interp,
+                             x_type='indices').fill('linear')
 
         if smooth:
             energy_out = _ConvolutionalFilter(irftype='gauss', win_len=2, normalize=True)(energy_out)

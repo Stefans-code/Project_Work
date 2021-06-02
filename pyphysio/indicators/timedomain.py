@@ -5,7 +5,7 @@ import numpy as _np
 from ..processing import Algorithm as _Algorithm
 
 from ..processing.tools import Diff as _Diff
-from ..signal import EvenlySignal as _EvenlySignal, Signal as _Signal
+from ..signal import Signal as _Signal
 
 
 # __author__ = 'AleB'
@@ -97,8 +97,6 @@ class AUC(_Algorithm):
         _Algorithm.__init__(self, **kwargs)
 
     def algorithm(self, signal):
-        if isinstance(signal, _Signal) and not isinstance(signal, _EvenlySignal):
-            print('Calculating Area Under the Curve of an Unevenly signal!')
         fsamp = signal.get_sampling_freq()
         return (1. / fsamp) * Sum()(signal)
     
@@ -110,8 +108,6 @@ class DetrendedAUC(_Algorithm):
         _Algorithm.__init__(self, **kwargs)
 
     def algorithm(self, signal):
-        if isinstance(signal, _Signal) and not isinstance(signal, _EvenlySignal):
-            print('Calculating Area Under the Curve of an Unevenly signal!')
         fsamp = signal.get_sampling_freq()
         
         #detrend

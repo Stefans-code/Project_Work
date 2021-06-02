@@ -35,6 +35,15 @@ class Signal(_ma.MaskedArray):
         else:
             self._fill_value = _np.nan
     
+    def __array_wrap__(self, out_arr, context=None):
+        # Just call the parent's
+        # noinspection PyArgumentList
+        print('--wrap--')
+        if isinstance(out_arr, Signal):
+            return _np.ndarray.__array_wrap__(self, out_arr, context)
+        else:
+            return out_arr
+
     @property
     def ph(self):
         return self._pyphysio

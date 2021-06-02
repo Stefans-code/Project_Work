@@ -7,7 +7,7 @@ from pyphysio import TestData
 bvp_data = TestData.bvp()
 
 fsamp = 2048
-bvp = ph.EvenlySignal(values = bvp_data, sampling_freq = fsamp)
+bvp = ph.Signal(values = bvp_data, sampling_freq = fsamp)
 ibi = ph.BeatFromBP()(bvp)
 
 #%%

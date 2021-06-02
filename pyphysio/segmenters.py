@@ -3,7 +3,7 @@ import numpy as _np
 from copy import copy as _cpy
 # from numpy import asarray as _asarray
 # from ..Utility import abstractmethod as _abstract
-from .signal import EvenlySignal as _EvenlySignal, Signal as _Signal, UnevenlySignal as _UnevenlySignal
+from .signal import Signal as _Signal
 # from numbers import Number as _Number
 # __author__ = 'AleB'
 
@@ -158,8 +158,8 @@ class FixedSegments(_Segmenter):
     """
 
     def __init__(self, step, width=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
-        assert timeline is None or isinstance(timeline, _EvenlySignal),\
-            "The parameter 'labels' should be an EvenlySignal."
+        assert timeline is None or isinstance(timeline, _Signal),\
+            "The parameter 'labels' should be a Signal."
         
         super(FixedSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         assert step > 0
@@ -205,7 +205,7 @@ class CustomSegments(_Segmenter):
 
     def __init__(self, begins, ends, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
         #TODO: timeline can also be a list with labels of each segment
-        assert timeline is None or isinstance(timeline, _EvenlySignal),\
+        assert timeline is None or isinstance(timeline, _Signal),\
             "The parameter 'labels' should be an EvenlySignal."
         super(CustomSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         
@@ -242,7 +242,7 @@ class LabelSegments(_Segmenter):
     """
 
     def __init__(self, timeline, drop_mixed=True, drop_cut=True, **kwargs):
-        assert timeline is None or isinstance(timeline, _EvenlySignal),\
+        assert timeline is None or isinstance(timeline, _Signal),\
             "The parameter 'labels' should be an EvenlySignal."
         super(LabelSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         self._i = 0
@@ -285,7 +285,7 @@ class RandomFixedSegments(_Segmenter):
     """
 
     def __init__(self, N, width, reference=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
-        assert timeline is None or isinstance(timeline, _EvenlySignal),\
+        assert timeline is None or isinstance(timeline, _Signal),\
             "The parameter 'labels' should be an EvenlySignal."
         super(RandomFixedSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         assert N > 0
@@ -370,6 +370,8 @@ def fmap(segmenter, algorithms, signal):
             t_ = v['begin'] + (v['end'] - v['begin']) / 2
             t.append(t_)
         
+        labels = _np.array(labels)
+        t = _np.array(t)
         
         #if no segments were processed
         if len(labels) == 0: 
@@ -390,25 +392,24 @@ def fmap(segmenter, algorithms, signal):
                 #since we used a FixedSegments, we can create an EvenlySignal
                 fsamp = 1/segmenter._step
                 
-                info = {'label': _EvenlySignal(labels, fsamp, t[0]),
+                info = {'label': _Signal(labels, fsamp, t[0]),
                         'name': alg.__repr__()}
                 
                 info.update(signal.get_info())
                 
-                result[alg.__repr__()] = _EvenlySignal(values, fsamp, t[0], info)
+                result[alg.__repr__()] = _Signal(values, fsamp, t[0], info)
                 
             else:
                 fsamp = signal.get_sampling_freq()
-                info = {'label': _UnevenlySignal(labels, fsamp,
-                                                 x_values = _np.array(t),
+                info = {'label': _Signal(labels, fsamp, t[0],
+                                                 x_values = t,
                                                  x_type='instants'),
                         'name': alg.__repr__()}
                 
                 info.update(signal.get_info())
                 
-                result[alg.__repr__()] = _UnevenlySignal(values, fsamp, info=info,
-                                                         x_values = _np.array(t),
-                                                         x_type='instants')
+                result[alg.__repr__()] = _Signal(values, fsamp, t[0], info,
+                                                 x_values = t, x_type='instants')
         
         #if list or tuple of ndarrays
         #(it is a special case we can try to manage)
@@ -429,32 +430,24 @@ def fmap(segmenter, algorithms, signal):
                     #since we used a FixedSegments, we can create an EvenlySignal
                     fsamp = 1/segmenter._step
                     
-                    info = {'label': _EvenlySignal(labels, fsamp, t[0]),
+                    info = {'label': _Signal(labels, fsamp, t[0]),
                             'name': alg.__repr__()}
                     
                     info.update(signal.get_info())
                     
-                    signals_out.append(_EvenlySignal(values_signal, 
-                                                     fsamp, 
-                                                     t[0], 
-                                                     info))
+                    signals_out.append(_Signal(values_signal, fsamp, t[0], info))
                     
                 else:
                     print(7)
                     fsamp = signal.get_sampling_freq()
-                    info = {'label': _UnevenlySignal(_np.array(labels), 
-                                                     fsamp, 
-                                                     x_values = _np.array(t),
-                                                     x_type='instants'),
+                    info = {'label': _Signal(labels, fsamp, t[0],
+                                             x_values = t, x_type='instants'),
                             'name': alg.__repr__()}
                     
                     info.update(signal.get_info())
                     
-                    signals_out.append(_UnevenlySignal(values_signal, 
-                                                       fsamp, 
-                                                       info=info,
-                                                       x_values = _np.array(t),
-                                                       x_type='instants'))
+                    signals_out.append(_Signal(values_signal, fsamp, t[0], info,
+                                               x_values = t, x_type='instants'))
         
             result[alg.__repr__()] = signals_out
         
@@ -494,13 +487,13 @@ def indicators2df(fmap_results):
                 result_key = fmap_results[key]
                 
                 if ind_sample.ndim == 3:
-                    indicator_df[key] = result_key[:, i_chan, i_comp].ravel()
+                    indicator_df[key] = result_key[:, i_chan, i_comp].get_values().ravel()
                     indicator_df['component'] = _np.repeat(i_comp+1, len(t))
                     indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
                     
                 else:
                     if ind_sample.ndim == 2:
-                        indicator_df[key] = result_key[:, i_chan].ravel()
+                        indicator_df[key] = result_key[:, i_chan].get_values().ravel()
                         indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
                     else:
                         indicator_df[key] =  result_key

@@ -1,5 +1,6 @@
 # coding=utf-8
 import numpy as _np
+import numpy.ma as _ma
 from . import SignalQualityIndicator as _SignalQualityIndicator
 from ..indicators.frequencydomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
@@ -68,15 +69,16 @@ class CVSignal(_SignalQualityIndicator):
     Compute the Coefficient of variation of the signal
     
     See: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3859838/
+    And Morais et al. 2018
 
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
 
     def algorithm(self, data):
-        mean = _np.nanmean(data)
-        sd = _np.nanstd(data)
-        cv = sd/mean
+        mean = _ma.nmean(data)
+        sd = _ma.nstd(data)
+        cv = 100*sd/mean
         return(cv)
 
 class PercentageNAN(_SignalQualityIndicator):

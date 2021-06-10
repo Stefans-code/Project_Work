@@ -143,24 +143,22 @@ class Signal(_ma.MaskedArray):
         return obj
 
     def __array_finalize__(self, obj):
-        if obj is None: return
-        
-        if hasattr(obj, '_pyphysio'):
-            self._pyphysio = getattr(obj, '_pyphysio')
-        else:
-            self._pyphysio = {'sampling_freq': 1,
-                              'start_time': 0,
-                              'info': {}}
+        if obj is not None: 
+                
+            if hasattr(obj, '_mask'):
+                self._mask = getattr(obj, '_mask')
+            else:
+                self._mask = False
+                
+            if hasattr(obj, '_fill_value'):
+                self._fill_value = getattr(obj, '_fill_value')
+            else:
+                self._fill_value = _np.nan
+                
             
-        if hasattr(obj, '_mask'):
-            self._mask = getattr(obj, '_mask')
-        else:
-            self._mask = False
-            
-        if hasattr(obj, '_fill_value'):
-            self._fill_value = getattr(obj, '_fill_value')
-        else:
-            self._fill_value = _np.nan
+            if hasattr(obj, '_pyphysio'):
+                self._pyphysio = getattr(obj, '_pyphysio').copy()
+
 
     def clone_properties(self, new_values, new_mask=None, x_values=None,x_type=None):
         x_new = Signal(new_values,

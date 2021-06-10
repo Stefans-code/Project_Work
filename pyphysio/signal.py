@@ -36,7 +36,7 @@ def from_pickle(path):
     return from_pickleable(p)
 
 
-class Signal(_np.ndarray):
+class Signal(_ma.MaskedArray):
     """
     Signal
     
@@ -74,15 +74,18 @@ class Signal(_np.ndarray):
     When slicing, indices of the first axis are considered idxs.
     
     """
-    def __new__(cls, values, sampling_freq=1, start_time = 0, info={}, mask=None,
+    def __new__(self, values, sampling_freq=1, start_time = 0, info={}, mask=None,
                 x_values = None, x_type='indices'):
+        
         #TODO assert max dims = 3
+        
         if mask is not None:
-            assert mask.ndim ==1
-            assert len(mask) == len(values)
+            
             if mask.sum() != 0: #we are defining UE using mask, x_values should be none
                 assert x_values is None, "When defining masked values, x_values should be none"
             
+            #TODO we should check that mask is uniform across dimensions
+            #TODO: check that shapes are compatible
             data = values
             
         elif x_values is not None: #we are defining UE using x_values
@@ -123,29 +126,39 @@ class Signal(_np.ndarray):
             data[idx_0] = values
             
             #create mask
-            mask = _np.ones(size_0)
+            mask = _np.ones(new_shape)
             mask[idx_0] = 0
             mask = mask.astype(bool)
             
         else:
             data = values
-            mask = _np.zeros(len(values)).astype(bool)
+            mask = _np.zeros_like(values).astype(bool)
 
-
-        obj = _np.asarray(data).view(cls)
-        
-        obj.mask = mask
+        obj = _ma.array(data=data, mask=mask).view(self)
         obj._pyphysio = {'sampling_freq': sampling_freq,
                          'start_time': start_time,
                          'info': info}
-        # obj = obj.view(subtype)
+        obj._mask = mask
+        obj._fill_value = _np.nan
         return obj
 
     def __array_finalize__(self, obj):
+        if obj is not None: 
+                
+            if hasattr(obj, '_mask'):
+                self._mask = getattr(obj, '_mask')
+            else:
+                self._mask = False
+                
+            if hasattr(obj, '_fill_value'):
+                self._fill_value = getattr(obj, '_fill_value')
+            else:
+                self._fill_value = _np.nan
+                
+            
+            if hasattr(obj, '_pyphysio'):
+                self._pyphysio = getattr(obj, '_pyphysio').copy()
 
-        if obj is None: return
-        self._pyphysio = getattr(obj, '_pyphysio', None)
-        self.mask = getattr(obj, 'mask', None)
 
     def clone_properties(self, new_values, new_mask=None, x_values=None,x_type=None):
         x_new = Signal(new_values,
@@ -158,6 +171,7 @@ class Signal(_np.ndarray):
         return(x_new)
         
     def __getitem__(self, item):
+        # print(item)
         sampling_frequency = self._pyphysio['sampling_freq']
         start_time = self._pyphysio['start_time']
         info = self._pyphysio['info']
@@ -165,67 +179,56 @@ class Signal(_np.ndarray):
         #######################
         # process values
         #######################
-        values = self.view(_np.ndarray)
+        values = self.data
         mask = self.mask
-        
         selected_values = values.__getitem__(item)
+        selected_mask = mask.__getitem__(item)
         
-        item_other = None
-        if isinstance(item, tuple): #more than one axis involved
-            item_0 = item[0]
-            item_other = item[1:]
-        else:
-            item_0 = item
-        
-        selected_mask = mask.__getitem__(item_0)
-
-        #If we are selecting an index on all axis 
-        #then we are extracting only one scalar:
-        #just return the scalar and avoid processing the attributes
-        #(This is also to avoid issues with IDE variable viewers)
         if isinstance(item, tuple):
-
+            #If we are selecting an index on all axis 
+            #then we are extracting only one scalar:
+            #just return the scalar and avoid processing the attributes
+            #(This is also to avoid issues with IDE variable viewers)
             if (len(item) == self.ndim) and _np.array([isinstance(x, int) for x in item]).all():
-
+                # print(1)
                 return _ma.MaskedArray(data = selected_values,
                                        mask = selected_mask,
-                                       fill_value = _np.nan)
+                                       fill_value = self._fill_value)
         
-        #If we are selecting on 0 axis using a list/ndarray
-        #then 
-        #if selecting a continuous subset, fine
-        #otherwise we lose the temporal dimension
-        #and we should just return the selected masked array
-        if (isinstance(item_0, list)) or (isinstance(item_0, _np.ndarray)):
-
-            diffs = _np.diff(item)
-            if len(_np.unique(diffs))>1:
-
+            #If we are selecting on 0 axis using a list/ndarray
+            #then we lose the temporal dimension
+            #just return the selected masked array
+            
+            if (isinstance(item[0], list)) or (isinstance(item[0], _np.ndarray)):
+                # print(2)
                 return _ma.MaskedArray(data = selected_values,
                                        mask = selected_mask,
-                                       fill_value = _np.nan)
+                                       fill_value = self._fill_value)
+
+            #If selecting only one timepoint (=int on 0 axis)
+            #maintain original number of dimensions
+            if isinstance(item[0], int):
+                # print(3)
+                selected_values = _ma.expand_dims(selected_values, 0)
+                selected_mask = _ma.expand_dims(selected_mask, 0)
 
         #If selecting only one timepoint (=int on 0 axis)
+        #(but no slicing on other axes)
         #maintain original number of dimensions
-        elif isinstance(item_0, int):
-
-            selected_values = _np.expand_dims(selected_values, 0)
-            selected_mask = _np.expand_dims(selected_mask, 0)
-
-        elif item_0 is Ellipsis:
-
-            pass
+        if isinstance(item, int):
+            # print(4)
+            selected_values = _ma.expand_dims(selected_values, 0)
+            selected_mask = _ma.expand_dims(selected_mask, 0)
         
-        elif item_0 is None:
-
-            pass
-        
-        else:
-            print('why here?')
-            
         #######################
         # process temporal metadata
         #######################
+        
+        #separate item for the first axis from others
+        if isinstance(item, tuple): #more than one axis involved
+            item_0 = item[0]
+        else:
+            item_0 = item
         
         # print('--')
         # print(item_0)
@@ -241,17 +244,6 @@ class Signal(_np.ndarray):
         elif item_0 is None:
             new_start_time = start_time
             new_sampling_freq = sampling_frequency
-        elif (isinstance(item_0, list)) or (isinstance(item_0, _np.ndarray)):
-            start = item_0[0]
-            new_start_time = start_time + start/sampling_frequency
-            
-            diffs = _np.diff(item_0)
-            if len(diffs)==1:
-                ratio = diffs[0]
-            else:
-                ratio = _np.nan
-            new_sampling_freq = sampling_frequency/ratio
-            
         else: #slice
             start = item_0.start if item_0.start is not None else 0
             new_start_time = start_time + start/sampling_frequency
@@ -264,12 +256,12 @@ class Signal(_np.ndarray):
         # print(selected_values.shape)
         # print(selected_mask.shape)
         # print(new_sampling_freq, new_start_time)
-        selected = self.__class__(selected_values,
+        selected = self.__class__(selected_values, 
                                   new_sampling_freq,
                                   new_start_time,
-                                  info,
+                                  info,                                  
                                   mask = selected_mask)
-        
+        # print(type(selected))
         #process info
         selected = self.__getitem_attrib__(selected, item)
         # print(type(selected))
@@ -324,13 +316,17 @@ class Signal(_np.ndarray):
         return selected
     
     def get_indices(self):
-        mask = self.mask
-        indices = _np.where(~mask)[0]
+        selection = list(_np.zeros(self.ndim).astype(int))
+        selection[0] = slice(None, None, None)
+        selection = tuple(selection)
+        # print(selection)
+        mask_0 = self._mask.__getitem__(selection)
+        indices = _np.where(~mask_0)[0]
         return indices
     
     def get_values(self):
         indices = self.get_indices()
-        values = self[indices].view(_np.ndarray)
+        values = self.data[indices]
         return values
     
     def get_times(self):
@@ -410,7 +406,7 @@ class Signal(_np.ndarray):
 
         Returns
         -------
-        portion : Signal
+        portion : UnvenlySignal
             The selected portion
         """
         idx_start = self.time2idx(t_start)
@@ -430,7 +426,7 @@ class Signal(_np.ndarray):
 
         Returns
         -------
-        portion : Signal
+        portion : UnvenlySignal
             The selected portion
         """
         idx_start = self.IDX2idx(IDX_start)
@@ -594,9 +590,9 @@ class Signal(_np.ndarray):
             indices = _np.append(indices, indices[[-1]]+1, axis=0)
             indices_out = _np.arange(self_interp.shape[0] * fout / self_interp.get_sampling_freq()) * ratio
             
-            # print(indices.shape)
-            # print(values.shape)
-            # print(indices[-1], indices_out[-1])
+            print(indices.shape)
+            print(values.shape)
+            print(indices[-1], indices_out[-1])
             tck = _interp.interp1d(indices, values, kind=kind, axis=0)
             signal_out = tck(indices_out)
 

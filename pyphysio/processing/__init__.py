@@ -59,9 +59,14 @@ class Algorithm(object):
         
         assert isinstance(data, _Signal), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
         # print('--call--')
-        values_out = _np.apply_along_axis(self.algorithm, 0, data)
+        values_out = _ma.apply_along_axis(self.algorithm, 0, data)
         if values_out.ndim == data.ndim:
-            return data.clone_properties(values_out.data)
+            if values_out.mask.ndim == values_out.data.ndim:
+                return data.clone_properties(values_out.data, 
+                                             values_out.mask)
+            else:
+                return data.clone_properties(values_out.data,
+                                             _np.zeros_like(values_out.data).astype(bool))
         else:
             if values_out.ndim == (data.ndim - 1):
                 # print('returning a scalar')
@@ -73,7 +78,12 @@ class Algorithm(object):
                 # print(values_out.mask.shape)
                 result = []
                 for i in range(values_out.shape[0]):
-                    result.append(data.clone_properties(values_out.data))
+                    if values_out.mask.ndim == values_out.data.ndim:
+                        result.append(data.clone_properties(values_out.data[i,:], 
+                                                            values_out.mask[i,:]))
+                    else:
+                        result.append(data.clone_properties(values_out.data[i,:], 
+                                                            _np.zeros_like(values_out.data[i,:]).astype(bool))) 
                 return result
             else:
                 return values_out

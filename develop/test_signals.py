@@ -59,6 +59,7 @@ signal = ph.Signal(values, fsamp, start_time,
                    x_type = 'indices')
 
 sig = signal.fill()
+
 #%%
 print(info_unevenly(signal))
 

@@ -74,24 +74,26 @@ class Signal(_ma.MaskedArray):
     When slicing, indices of the first axis are considered idxs.
     
     """
-    def __new__(self, values, sampling_freq=1, start_time = 0, info={}, mask=None,
+    def __new__(self, data, sampling_freq, 
+                start_time = 0, info={}, 
+                mask=None,
                 x_values = None, x_type='indices'):
         
-        #TODO assert max dims = 3
+        #TODO assert max dims = 3 ?
         
         if mask is not None:
+            #TODO we should check that mask is uniform across dimensions
+            #TODO: check that shapes are compatible
             
             if mask.sum() != 0: #we are defining UE using mask, x_values should be none
                 assert x_values is None, "When defining masked values, x_values should be none"
             
-            #TODO we should check that mask is uniform across dimensions
-            #TODO: check that shapes are compatible
-            data = values
+            new_data = data
             
         elif x_values is not None: #we are defining UE using x_values
             assert x_type in ['indices', 'instants'], "x_type not in ['indices', 'instants']"
         
-            assert len(x_values) == len(values), "Length mismatch (y:%d vs. x:%d)" % (len(values), len(x_values))
+            assert len(x_values) == len(data), "Length mismatch (y:%d vs. x:%d)" % (len(data), len(x_values))
             assert len(_np.where(_np.diff(x_values) <= 0)[0]) == 0, 'Given x_values are not strictly monotonic'
         
             if x_type == 'instants':
@@ -100,7 +102,7 @@ class Signal(_ma.MaskedArray):
             #we avoid initial masked values,
             #by updating the start_time and x_values
             
-            #compute the size of the supporting EvenlySignal
+            #compute the size of the supporting (fully sampled) Signal
             if x_type == 'indices':
                 start_time = start_time + x_values[0]/sampling_freq
                 x_values = x_values - x_values[0]
@@ -116,14 +118,14 @@ class Signal(_ma.MaskedArray):
                 idx_0 = _np.round(sampling_freq*(x_values - start_time)).astype(int)
             
             #creating output shape
-            values_shape = list(values.shape)
+            values_shape = list(data.shape)
             new_shape = values_shape
             new_shape[0] = size_0
             new_shape = tuple(new_shape)
             
             #create data of the Signal
-            data = _np.empty(new_shape)
-            data[idx_0] = values
+            new_data = _np.empty(new_shape)
+            new_data[idx_0] = data
             
             #create mask
             mask = _np.ones(new_shape)
@@ -131,35 +133,32 @@ class Signal(_ma.MaskedArray):
             mask = mask.astype(bool)
             
         else:
-            data = values
-            mask = _np.zeros_like(values).astype(bool)
+            new_data = data
+            mask = _np.zeros_like(new_data).astype(bool)
 
-        obj = _ma.array(data=data, mask=mask).view(self)
-        obj._pyphysio = {'sampling_freq': sampling_freq,
+        obj = _ma.MaskedArray(data=new_data, mask=mask).view(self)
+        
+        obj._optinfo = {'sampling_freq': sampling_freq,
                          'start_time': start_time,
                          'info': info}
-        obj._mask = mask
-        obj._fill_value = _np.nan
         return obj
 
     def __array_finalize__(self, obj):
-        if obj is not None: 
-                
-            if hasattr(obj, '_mask'):
-                self._mask = getattr(obj, '_mask')
-            else:
-                self._mask = False
-                
-            if hasattr(obj, '_fill_value'):
-                self._fill_value = getattr(obj, '_fill_value')
-            else:
-                self._fill_value = _np.nan
-                
-            
-            if hasattr(obj, '_pyphysio'):
-                self._pyphysio = getattr(obj, '_pyphysio').copy()
-
-
+        if obj is None: return
+        mask = _np.zeros_like(len(self)).astype(bool)
+        self._mask = getattr(obj, '_mask', mask)
+        self._hardmask = getattr(obj, '_hardmask', False)
+        self._fill_value = getattr(obj, '_fill_value', _np.nan)
+        
+        if hasattr(obj, '_optinfo'):
+            self._optinfo = getattr(obj, '_optinfo')
+        else:
+            _optinfo = {'sampling_freq':_np.nan,
+                        'start_time':_np.nan,
+                        'info': {}}
+            self._optinfo = _optinfo
+            print('no _optinfo')
+    
     def clone_properties(self, new_values, new_mask=None, x_values=None,x_type=None):
         x_new = Signal(new_values,
                        self.get_sampling_freq(),
@@ -171,10 +170,10 @@ class Signal(_ma.MaskedArray):
         return(x_new)
         
     def __getitem__(self, item):
-        # print(item)
-        sampling_frequency = self._pyphysio['sampling_freq']
-        start_time = self._pyphysio['start_time']
-        info = self._pyphysio['info']
+        print(item)
+        sampling_frequency = self.get_sampling_freq()
+        start_time = self.get_start_time()
+        info = self.get_info()
 
         #######################
         # process values
@@ -184,56 +183,59 @@ class Signal(_ma.MaskedArray):
         selected_values = values.__getitem__(item)
         selected_mask = mask.__getitem__(item)
         
+        if isinstance(item, tuple): #more than one axis involved
+            item_0 = item[0]
+        else:
+            item_0 = item
+            
+        #If we are selecting an index on all axis 
+        #then we are extracting only one scalar:
+        #just return the scalar and avoid processing the attributes
+        #(This is also to avoid issues with IDE variable viewers)
         if isinstance(item, tuple):
-            #If we are selecting an index on all axis 
-            #then we are extracting only one scalar:
-            #just return the scalar and avoid processing the attributes
-            #(This is also to avoid issues with IDE variable viewers)
             if (len(item) == self.ndim) and _np.array([isinstance(x, int) for x in item]).all():
                 # print(1)
                 return _ma.MaskedArray(data = selected_values,
                                        mask = selected_mask,
                                        fill_value = self._fill_value)
         
-            #If we are selecting on 0 axis using a list/ndarray
-            #then we lose the temporal dimension
-            #just return the selected masked array
-            
-            if (isinstance(item[0], list)) or (isinstance(item[0], _np.ndarray)):
-                # print(2)
+        #If we are selecting on 0 axis using a list/ndarray
+        #then 
+        #if selecting a continuous subset (diffs are always the same), fine
+        #otherwise we lose the temporal dimension
+        #and we should just return the selected masked array
+        if (isinstance(item_0, list)) or (isinstance(item_0, _np.ndarray)):
+
+            diffs = _np.diff(item)
+            if len(_np.unique(diffs))>1:
                 return _ma.MaskedArray(data = selected_values,
                                        mask = selected_mask,
-                                       fill_value = self._fill_value)
-
-            #If selecting only one timepoint (=int on 0 axis)
-            #maintain original number of dimensions
-            if isinstance(item[0], int):
-                # print(3)
-                selected_values = _ma.expand_dims(selected_values, 0)
-                selected_mask = _ma.expand_dims(selected_mask, 0)
+                                       fill_value = _np.nan)
 
         #If selecting only one timepoint (=int on 0 axis)
-        #(but no slicing on other axes)
         #maintain original number of dimensions
-        if isinstance(item, int):
-            # print(4)
+        elif isinstance(item_0, int):
+            # print(3)
             selected_values = _ma.expand_dims(selected_values, 0)
             selected_mask = _ma.expand_dims(selected_mask, 0)
+
+        elif item_0 is Ellipsis:
+            pass
+        
+        elif item_0 is None:
+            pass
+        
+        elif isinstance(item_0, slice):
+            pass
+        
+        else:
+            print('why here?')
+            print(item_0, type(item_0))
         
         #######################
         # process temporal metadata
         #######################
         
-        #separate item for the first axis from others
-        if isinstance(item, tuple): #more than one axis involved
-            item_0 = item[0]
-        else:
-            item_0 = item
-        
-        # print('--')
-        # print(item_0)
-        # print(self.shape)
-        # print(type(item_0))
         #set start time and new sampling freq
         if isinstance(item_0, int):
             new_start_time = start_time + item_0/sampling_frequency
@@ -244,13 +246,29 @@ class Signal(_ma.MaskedArray):
         elif item_0 is None:
             new_start_time = start_time
             new_sampling_freq = sampling_frequency
-        else: #slice
+        elif (isinstance(item_0, list)) or (isinstance(item_0, _np.ndarray)):
+            start = item_0[0]
+            new_start_time = start_time + start/sampling_frequency
+            
+            diffs = _np.unique(_np.diff(item_0))
+            if len(diffs)==1:
+                ratio = diffs[0]
+            else:
+                ratio = _np.nan
+            new_sampling_freq = sampling_frequency/ratio
+        elif isinstance(item_0, slice):
             start = item_0.start if item_0.start is not None else 0
             new_start_time = start_time + start/sampling_frequency
             
             ratio = item_0.step if item_0.step is not None else 1
             new_sampling_freq = sampling_frequency/ratio
         
+        else: #slice
+            print('why here?')
+            print(item_0, type(item_0))
+            new_start_time = _np.nan
+            new_sampling_freq = _np.nan
+            
         ######################
         # finalize
         # print(selected_values.shape)
@@ -436,7 +454,7 @@ class Signal(_ma.MaskedArray):
     
     @property
     def ph(self):
-        return self._pyphysio
+        return self._optinfo
 
     def clone(self):
         #TODO CHECK
@@ -547,7 +565,7 @@ class Signal(_ma.MaskedArray):
         sig_out = tck(indices_out)
 
         # Init new signal
-        sig_out = Signal(values=sig_out,
+        sig_out = Signal(data=sig_out,
                          sampling_freq=self.get_sampling_freq(),
                          start_time=self.get_start_time(),
                          info=self.get_info(),
@@ -596,7 +614,7 @@ class Signal(_ma.MaskedArray):
             tck = _interp.interp1d(indices, values, kind=kind, axis=0)
             signal_out = tck(indices_out)
 
-        return Signal(values=signal_out,
+        return Signal(signal_out,
                       sampling_freq=fout,
                       start_time=self_interp.get_start_time(),
                       info=self_interp.get_info(),

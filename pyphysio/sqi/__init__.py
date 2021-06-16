@@ -109,7 +109,7 @@ class ComputeQuality(_Algorithm):
         is_good_ = []
         for k,v in sqi_values.items():
             sqi_values_[k] = v[0]
-            is_good_.append(v[1])
+            is_good_.append(v[1].get_values())
         
         #save sqi only in signal.info
         signal.update_info('sqi', sqi_values_)  

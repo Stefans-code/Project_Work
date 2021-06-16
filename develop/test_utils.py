@@ -2,7 +2,7 @@ import pyphysio as ph
 import numpy as np
 
 def generate_evenly(shape=(1000, 5, 3), fsamp=100, starttime=0):
-    signal = ph.EvenlySignal(np.random.uniform(size=shape), fsamp, starttime)
+    signal = ph.Signal(np.random.uniform(size=shape), fsamp, starttime)
     if isinstance(shape, int):
         shape = [shape]
     check(signal, shape, fsamp, starttime)

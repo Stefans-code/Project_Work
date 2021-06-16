@@ -25,8 +25,6 @@ class Entropy(_SignalQualityIndicator):
     
     def algorithm(self, data):
         params = self._params
-        if _np.isnan(data).all():
-            return(_np.nan)
         nbins=params['nbins']
         p_data = _np.histogram(data.get_values().ravel().reshape(-1,1), bins=nbins)[0]/len(data) # calculates the probabilities
         entropy = _sps.entropy(_np.array(p_data))  # input probabilities to get the entropy 

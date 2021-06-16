@@ -171,9 +171,9 @@ class Signal(_ma.MaskedArray):
         
     def __getitem__(self, item):
         print(item)
-        sampling_frequency = self.get_sampling_freq()
-        start_time = self.get_start_time()
-        info = self.get_info()
+        sampling_frequency = copy.deepcopy(self.get_sampling_freq())
+        start_time = copy.deepcopy(self.get_start_time())
+        info = copy.deepcopy(self.get_info())
 
         #######################
         # process values
@@ -287,6 +287,9 @@ class Signal(_ma.MaskedArray):
         return selected
     
     def __getitem_attrib__(self, selected, item):
+        # #DONT DO ANYTHING FOR NOW
+        # return(selected)
+        
         # print('--getitem_attrib--')
         # print(type(selected))
         # separate item for the first axis from others
@@ -301,6 +304,7 @@ class Signal(_ma.MaskedArray):
         #=========================
         # work on metadata in info dict
         info = selected.get_info()
+        
         #set sqi if existing
         #set good if existing
         #sqi and good should be changed only if working on other dims
@@ -320,7 +324,7 @@ class Signal(_ma.MaskedArray):
                 #apply the item_new to the sqi
                 new_sqi = {}
                 for s in info['sqi'].keys():
-                    sqi = info['sqi'][s].clone()
+                    sqi = info['sqi'][s]
                     new_sqi[s] = sqi.__getitem__(item_new)
                     
                 selected.update_info('sqi', new_sqi)
@@ -328,7 +332,8 @@ class Signal(_ma.MaskedArray):
             if 'good' in info.keys():
                 # new_good = {}
                 # for s in info['good'].keys():
-                new_good = info['good'].__getitem__(item_new)
+                good = info['good']
+                new_good = good.__getitem__(item_new)
                 selected.update_info('good', new_good)
         
         return selected

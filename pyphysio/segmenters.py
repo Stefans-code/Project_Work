@@ -92,7 +92,7 @@ class _Segmenter(object):
         
         #manage labels, drop_mixed
         if self.timeline is not None:
-            timeline_segment = self.timeline.segment_time(b, e)
+            timeline_segment = self.timeline.segment_time(b, e).get_values()
             
             if (timeline_segment == timeline_segment[0]).all():
                 #timeline values are the same within the segment

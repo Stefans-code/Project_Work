@@ -3,18 +3,41 @@ import numpy as _np
 import numpy.ma as _ma
 import copy
 
+def from_pickle(path):
+    """
+    Loads a Signal from a pickle file given the path.
+    :param path: File system path to the pickle file.
+    :return: A Signal.
+    """
+    from gzip import open
+    from pickle import load
+    f = open(path)
+    signal = load(f)
+    
+    assert isinstance(signal, Signal)
+    return signal
+
 class Signal(_ma.MaskedArray):
     def __new__(self, 
                 data, 
+                mask=False,
+                dtype=None,
+                copy=False, 
+                subok=True,
+                ndmin=0,
+                fill_value=None,
+                keep_mask=True,
+                hard_mask=None,
+                shrink=True,
+                order=None,
                 sampling_freq=1, 
                 start_time = 0,
-                info={}, 
-                mask=None):
+                info={}):
+        
         if mask is None:
             mask = _np.zeros_like(data).astype(bool)
 
-        obj = _ma.MaskedArray(data=data, mask=mask,
-                              subok=False, hard_mask=False)
+        obj = _ma.MaskedArray(data=data, mask=mask)
         
         obj._optinfo = {'sampling_freq': sampling_freq,
                         'start_time': start_time,
@@ -23,34 +46,6 @@ class Signal(_ma.MaskedArray):
         obj = obj.view(self)
         return obj
 
-    # def __array_finalize__(self, obj):
-    #     if obj is None: return
-                
-    #     mask = _np.zeros_like(len(self)).astype(bool)
-    #     self._mask = getattr(obj, '_mask', mask)
-    #     self._hardmask = getattr(obj, '_hardmask', False)
-    #     self._fill_value = getattr(obj, '_fill_value', _np.nan)
-        
-    #     if hasattr(obj, '_optinfo'):
-    #         self._optinfo = getattr(obj, '_optinfo')
-    #     else:
-    #         print('no _optinfo')
-
-    
-    # def __array_wrap__(self, out_arr, context=None):
-    #     print('In __array_wrap__:')
-    #     print('   self is %s' % repr(self))
-    #     print('   arr is %s' % repr(out_arr))
-    #     # then just call the parent
-    #     return super(Signal, self).__array_wrap__(self, out_arr, context)
-    
-    # def __array_ufunc__(self, ufunc, method, *inputs, out=None, **kwargs):
-    #     print('In __array_ufunc__:')
-    #     print('   self is %s' % repr(self))
-    #     print('   arr is %s' % repr(out))
-    #     # then just call the parent
-    #     return super(Signal, self).__array_ufunc__(self, ufunc, method, *inputs, out=None, **kwargs)
-    
     def clone_properties(self, new_data, new_mask=None):
         x_new = Signal(new_data,
                        self.ph['sampling_freq'],
@@ -245,6 +240,26 @@ class Signal(_ma.MaskedArray):
         return self.get_values().__repr__() + '\n'+\
             f'{self.ph["sampling_freq"]} Hz \n'
 
+    def pickleable(self):
+        """
+        Returns a pickleable tuple of this Signal.
+        :return: Tuple (Signal, ph dict).
+        """
+        return self, self.ph
+    
+    def to_pickle(self, path):
+        """
+        Saves this Signal into a pickle file.
+        :param path: File system path to the file to write (create/overwrite).
+        """
+        from gzip import open
+        from pickle import dump
+        f = open(path, "wb")
+        dump(self, f, protocol=2)
+        # dump(self, f, protocol=2)
+        f.close()
+        
+#%%        
 import numpy as np
 
 def info(s):
@@ -259,6 +274,18 @@ fsamp = 10
 s = Signal(data = signal_values, 
            sampling_freq = fsamp)
 
+#%%
+s.to_pickle('/home/bizzego/tmp/s.pkl')
+
+s1 = from_pickle('/home/bizzego/tmp/s.pkl')
+
+#%%
+import pickle
+import numpy
+
+s.dump('/home/bizzego/tmp/s.pkl')
+
+s1 = numpy.load('/home/bizzego/tmp/s.pkl', allow_pickle=True)
 
 #%%
 mmm = ma.array([[1,2,3], [1,2,3]])

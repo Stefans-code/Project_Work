@@ -18,7 +18,7 @@ def from_pickleable(pickle):
     d, ph = pickle
     assert isinstance(d, Signal)
     assert isinstance(ph, dict)
-    d._pyphysio = ph
+    d._optinfo = ph
     return d
 
 
@@ -31,9 +31,13 @@ def from_pickle(path):
     from gzip import open
     from pickle import load
     f = open(path)
-    p = load(f)
+    p, ph, info = load(f)
     f.close()
-    return from_pickleable(p)
+    # return from_pickleable(p)
+    p._optinfo = ph
+    p._optinfo['info'] = info
+    
+    return p
 
 
 class Signal(_ma.MaskedArray):
@@ -74,10 +78,23 @@ class Signal(_ma.MaskedArray):
     When slicing, indices of the first axis are considered idxs.
     
     """
-    def __new__(self, data, sampling_freq, 
-                start_time = 0, info={}, 
-                mask=None,
-                x_values = None, x_type='indices'):
+    def __new__(self, data, mask=None,
+                #>>>this is required for correct pickling, dont know why
+                dtype=None,
+                copy=False, 
+                subok=True,
+                ndmin=0,
+                fill_value=None,
+                keep_mask=True,
+                hard_mask=None,
+                shrink=True,
+                order=None,                
+                #<<<this is required for correct pickling, dont know why
+                sampling_freq=_np.nan, 
+                start_time = 0, 
+                info={}, 
+                x_values = None, 
+                x_type='indices'):
         
         #TODO assert max dims = 3 ?
         
@@ -139,8 +156,8 @@ class Signal(_ma.MaskedArray):
         obj = _ma.MaskedArray(data=new_data, mask=mask).view(self)
         
         obj._optinfo = {'sampling_freq': sampling_freq,
-                         'start_time': start_time,
-                         'info': info}
+                        'start_time': start_time,
+                        'info': info}
         return obj
 
     def __array_finalize__(self, obj):
@@ -157,20 +174,19 @@ class Signal(_ma.MaskedArray):
                         'start_time':_np.nan,
                         'info': {}}
             self._optinfo = _optinfo
-            print('no _optinfo')
+            # print('no _optinfo')
     
     def clone_properties(self, new_values, new_mask=None, x_values=None,x_type=None):
-        x_new = Signal(new_values,
-                       self.get_sampling_freq(),
-                       self.get_start_time(),
-                       self.get_info(),
-                       new_mask,
-                       x_values,
-                       x_type)
+        x_new = Signal(new_values, new_mask,
+                       sampling_freq=self.get_sampling_freq(),
+                       start_time=self.get_start_time(),
+                       info=self.get_info(),
+                       x_values=x_values,
+                       x_type=x_type)
         return(x_new)
         
     def __getitem__(self, item):
-        print(item)
+        # print(item)
         sampling_frequency = copy.deepcopy(self.get_sampling_freq())
         start_time = copy.deepcopy(self.get_start_time())
         info = copy.deepcopy(self.get_info())
@@ -274,11 +290,10 @@ class Signal(_ma.MaskedArray):
         # print(selected_values.shape)
         # print(selected_mask.shape)
         # print(new_sampling_freq, new_start_time)
-        selected = self.__class__(selected_values, 
-                                  new_sampling_freq,
-                                  new_start_time,
-                                  info,                                  
-                                  mask = selected_mask)
+        selected = self.__class__(selected_values, mask = selected_mask,
+                                  sampling_freq=new_sampling_freq,
+                                  start_time=new_start_time,
+                                  info=info)
         # print(type(selected))
         #process info
         selected = self.__getitem_attrib__(selected, item)
@@ -287,9 +302,6 @@ class Signal(_ma.MaskedArray):
         return selected
     
     def __getitem_attrib__(self, selected, item):
-        # #DONT DO ANYTHING FOR NOW
-        # return(selected)
-        
         # print('--getitem_attrib--')
         # print(type(selected))
         # separate item for the first axis from others
@@ -512,15 +524,23 @@ class Signal(_ma.MaskedArray):
     def set_info(self, info):
         self.ph['info'] = info
     
-    def has_good(self):
-        #TODO return if good are global?
-        return 'good' in self.ph['info'].keys()
+    def has_good(self, good_global=True):
+        if 'good' in self.ph['info'].keys():
+            if not good_global:
+                return True
+            else:
+                good = self.ph['info']['good']
+                if good.shape[0] == 1:
+                    return True
+                return False
+        return False
     
-    def get_good(self):
+    def get_good(self, safe=True):
         assert self.has_good(), "Quality has not been computed yet"
+        
         info = self.get_info()
         is_good = info['good']
-        assert is_good.shape[0] == 1, "Quality has not been computed globally. Please compute global quality first"
+        # assert is_good.shape[0] == 1, "Quality has not been computed globally. Please compute global quality first"
         
         if is_good.ndim == 1:
             return(_np.array(_np.where(is_good))[0])
@@ -570,11 +590,10 @@ class Signal(_ma.MaskedArray):
         sig_out = tck(indices_out)
 
         # Init new signal
-        sig_out = Signal(data=sig_out,
+        sig_out = Signal(data=sig_out, mask=None,
                          sampling_freq=self.get_sampling_freq(),
                          start_time=self.get_start_time(),
-                         info=self.get_info(),
-                         mask=None)
+                         info=self.get_info())
 
         return sig_out
     
@@ -619,11 +638,10 @@ class Signal(_ma.MaskedArray):
             tck = _interp.interp1d(indices, values, kind=kind, axis=0)
             signal_out = tck(indices_out)
 
-        return Signal(signal_out,
+        return Signal(signal_out,mask=None,
                       sampling_freq=fout,
                       start_time=self_interp.get_start_time(),
-                      info=self_interp.get_info(),
-                      mask=None)
+                      info=self_interp.get_info())
 
     def plot(self, marker=None, ncols=4):
         fig = _gcf()
@@ -713,7 +731,8 @@ class Signal(_ma.MaskedArray):
         from gzip import open
         from pickle import dump
         f = open(path, "wb")
-        dump(self.pickleable, f, protocol=2)
+        # dump(self.pickleable, f, protocol=2)
+        dump((self, self._optinfo, self.ph['info']), f, protocol=2)
         f.close()
        
     def __repr__(self):

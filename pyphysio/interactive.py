@@ -193,7 +193,7 @@ class Annotate(object):
         self.peaks_v = _np.diff(self.peaks_t)
         self.peaks_v = _np.r_[self.peaks_v[0], self.peaks_v]
             
-        self.ibi_ok =  _Signal(values=self.peaks_v,
+        self.ibi_ok =  _Signal(values=self.peaks_v, mask=None,
                                sampling_freq=self.ibi.get_sampling_freq(),
                                info=self.ibi.get_info(),
                                x_values=self.peaks_t,

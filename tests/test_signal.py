@@ -115,7 +115,8 @@ class TestSignal(object):
             for t in self.start_times:
                 for v in self.values:
                     for i_sh, sh in enumerate(sizes):
-                        s = ph.Signal(v[i_sh], f, t, info=self.info)
+                        s = ph.Signal(v[i_sh], sampling_freq=f, 
+                                      start_time=t, info=self.info)
                         assert s.get_end_time() == t + (len(v) + 1)/f, s.get_end_time()
                         assert s.get_indices()[123] == 123, s.get_indices()[123]
                         assert s.get_times()[123] == 123/f + t, s.get_times()[123]
@@ -130,7 +131,8 @@ class TestSignal(object):
                 for t in self.start_times:
                     for v in self.values:
                         for i_sh, sh in enumerate(self.shapes):
-                            s = ph.Signal(v[i_sh], f, t, info=self.info, mask=m)
+                            s = ph.Signal(v[i_sh], sampling_freq=f, 
+                                          start_time=t, info=self.info, mask=m)
                         
                             start_time = s.get_start_time()
                             indices = s.get_indices()

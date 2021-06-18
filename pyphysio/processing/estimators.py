@@ -254,7 +254,7 @@ class DriverEstim(_Algorithm):
             _np.max(bateman_second_half) - _np.min(bateman_second_half))
 
         signal_in = _np.r_[bateman_first_half, signal.get_values(), bateman_second_half]
-        signal_in = _Signal(signal_in, fsamp)
+        signal_in = _Signal(signal_in, sampling_freq=fsamp)
 
         # deconvolution
         driver = _DeConvolutionalFilter(irf=bateman, normalize=True, deconv_method='fft')(signal_in)
@@ -263,7 +263,7 @@ class DriverEstim(_Algorithm):
         # gaussian smoothing
         driver = _ConvolutionalFilter(irftype='gauss', win_len=_np.max([0.2, 1 / fsamp]) * 8, normalize=True)(driver)
 
-        driver = _Signal(driver, sampling_freq=fsamp, start_time=signal.get_start_time(),info=signal.get_info())
+        driver = _Signal(driver, sampling_freq=fsamp, start_time=signal.get_start_time(), info=signal.get_info())
         return driver
 
     @staticmethod
@@ -430,7 +430,7 @@ class Energy(_Algorithm):
         energy[-1] = energy[-2]
 
         idx_interp = _np.r_[0, windows + round(idx_len / 2), len(signal)-1]
-        energy_out = _Signal(energy, signal.get_sampling_freq(), 
+        energy_out = _Signal(energy, sampling_freq=signal.get_sampling_freq(), 
                              start_time = signal.get_start_time(), 
                              x_values=idx_interp,
                              x_type='indices').fill('linear')

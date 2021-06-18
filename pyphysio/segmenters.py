@@ -392,23 +392,24 @@ def fmap(segmenter, algorithms, signal):
                 #since we used a FixedSegments, we can create an EvenlySignal
                 fsamp = 1/segmenter._step
                 
-                info = {'label': _Signal(labels, fsamp, t[0]),
+                info = {'label': _Signal(labels, sampling_freq=fsamp, start_time=t[0]),
                         'name': alg.__repr__()}
                 
                 info.update(signal.get_info())
                 
-                result[alg.__repr__()] = _Signal(values, fsamp, t[0], info)
+                result[alg.__repr__()] = _Signal(values, sampling_freq=fsamp, 
+                                                 start_time=t[0], info=info)
                 
             else:
                 fsamp = signal.get_sampling_freq()
-                info = {'label': _Signal(labels, fsamp, t[0],
-                                                 x_values = t,
-                                                 x_type='instants'),
+                info = {'label': _Signal(labels, sampling_freq=fsamp, start_time=t[0],
+                                         x_values = t, x_type='instants'),
                         'name': alg.__repr__()}
                 
                 info.update(signal.get_info())
                 
-                result[alg.__repr__()] = _Signal(values, fsamp, t[0], info,
+                result[alg.__repr__()] = _Signal(values, sampling_freq=fsamp, 
+                                                 start_time=t[0], info=info,
                                                  x_values = t, x_type='instants')
         
         #if list or tuple of ndarrays
@@ -416,7 +417,7 @@ def fmap(segmenter, algorithms, signal):
         #we create a list of Signals
         elif (isinstance(values[0], list) or isinstance(values[0], tuple)) and \
             sum([isinstance(x, _np.ndarray) for x in values[0]]) ==  len(values[0]):
-            print(5)
+            # print(5)
             number_signals = len(values[0])
             signals_out = []
             for i_signal in range(number_signals):
@@ -426,27 +427,31 @@ def fmap(segmenter, algorithms, signal):
                 values_signal = _np.stack(values_signal, axis=0)
                 
                 if isinstance(segmenter, FixedSegments):
-                    print(6)
+                    # print(6)
                     #since we used a FixedSegments, we can create an EvenlySignal
                     fsamp = 1/segmenter._step
                     
-                    info = {'label': _Signal(labels, fsamp, t[0]),
+                    info = {'label': _Signal(labels, sampling_freq=fsamp, 
+                                             start_time=t[0]),
                             'name': alg.__repr__()}
                     
                     info.update(signal.get_info())
                     
-                    signals_out.append(_Signal(values_signal, fsamp, t[0], info))
+                    signals_out.append(_Signal(values_signal, sampling_freq=fsamp, 
+                                               start_time=t[0], info=info))
                     
                 else:
-                    print(7)
+                    # print(7)
                     fsamp = signal.get_sampling_freq()
-                    info = {'label': _Signal(labels, fsamp, t[0],
+                    info = {'label': _Signal(labels, sampling_freq=fsamp, 
+                                             start_time= t[0],
                                              x_values = t, x_type='instants'),
                             'name': alg.__repr__()}
                     
                     info.update(signal.get_info())
                     
-                    signals_out.append(_Signal(values_signal, fsamp, t[0], info,
+                    signals_out.append(_Signal(values_signal, sampling_freq=fsamp, 
+                                               start_time=t[0], info=info,
                                                x_values = t, x_type='instants'))
         
             result[alg.__repr__()] = signals_out
@@ -454,7 +459,7 @@ def fmap(segmenter, algorithms, signal):
         #all other cases
         #just return the original dictionary
         else:
-            print(8)
+            # print(8)
             result[alg.__repr__()] = result_algorithm
             
     return result

@@ -426,7 +426,7 @@ class DenoiseEDA(_Algorithm):
         if idx_ok[-1] != len(signal) - 1:
             idx_ok = _np.r_[idx_ok, len(signal) - 1].astype(int)
 
-        denoised = _Signal(signal[idx_ok], signal.get_sampling_freq(),
+        denoised = _Signal(signal[idx_ok], sampling_freq=signal.get_sampling_freq(),
                            start_time = signal.get_start_time(),
                            x_values=idx_ok, x_type='indices')
 

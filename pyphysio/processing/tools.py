@@ -40,7 +40,7 @@ class Diff(_Algorithm):
         sig_1 = signal[:-degree]
         sig_2 = signal[degree:]
 
-        out = _Signal(values=sig_2 - sig_1,
+        out = _Signal(data=sig_2 - sig_1,
                       sampling_freq=signal.get_sampling_freq(),
                       info=signal.get_info(),
                       start_time=signal.get_start_time() + degree / signal.get_sampling_freq())

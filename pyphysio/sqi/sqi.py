@@ -74,8 +74,9 @@ class CVSignal(_SignalQualityIndicator):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
 
     def algorithm(self, data):
-        mean = _ma.nmean(data)
-        sd = _ma.nstd(data)
+        data_values= data.get_values()
+        mean = _ma.mean(data_values)
+        sd = _ma.std(data_values)
         cv = 100*sd/mean
         return(cv)
 

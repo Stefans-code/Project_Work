@@ -15,10 +15,12 @@ def from_pickleable(pickle):
     :param pickle: Tuple of the form (Signal, ph dict).
     :return: Signal
     """
-    d, ph = pickle
+    d, ph, info = pickle
     assert isinstance(d, Signal)
     assert isinstance(ph, dict)
+    assert isinstance(info, dict)
     d._optinfo = ph
+    d._optinfo['info'] = info
     return d
 
 
@@ -31,10 +33,25 @@ def from_pickle(path):
     from gzip import open
     from pickle import load
     f = open(path)
-    p, ph, info = load(f)
+    p, ph, info_pickle = load(f)
     f.close()
     # return from_pickleable(p)
     p._optinfo = ph
+    info = {}
+    for info_key in info_pickle.keys():
+        if info_key == 'sqi':
+            info_sqi = {}
+            for k in info_pickle['sqi'].keys():
+                info_sqi[k] = from_pickleable(info_pickle['sqi'][k])
+            info['sqi'] = info_sqi
+        
+        elif info_key == 'good':
+            info['good'] = from_pickleable(info_pickle['good'])
+        
+        elif info_key == 'stim':
+            info['stim'] = from_pickleable(info_pickle['stim'])
+        else:
+            info[info_key] = info_pickle[info_key]
     p._optinfo['info'] = info
     
     return p
@@ -118,8 +135,6 @@ class Signal(_ma.MaskedArray):
             
             #we avoid initial masked values,
             #by updating the start_time and x_values
-            
-            #compute the size of the supporting (fully sampled) Signal
             if x_type == 'indices':
                 start_time = start_time + x_values[0]/sampling_freq
                 x_values = x_values - x_values[0]
@@ -643,7 +658,7 @@ class Signal(_ma.MaskedArray):
                       start_time=self_interp.get_start_time(),
                       info=self_interp.get_info())
 
-    def plot(self, marker=None, ncols=4):
+    def plot(self, marker=None, ncols=4, sharey=True):
         fig = _gcf()
         
         #if single signal, then plot
@@ -692,10 +707,10 @@ class Signal(_ma.MaskedArray):
                     n_cols = n_ch if n_ch < ncols else ncols
                     n_rows = int(_np.ceil(n_ch/n_cols))
                     
-                    fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True)
+                    fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True, sharey=sharey)
                     axes = axes.ravel()
                 else:
-                    fig, axes = _subplots(1, 1, num = fig.number, sharex=True)
+                    fig, axes = _subplots(1, 1, num = fig.number, sharex=True, sharey=sharey)
                     axes = [axes]
             
             #recursive calls to signal.plot()
@@ -721,7 +736,26 @@ class Signal(_ma.MaskedArray):
         Returns a pickleable tuple of this Signal.
         :return: Tuple (Signal, ph dict).
         """
-        return self, self.ph
+        info = self.get_info()
+        
+        
+        info_pickle = {}
+        for info_key in info.keys():
+            if info_key == 'sqi':
+                info_sqi = {}
+                for k in info['sqi'].keys():
+                    info_sqi[k] = info['sqi'][k].pickleable
+                info_pickle['sqi'] = info_sqi
+            
+            elif info_key == 'good':
+                info_pickle['good'] = info['good'].pickleable
+            
+            elif info_key == 'stim':
+                info_pickle['stim'] = info['stim'].pickleable
+            else:
+                info_pickle[info_key] = info[info_key]
+                
+        return self, self._optinfo, info_pickle
 
     def to_pickle(self, path):
         """
@@ -731,8 +765,7 @@ class Signal(_ma.MaskedArray):
         from gzip import open
         from pickle import dump
         f = open(path, "wb")
-        # dump(self.pickleable, f, protocol=2)
-        dump((self, self._optinfo, self.ph['info']), f, protocol=2)
+        dump(self.pickleable, f, protocol=2)
         f.close()
        
     def __repr__(self):

@@ -4,7 +4,7 @@ import numpy as _np
 import numpy.ma as _ma
 import scipy.stats as _stats
 from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_design as _filter_design, \
-    deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve
+    deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve, iirnotch as _iirnotch
 # from matplotlib.pyplot import plot as _plot
 from . import Algorithm as _Algorithm
 from ..signal import Signal as _Signal
@@ -126,6 +126,51 @@ class IIRFilter(_Algorithm):
         else:
             return sig_filtered
 
+class NotchFilter(_Algorithm):
+    """
+    Filter the input signal using an Infinite Impulse Response filter.
+
+    Parameters
+    ----------
+    f : float
+        The frequency to be removed
+    Q : float
+        Quality
+    
+    Returns
+    -------
+    signal : Signal
+        Filtered signal
+
+    Notes
+    -----
+    This is a wrapper of *scipy.signal.iirnotch*. Refer to `scipy.signal.iirnotch`
+    for additional information
+    """
+
+    def __init__(self, f, Q=30):
+        assert f > 0
+        assert Q > 0
+        _Algorithm.__init__(self, f=f, Q=Q)
+
+    def algorithm(self, signal):
+        assert not signal.is_masked(), 'Filtering masked signal is undefined.'
+        
+        params = self._params
+        fsamp = signal.get_sampling_freq()
+        f = params["f"]
+        Q = params["Q"]
+        
+        b, a = _iirnotch(f, Q, fsamp)
+        
+        sig_filtered = signal.clone_properties(_filtfilt(b, a, signal.get_values().ravel()))
+
+        if _np.isnan(sig_filtered[0]):
+            print('Filter parameters allow no solution. Returning original signal.')
+            return signal
+        else:
+            return sig_filtered
+        
 
 class FIRFilter(_Algorithm):
     """
@@ -491,19 +536,20 @@ class ConvolutionalFilter(_Algorithm):
                     print(f"'win_len' too short to generate a gaussian IRF, expected > {str(_np.ceil(8 / fsamp))}")
                     std = _np.floor(n / 8)
                     irf = _gaussian(n, std)
-                elif irftype == 'rect':
-                    irf = _np.ones(n)
-                elif irftype == 'triang':
-                    irf_1 = _np.arange(n // 2)
-                    irf_2 = irf_1[-1] - _np.arange(n // 2)
-                    if n % 2 == 0:
-                        irf = _np.r_[irf_1, irf_2]
-                    else:
-                        irf = _np.r_[irf_1, irf_1[-1] + 1, irf_2]
-                elif irftype == 'dgauss':
-                    std = _np.round(n / 8)
-                    g = _gaussian(n, std)
-                    irf = _np.diff(g)
+            elif irftype == 'rect':
+                irf = _np.ones(n)
+
+            elif irftype == 'triang':
+                irf_1 = _np.arange(n // 2)
+                irf_2 = irf_1[-1] - _np.arange(n // 2)
+                if n % 2 == 0:
+                    irf = _np.r_[irf_1, irf_2]
+                else:
+                    irf = _np.r_[irf_1, irf_1[-1] + 1, irf_2]
+            elif irftype == 'dgauss':
+                std = _np.round(n / 8)
+                g = _gaussian(n, std)
+                irf = _np.diff(g)
 
         # NORMALIZE
         if normalize:

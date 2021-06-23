@@ -7,48 +7,6 @@ from ..processing.tools import PSD as PSD
 # __author__ = 'AleB'
 
 
-class InBand(_Algorithm):
-    """
-    Extract the PSD of a given frequency band
-    
-
-    Parameters
-    ----------
-    freq_min : float, >0
-        Left bound of the frequency band
-    freq_max : float, >0
-        Right bound of the frequency band
-    method : 'ar', 'welch' or 'fft'
-        Method to estimate the PSD
-        
-    Additional parameters
-    ---------------------
-    For the PSD (see pyphysio.tools.Tools.PSD), for instance:
-        
-    interp_freq : float, >0
-        Frequency used to (re-)interpolate the signal
-
-    Returns
-    -------
-    freq : numpy array
-        Frequencies in the frequency band
-    psd : float
-        Power Spectrum Density in the frequency band
-    """
-
-    def __init__(self, freq_min, freq_max, method, **kwargs):
-        _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
-
-    def algorithm(self, signal):
-        params = self._params
-
-        freq, spec = PSD(**params)(signal)
-        freq = freq.ravel()
-        spec = spec.ravel()
-        # freq is sorted so
-        i_min = _np.searchsorted(freq, params["freq_min"])
-        i_max = _np.searchsorted(freq, params["freq_max"])
-        return freq[i_min:i_max], spec[i_min:i_max]
 
 
 class PowerInBand(_Algorithm):
@@ -83,8 +41,8 @@ class PowerInBand(_Algorithm):
     def algorithm(self, signal):
         params = self._params
         freq, powers = PSD(**params)(signal)
-        i_min = _np.searchsorted(freq, params["freq_min"])
-        i_max = _np.searchsorted(freq, params["freq_max"])
+        i_min = _np.searchsorted(freq.data, params["freq_min"])
+        i_max = _np.searchsorted(freq.data, params["freq_max"])
         return _np.sum(powers[i_min:i_max] )
     
 
@@ -120,6 +78,14 @@ class PeakInBand(_Algorithm):
     
     def algorithm(self, signal):
         params = self._params
-        freq, power = InBand(**params)(signal)
-        return freq[_np.argmax(power)]
+        freq, powers = PSD(**params)(signal)
+        
+        i_min = _np.searchsorted(freq.data, params["freq_min"])
+        i_max = _np.searchsorted(freq.data, params["freq_max"])
+        
+        f_band = freq.data[i_min:i_max]
+        p_band = powers.data[i_min:i_max]
+        f_peak = f_band[_np.argmax(p_band)]
+        
+        return float(f_peak)
 

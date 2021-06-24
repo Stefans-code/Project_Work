@@ -131,7 +131,28 @@ class DetrendedAUC(_Indicator):
         signal_ = signal - baseline
         return (1. / fsamp) * Sum()(signal_)
 
+class DetrendedAbsAUC(_Indicator):
+    """
+    Computes the Area Under the Curve of the signal, treating Not a Numbers (NaNs) as zero.
+    """
+    def __init__(self, **kwargs):
+        _Indicator.__init__(self, **kwargs)
 
+    @classmethod
+    def algorithm(cls, signal, params):
+        if isinstance(signal, _Signal) and not isinstance(signal, _EvenlySignal):
+            cls.warn('Calculating Area Under the Curve of an Unevenly signal!')
+        fsamp = signal.get_sampling_freq()
+        
+        #detrend
+        t_signal = signal.get_times()
+        intercept = signal[0]
+        coeff = (signal[-1] - signal[0]) / signal.get_duration()
+        baseline = coeff*(t_signal - t_signal[0]) + intercept
+        
+        signal_ = signal - baseline
+        return (1. / fsamp) * Sum()(abs(signal_))
+    
 class RMSSD(_Indicator):
     """
     Compute the square root of the mean of the squared 1st order discrete differences.

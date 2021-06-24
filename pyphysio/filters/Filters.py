@@ -62,8 +62,6 @@ class Normalize(_Filter):
         elif method == "custom":
             return (signal - params['norm_bias']) / params['norm_range']
 
-
-
 class IIRFilter(_Filter):
     """
     Filter the input signal using an Infinite Impulse Response filter.

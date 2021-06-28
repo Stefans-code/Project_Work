@@ -748,10 +748,12 @@ class Signal(_ma.MaskedArray):
                 info_pickle['sqi'] = info_sqi
             
             elif info_key == 'good':
-                info_pickle['good'] = info['good'].pickleable
+                if hasattr(info['good'], 'pickleable'):
+                    info_pickle['good'] = info['good'].pickleable
             
             elif info_key == 'stim':
-                info_pickle['stim'] = info['stim'].pickleable
+                if hasattr(info['stim'], 'pickleable'):
+                    info_pickle['stim'] = info['stim'].pickleable
             else:
                 info_pickle[info_key] = info[info_key]
                 

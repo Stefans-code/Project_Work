@@ -53,6 +53,12 @@ class SignalQualityIndicator(_Algorithm):
         
         return(values_out, isgood)
 
+def compute_good_global(is_good, ratio):
+    #at leat ratio% timepoints should be good
+    is_good_ = is_good.copy()
+    is_good_ = _np.sum(is_good_, axis=0, keepdims=True) >= ratio*is_good_.shape[0]
+    return(is_good_)
+
 class ComputeQuality(_Algorithm):
     '''
     Automitize the computation of SQI and the decision about the overall signal quality of a signal.
@@ -85,7 +91,6 @@ class ComputeQuality(_Algorithm):
         assert segmenter is None or isinstance(segmenter, _Segmenter)
         _Algorithm.__init__(self, sqi=sqi, segmenter=segmenter,
                             compute_global=compute_global, ratio=ratio, **kwargs)
-        
     
     def __call__(self, signal):
         params = self._params
@@ -128,8 +133,7 @@ class ComputeQuality(_Algorithm):
         #---------
         #now, decide whether to get global or local indications
         if compute_global:
-            #at leat ratio% timepoints should be good
-            is_good_ = _np.sum(is_good_, axis=0, keepdims=True) >= ratio*is_good_.shape[0]
+            is_good_ = compute_good_global(is_good_, ratio)
             is_good_signal = sqi_values_[sqi_key].clone_properties(is_good_)
             signal.update_info('good', is_good_signal)
                 

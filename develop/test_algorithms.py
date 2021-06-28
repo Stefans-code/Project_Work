@@ -7,7 +7,7 @@ from test_utils import info
 # create two signals
 fsamp = 10
 
-signal = ph.Signal(np.random.uniform(size=(100,3)), fsamp)
+signal = ph.Signal(np.random.uniform(size=(100,3)), sampling_freq = fsamp)
 
 #%%
 signal_ = ph.Mean()(signal)

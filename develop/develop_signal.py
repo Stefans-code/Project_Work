@@ -17,10 +17,11 @@ def from_pickle(path):
     assert isinstance(signal, Signal)
     return signal
 
+
 class Signal(_ma.MaskedArray):
     def __new__(self, 
                 data, 
-                mask=False,
+                mask=None,
                 dtype=None,
                 copy=False, 
                 subok=True,

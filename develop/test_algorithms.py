@@ -36,7 +36,7 @@ plt.plot(signal_[:,0])
 #%%
 signal_vals = np.stack([np.sin(2*np.pi*x*np.arange(0, 10, 0.05)) for x in np.arange(10)], axis=1)
 
-signal = ph.Signal(signal_vals, 20)
+signal = ph.Signal(signal_vals, sampling_freq=20)
 
 freq, pwd = ph.PSD('fft')(signal)
 plt.plot(freq[:,0], pwd)

@@ -95,7 +95,8 @@ class Signal(_ma.MaskedArray):
     When slicing, indices of the first axis are considered idxs.
     
     """
-    def __new__(self, data, mask=None,
+    def __new__(self, values, 
+                mask=None,
                 #>>>this is required for correct pickling, dont know why
                 dtype=None,
                 copy=False, 
@@ -108,7 +109,7 @@ class Signal(_ma.MaskedArray):
                 order=None,                
                 #<<<this is required for correct pickling, dont know why
                 sampling_freq=_np.nan, 
-                start_time = 0, 
+                start_time=0, 
                 info={}, 
                 x_values = None, 
                 x_type='indices'):
@@ -116,22 +117,19 @@ class Signal(_ma.MaskedArray):
         #TODO assert max dims = 3 ?
         
         if mask is not None:
-            #TODO we should check that mask is uniform across dimensions
-            #TODO: check that shapes are compatible
+            #we assume the user knows what to do and gives a meaningful mask
+            assert x_values is None
+            new_values = values
             
-            if mask.sum() != 0: #we are defining UE using mask, x_values should be none
-                assert x_values is None, "When defining masked values, x_values should be none"
-            
-            new_data = data
-            
-        elif x_values is not None: #we are defining UE using x_values
+        if x_values is not None: #we are defining UE using x_values
             assert x_type in ['indices', 'instants'], "x_type not in ['indices', 'instants']"
         
-            assert len(x_values) == len(data), "Length mismatch (y:%d vs. x:%d)" % (len(data), len(x_values))
+            assert len(x_values) == len(values), "Length mismatch (y:%d vs. x:%d)" % (len(values), len(x_values))
             assert len(_np.where(_np.diff(x_values) <= 0)[0]) == 0, 'Given x_values are not strictly monotonic'
         
             if x_type == 'instants':
-                assert start_time<= x_values[0], 'the first instant is before the start_time'
+                if not _np.isnan(start_time):
+                    assert start_time<= x_values[0], 'the first instant is before the start_time'
             
             #we avoid initial masked values,
             #by updating the start_time and x_values
@@ -150,14 +148,14 @@ class Signal(_ma.MaskedArray):
                 idx_0 = _np.round(sampling_freq*(x_values - start_time)).astype(int)
             
             #creating output shape
-            values_shape = list(data.shape)
+            values_shape = list(values.shape)
             new_shape = values_shape
             new_shape[0] = size_0
             new_shape = tuple(new_shape)
             
             #create data of the Signal
-            new_data = _np.empty(new_shape)
-            new_data[idx_0] = data
+            new_values = _np.empty(new_shape)
+            new_values[idx_0] = values
             
             #create mask
             mask = _np.ones(new_shape)
@@ -165,34 +163,35 @@ class Signal(_ma.MaskedArray):
             mask = mask.astype(bool)
             
         else:
-            new_data = data
-            mask = _np.zeros_like(new_data).astype(bool)
+            new_values = values
+            mask = _np.zeros_like(new_values).astype(bool)
 
-        obj = _ma.MaskedArray(data=new_data, mask=mask).view(self)
+        obj = _ma.MaskedArray(data=new_values, mask=mask).view(self)
         
         obj._optinfo = {'sampling_freq': sampling_freq,
                         'start_time': start_time,
                         'info': info}
         return obj
 
-    def __array_finalize__(self, obj):
-        if obj is None: return
-        mask = _np.zeros_like(len(self)).astype(bool)
-        self._mask = getattr(obj, '_mask', mask)
-        self._hardmask = getattr(obj, '_hardmask', False)
-        self._fill_value = getattr(obj, '_fill_value', _np.nan)
+    # def __array_finalize__(self, obj):
+    #     if obj is None: return
+    #     mask = _np.zeros_like(len(self)).astype(bool)
+    #     self._mask = getattr(obj, '_mask', mask)
+    #     self._hardmask = getattr(obj, '_hardmask', False)
+    #     self._fill_value = getattr(obj, '_fill_value', _np.nan)
         
-        if hasattr(obj, '_optinfo'):
-            self._optinfo = getattr(obj, '_optinfo')
-        else:
-            _optinfo = {'sampling_freq':_np.nan,
-                        'start_time':_np.nan,
-                        'info': {}}
-            self._optinfo = _optinfo
-            # print('no _optinfo')
+    #     if hasattr(obj, '_optinfo'):
+    #         self._optinfo = getattr(obj, '_optinfo')
+    #     else:
+    #         _optinfo = {'sampling_freq':_np.nan,
+    #                     'start_time':_np.nan,
+    #                     'info': {}}
+    #         self._optinfo = _optinfo
+    #         # print('no _optinfo')
     
     def clone_properties(self, new_values, new_mask=None, x_values=None,x_type=None):
-        x_new = Signal(new_values, new_mask,
+        x_new = Signal(values=new_values, 
+                       mask=new_mask,
                        sampling_freq=self.get_sampling_freq(),
                        start_time=self.get_start_time(),
                        info=self.get_info(),
@@ -202,9 +201,9 @@ class Signal(_ma.MaskedArray):
         
     def __getitem__(self, item):
         # print(item)
-        sampling_frequency = copy.deepcopy(self.get_sampling_freq())
-        start_time = copy.deepcopy(self.get_start_time())
-        info = copy.deepcopy(self.get_info())
+        sampling_frequency = self.get_sampling_freq()
+        start_time = self.get_start_time()
+        info = self.get_info()
 
         #######################
         # process values
@@ -222,9 +221,8 @@ class Signal(_ma.MaskedArray):
         #If we are selecting an index on all axis 
         #then we are extracting only one scalar:
         #just return the scalar and avoid processing the attributes
-        #(This is also to avoid issues with IDE variable viewers)
         if isinstance(item, tuple):
-            if (len(item) == self.ndim) and _np.array([isinstance(x, int) for x in item]).all():
+            if (len(item) == self.ndim) and _np.array([isinstance(x, (int, _np.integer)) for x in item]).all():
                 # print(1)
                 return _ma.MaskedArray(data = selected_values,
                                        mask = selected_mask,
@@ -232,7 +230,7 @@ class Signal(_ma.MaskedArray):
         
         #If we are selecting on 0 axis using a list/ndarray
         #then 
-        #if selecting a continuous subset (diffs are always the same), fine
+        #if selecting a continuous subset (diffs are always the same) --> fine
         #otherwise we lose the temporal dimension
         #and we should just return the selected masked array
         if (isinstance(item_0, list)) or (isinstance(item_0, _np.ndarray)):
@@ -268,7 +266,7 @@ class Signal(_ma.MaskedArray):
         #######################
         
         #set start time and new sampling freq
-        if isinstance(item_0, int):
+        if isinstance(item_0, (int, _np.integer)):
             new_start_time = start_time + item_0/sampling_frequency
             new_sampling_freq = sampling_frequency
         elif item_0 is Ellipsis:
@@ -297,22 +295,18 @@ class Signal(_ma.MaskedArray):
         else: #slice
             print('why here?')
             print(item_0, type(item_0))
-            new_start_time = _np.nan
-            new_sampling_freq = _np.nan
+            print(asd) #-->throw error
             
         ######################
         # finalize
-        # print(selected_values.shape)
-        # print(selected_mask.shape)
-        # print(new_sampling_freq, new_start_time)
-        selected = self.__class__(selected_values, mask = selected_mask,
+        selected = self.__class__(values=selected_values, 
+                                  mask=selected_mask,
                                   sampling_freq=new_sampling_freq,
                                   start_time=new_start_time,
                                   info=info)
-        # print(type(selected))
+
         #process info
         selected = self.__getitem_attrib__(selected, item)
-        # print(type(selected))
         
         return selected
     
@@ -376,7 +370,7 @@ class Signal(_ma.MaskedArray):
     
     def get_values(self):
         indices = self.get_indices()
-        values = self.data[indices]
+        values = copy.deepcopy(self.data[indices])
         return values
     
     def get_times(self):
@@ -492,7 +486,6 @@ class Signal(_ma.MaskedArray):
         #TODO CHECK
         print('using Signal.clone(); might not work properly')
         return copy.deepcopy(self)
-        
 
     def has_multi_channels(self):
         return(self.get_nchannels()>1)
@@ -522,19 +515,19 @@ class Signal(_ma.MaskedArray):
         return True
     
     def get_sampling_freq(self):
-        return self.ph['sampling_freq']
+        return copy.deepcopy(self.ph['sampling_freq'])
 
     def set_sampling_freq(self, value):
         self.ph['sampling_freq'] = value
     
     def get_start_time(self):
-        return self.ph['start_time']
+        return copy.deepcopy(self.ph['start_time'])
 
     def set_start_time(self, value):
         self.ph['start_time'] = value    
     
     def get_info(self):
-        return self.ph['info']
+        return copy.deepcopy(self.ph['info'])
 
     def set_info(self, info):
         self.ph['info'] = info
@@ -550,7 +543,7 @@ class Signal(_ma.MaskedArray):
                 return False
         return False
     
-    def get_good(self, safe=True):
+    def get_good(self):
         assert self.has_good(), "Quality has not been computed yet"
         
         info = self.get_info()
@@ -774,23 +767,3 @@ class Signal(_ma.MaskedArray):
         return self.get_values().__repr__() + '\n'+\
             f'{self.get_sampling_freq()} Hz \n'+\
                 f'{self.get_start_time()} s \n'
-
-#%%
-# import numpy as np
-
-# signal_values = np.arange(100)
-# fsamp = 10
-# tstart = 0 
-
-# ## create an Unevenly signal defining the instants
-# x_values_time = np.arange(100)/fsamp
-# x_values_time[-1] = 12.5
-# x_values_time += 10
-
-# s_fake_time = Signal(values = signal_values, 
-#                      sampling_freq = fsamp, 
-#                      start_time = tstart,
-#                      x_values = x_values_time, 
-#                      x_type = 'instants')
-
-# s_fake_time_evenly = s_fake_time.fill(kind = 'linear')

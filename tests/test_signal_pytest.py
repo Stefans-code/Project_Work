@@ -13,7 +13,7 @@ def test_simple_signal(size, f, t):
         size = (size,)
         
     values = np.random.uniform(size=size)
-    s = ph.Signal(data=values,
+    s = ph.Signal(values=values,
                   sampling_freq=f, 
                   start_time=t)
     

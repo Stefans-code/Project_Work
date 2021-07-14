@@ -105,6 +105,10 @@ class IIRFilter(_Algorithm):
     def algorithm(self, signal):
         assert not signal.is_masked(), 'Filtering masked signal is undefined.'
         
+        if len(signal.get_values().ravel()) <= 33:
+            print('Signal too short. Returning original signal.')
+            return signal
+        
         params = self._params
         fsamp = signal.get_sampling_freq()
         fp, fs, loss, att, ftype = params["fp"], params["fs"], params["loss"], params["att"], params["ftype"]

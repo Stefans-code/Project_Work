@@ -492,7 +492,7 @@ def indicators2df(fmap_results):
                 result_key = fmap_results[key]
                 
                 if ind_sample.ndim == 3:
-                    indicator_df[key] = result_key[:, i_chan, i_comp].get_values().ravel()
+                    indicator_df[key] = result_key.get_values()[:, i_chan, i_comp].ravel()
                     indicator_df['component'] = _np.repeat(i_comp+1, len(t))
                     indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
                     

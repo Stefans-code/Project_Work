@@ -114,31 +114,36 @@ class ComputeQuality(_Algorithm):
         is_good_ = []
         for k,v in sqi_values.items():
             sqi_values_[k] = v[0]
-            is_good_.append(v[1].get_values())
+            is_good_.append(v[1])
         
         #save sqi only in signal.info
         signal.update_info('sqi', sqi_values_)  
+        
+        mask = is_good_[0].mask
         
         #COMPUTE GOOD
         #---------
         #first, to be good, all sqi should be good
         
         #stack over a new 0 axis
-        is_good_ = _np.stack(is_good_, axis=0)
+        is_good_np = _np.stack([x.get_values() for x in is_good_], axis=0)
         #is good if all sqi (on the 0 axis) are good
         #i.e. the sum is equal to the number of sqi
-        is_good_ = _np.sum(is_good_, axis=0) == is_good_.shape[0]
+        is_good_np = _np.sum(is_good_np, axis=0) == is_good_np.shape[0]
         
         sqi_key = list(sqi_values.keys())[0]
         #---------
         #now, decide whether to get global or local indications
         if compute_global:
-            is_good_ = compute_good_global(is_good_, ratio)
-            is_good_signal = sqi_values_[sqi_key].clone_properties(is_good_)
+            is_good_global = compute_good_global(is_good_np, ratio)
+            is_good_signal = sqi_values_[sqi_key].clone_properties(is_good_global)
             signal.update_info('good', is_good_signal)
                 
         else:
-            is_good_signal = sqi_values_[sqi_key].clone_properties(is_good_)
+            
+            is_good_signal = sqi_values_[sqi_key].clone_properties(is_good_np, 
+                                                                   x_values = _np.where(mask[:,0,0] == False)[0],
+                                                                   x_type = 'indices')
             signal.update_info('good', is_good_signal)
         
         

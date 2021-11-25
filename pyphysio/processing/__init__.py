@@ -1,7 +1,7 @@
 from ..signal import Signal as _Signal
 import numpy as _np
 import numpy.ma as _ma
-
+import xarray as _xr
 
 def apply_on_signals(alg, signal):
     print(alg)
@@ -57,36 +57,45 @@ class Algorithm(object):
         @return: The result.
         """
         
-        assert isinstance(data, _Signal), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
-        # print('--call--')
-        values_out = _ma.apply_along_axis(self.algorithm, 0, data)
-        if values_out.ndim == data.ndim:
-            if values_out.mask.ndim == values_out.data.ndim:
-                return data.clone_properties(values_out.data, 
-                                             values_out.mask)
-            else:
-                return data.clone_properties(values_out.data,
-                                             _np.zeros_like(values_out.data).astype(bool))
-        else:
-            if values_out.ndim == (data.ndim - 1):
-                # print('returning a scalar')
-                return values_out
-            if values_out.ndim == (data.ndim + 1):
-                # print('returning a list')
-                # print(values_out.shape)
-                # print(values_out.data.shape)
-                # print(values_out.mask.shape)
-                result = []
-                for i in range(values_out.shape[0]):
-                    if values_out.mask.ndim == values_out.data.ndim:
-                        result.append(data.clone_properties(values_out.data[i,:], 
-                                                            values_out.mask[i,:]))
-                    else:
-                        result.append(data.clone_properties(values_out.data[i,:], 
-                                                            _np.zeros_like(values_out.data[i,:]).astype(bool))) 
-                return result
-            else:
-                return values_out
+        assert isinstance(data, _xr.Dataset), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
+        
+        
+        signal_out = _xr.apply_ufunc(self.algorithm, data.signal,
+                                     keep_attrs=True,
+                                     input_core_dims=[['time']],
+                                     output_core_dims=[['time']])
+
+        signal_out = signal_out.transpose('time', ...)
+        
+        dataset_out = data.copy(data={'signal': signal_out})
+        
+        # if values_out.ndim == data.ndim:
+        #     if values_out.mask.ndim == values_out.data.ndim:
+        #         return data.clone_properties(values_out.data, 
+        #                                      values_out.mask)
+        #     else:
+        #         return data.clone_properties(values_out.data,
+        #                                      _np.zeros_like(values_out.data).astype(bool))
+        # else:
+        #     if values_out.ndim == (data.ndim - 1):
+        #         # print('returning a scalar')
+        #         return values_out
+        #     if values_out.ndim == (data.ndim + 1):
+        #         # print('returning a list')
+        #         # print(values_out.shape)
+        #         # print(values_out.data.shape)
+        #         # print(values_out.mask.shape)
+        #         result = []
+        #         for i in range(values_out.shape[0]):
+        #             if values_out.mask.ndim == values_out.data.ndim:
+        #                 result.append(data.clone_properties(values_out.data[i,:], 
+        #                                                     values_out.mask[i,:]))
+        #             else:
+        #                 result.append(data.clone_properties(values_out.data[i,:], 
+        #                                                     _np.zeros_like(values_out.data[i,:]).astype(bool))) 
+        #         return result
+        #     else:
+        return dataset_out
 
     def __repr__(self):
         return self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']
@@ -110,7 +119,7 @@ class Algorithm(object):
             return self._params[param]
 
 
-    def algorithm(cls, data):
+    def algorithm(cls, signal):
         """
         Placeholder for the subclasses
         @raise NotImplementedError: Ever

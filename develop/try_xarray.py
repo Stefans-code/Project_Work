@@ -73,6 +73,9 @@ class Signal(object):
     def __init__(self, xarray_obj):
         self.ds = xarray_obj
     
+    def __getitem__(self, item):
+        print(item)
+        
     @property
     def signal(self):
         return self.ds['signal']
@@ -220,7 +223,7 @@ class Signal(object):
 data = _np.random.uniform(size = (1000, 10,5))
 sampling_freq = 1000
 signal = create_signal(data, sampling_freq=sampling_freq)
-signal.ph.plot()
+# signal.ph.plot()
 
 #%%
 

@@ -48,20 +48,23 @@ class Normalize(_Algorithm):
         _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
 
     def algorithm(self, signal):
-        from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
+        # from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
         params = self._params
-        method = params['norm_method']
-        if method == "mean":
-            return signal - _Mean()(signal)
-        elif method == "standard":
-            return (signal - _Mean()(signal)) / _StDev()(signal)
-        elif method == "min":
-            return signal - _Min(signal)
-        elif method == "maxmin":
-            return (signal - _Min(signal)) / (_Max(signal) - _Min(signal))
-        elif method == "custom":
-            result = (signal - params['norm_bias']) / params['norm_range']
-            return result
+        # method = params['norm_method']
+        # if method == "mean":
+        #     return signal - _Mean()(signal)
+        # elif method == "standard":
+        #     return (signal - _Mean()(signal)) / _StDev()(signal)
+        # elif method == "min":
+        #     return signal - _Min(signal)
+        # elif method == "maxmin":
+        #     return (signal - _Min(signal)) / (_Max(signal) - _Min(signal))
+        # elif method == "custom":
+        #     result = (signal - params['norm_bias']) / params['norm_range']
+        #     return result
+        print(type(signal))
+        print(signal.shape)
+        return (signal - _np.mean(signal)) / _np.std(signal)
 
 class IIRFilter(_Algorithm):
     """

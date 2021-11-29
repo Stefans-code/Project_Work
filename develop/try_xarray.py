@@ -12,7 +12,7 @@ import xarray as _xr
 
 #%% SIGNAL
 def create_signal(data, times=None, sampling_freq=None,
-                  start_time=0, info={}):
+                  start_time=0, name='signal', info={}):
     
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
     
@@ -36,38 +36,49 @@ def create_signal(data, times=None, sampling_freq=None,
     #start_time is times[0]
     start_time = times[0]
         
-    #check dims
+    #check dims and set coordinates
     dims_template = ('time', 'channel', 'component')
     assert data.ndim <= 3
     dims = dims_template[:data.ndim]
+    
+    coords = {'time':times}
+    
+    for i_dim, name_dim in enumerate(dims[1:]):
+        coords[dims_template[i_dim+1]] = _np.arange(data.shape[i_dim+1])
+        
     
     info['sampling_freq'] = sampling_freq
     info['start_time'] = start_time
     
     signal = _xr.DataArray(data, dims = dims,
-                           coords = {'time': times}, 
+                           coords = coords, 
                            attrs = info,
-                           name = 'signal')
-    
-    return(signal.to_dataset())
-        
-@_xr.register_dataset_accessor('p')
+                           name = name)
+    return signal
+
+#%%
+import matplotlib.pyplot as plt
+data = _np.random.uniform(size = (10000, 5, 2))
+sampling_freq = 1000
+data = create_signal(data, sampling_freq=sampling_freq, name = 'random')
+   
+#%%     
+@_xr.register_dataarray_accessor('p')
 class Signal(object):
-    def __init__(self, xarray_obj):
-        self.ds = xarray_obj
+    def __init__(self, xdataarray):
+        self.da = xdataarray
     
-    def __getitem__(self, item):
-        print(item)
-        
-    @property
-    def signal(self):
-        return self.ds['signal']
+    def clone(self, values, name='signal'):
+        assert values.shape[0] == self.da.values.shape[0]
+        signal_clone = create_signal(values, times = self.da.coords['time'].values,
+                                     name = name, info=self.da.attrs)
+        return(signal_clone)
     
     def get_values(self):
-        return self.signal.values
+        return self.da.values
 
     def get_times(self):
-        time = self.signal.coords['time'].values
+        time = self.da.coords['time'].values
         time = time/_np.timedelta64(1, 's')
         return time
     
@@ -90,20 +101,10 @@ class Signal(object):
         t_start_timedelta = _pd.to_timedelta(t_start, 's')
         t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
         
-        sub_dataset = self.ds.sel(time = slice(t_start_timedelta,
+        sub_dataset = self.da.sel(time = slice(t_start_timedelta,
                                                t_stop_timedelta))
         return sub_dataset
     
-    def clone(self, values, name):
-        assert values.shape[0] == self.signal.shape[0]
-        
-        times = self.signal.coords['time'].values
-        new_signal = create_signal(values, times)
-        new_signal = new_signal.rename({'signal': name})
-        
-        new = self.ds.merge(new_signal)
-        return(new)
-
     def get_start_time(self):
         times= self.get_times()
         return(times[0])
@@ -113,31 +114,31 @@ class Signal(object):
         return(times[-1])
 
     def get_sampling_freq(self):
-        return self.signal.attrs['sampling_freq']
+        return self.da.attrs['sampling_freq']
     
     def get_duration(self):
         return self.get_end_time() - self.get_start_time()
 
     def has_multi_channels(self):
-        return(len(self.ds.dims)>1)
+        return(len(self.da.dims)>1)
     
     def get_nchannels(self):
         if self.has_multi_channels():
-            return(self.ds.dims['channel'])
+            return(int(_np.max(self.da.coords['channel'])+1))
         else:
             return(1)
     
     def has_multi_components(self):
-        return(len(self.ds.dims)>2)
+        return(len(self.da.dims)>2)
     
     def get_ncomponents(self):
         if self.has_multi_components():
-            return(self.ds.dims['component'])
+            return(int(_np.max(self.da.coords['component'])+1))
         else:
             return(1)
     
     def get_info(self):
-        return self.ds.attr
+        return self.da.attr
 
     def plot(self, marker=None, ncols=4, sharey=True):
         fig = _gcf()
@@ -145,7 +146,7 @@ class Signal(object):
         v_ = self.get_values()
         linestyle='solid'
         #if single signal, then plot
-        if len(self.ds.dims) == 1:
+        if len(self.da.dims) == 1:
             
             #TODO if existing figure has many axes, 
             #replicate the plot on each axis
@@ -213,21 +214,20 @@ class Signal(object):
             _tight_layout()
             _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
 
+print(data.p.get_sampling_freq())
+# data.p.plot()
+
 #%% ALGORITHMS
 class Algorithm(object):
 
     def __init__(self, **kwargs):
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
+        self.name = ''
 
-    def __call__(self, data):
-        assert isinstance(data, _xr.Dataset)
-
-        #should only be applied on the main signal
-        #convert main signal to dataset
-        signal = data.signal.to_dataset()        
-        
-        print(signal.p.get_start_time())
+    def __call__(self, signal):
+        assert isinstance(signal, _xr.DataArray)
+        sig_name = signal.name
         dimensions = list(signal.dims)
 
         if len(dimensions)>1:
@@ -240,34 +240,37 @@ class Algorithm(object):
         
         #create a roller over new dimension (
         #so to process one component at a time)
-        rr = signal_stacked.signal.rolling(new=1)
+        rr = signal_stacked.rolling(new=1)
 
         results = []
         for label, arr_window in rr:
             #apply to each component
             res_sig = self.algorithm(arr_window)
             
-            if res_sig.shape[-1] == 1:
-                tstart = arr_window.coords['time'].values[0]
-                res_sig = res_sig.assign_coords(time=[tstart])
-                
+            #if we lose temporal consistency
+            #(this is expected when we extract indicators)
+            #save info about start and stop of the original signal
+            if res_sig.shape[-1] != signal.shape[0]: 
+                t_start = arr_window.coords['time'].values[0]
+                t_end = arr_window.coords['time'].values[-1]
+                res_sig = res_sig.assign_coords(time=[t_start])
+                res_sig = res_sig.assign_coords(t_start=('time', [t_start]))
+                res_sig = res_sig.assign_coords(t_end=('time', [t_end]))
+            
             results.append(res_sig)
    
         #recompose
         signal_out = _xr.merge(results)
         signal_out = signal_out.transpose('time', ...)
-        
+
         if len(dimensions)>1:
             signal_out = signal_out.unstack()
         else:
             signal_out = signal_out.squeeze('new')
         
-        #"clone" old dataset with new signal values
-        data_out = data.copy(deep=True)
-        data_out['signal'] = signal_out.signal
         
-        data_out = data_out.dropna(dim='time')
-        return(data_out)
+        signal_out = signal_out.to_array(name=sig_name+'_'+self.name).squeeze('variable')
+        return(signal_out)
 
     def __repr__(self):
         return self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']
@@ -290,7 +293,6 @@ class Algorithm(object):
         else:
             return self._params[param]
 
-
     def algorithm(cls, signal):
         """
         Placeholder for the subclasses
@@ -303,53 +305,73 @@ class Algorithm(object):
 class Normalize(Algorithm):
     def __init__(self, **kwargs):
         Algorithm.__init__(self, **kwargs)
+        self.name = 'Normalize'
 
     def algorithm(self, signal):
-        print('Normalize.algorithm >>>')
-        print(type(signal))
-        print(signal.shape)
-        print(signal)
-        print('Normalize.algorithm <<<')
+        # print('Normalize.algorithm >>>')
+        # print(type(signal))
+        # print(signal.shape)
+        # print(signal)
+        # print('Normalize.algorithm <<<')
         return (signal - _np.mean(signal) +_np.random.uniform(0, 10)) / _np.std(signal)
-
-class RandomMean(Algorithm):
-    def __init__(self, **kwargs):
-        Algorithm.__init__(self, **kwargs)
-
-    def algorithm(self, signal):
-        return signal + _np.random.uniform(0,5)
     
 class Mean(Algorithm):
     def __init__(self, **kwargs):
         Algorithm.__init__(self, **kwargs)
+        self.name = 'Mean'
 
     def algorithm(self, signal):
-        print('Mean.algorithm >>>')
-        print(type(signal))
-        print(signal.shape)
-        print(signal)
+        # print('Mean.algorithm >>>')
+        # print(type(signal))
+        # print(signal.shape)
+        # print(signal)
         mean = _np.mean(signal, keepdims=True)
         
-        print(type(mean))
-        print(mean)
-        print('Mean.algorithm <<<')
+        # print(type(mean))
+        # print(mean)
+        # print('Mean.algorithm <<<')
         
         return mean
 
-class Test(Algorithm):
+class Min(Algorithm):
     def __init__(self, **kwargs):
         Algorithm.__init__(self, **kwargs)
+        self.name = 'Min'
 
     def algorithm(self, signal):
-        print('Test.algorithm >>>')
-        print(type(signal))
-        return signal
+        # print('Mean.algorithm >>>')
+        # print(type(signal))
+        # print(signal.shape)
+        # print(signal)
+        mean = _np.min(signal, keepdims=True)
+        
+        # print(type(mean))
+        # print(mean)
+        # print('Mean.algorithm <<<')
+        
+        return mean
+    
+# class Test(Algorithm):
+#     def __init__(self, **kwargs):
+#         Algorithm.__init__(self, **kwargs)
 
-def test(data):
-    print(data.p.get_start_time())
+#     def algorithm(self, signal):
+#         print('Test.algorithm >>>')
+#         print(type(signal))
+#         return signal
+
+#%%
+rr = Normalize()(data)
+
+plt.plot(data.values[:, 0, 0])
+plt.plot(data.values[:, 0, 1])
+
+plt.plot(rr.values[:, 0, 0])
+plt.plot(rr.values[:, 0, 1])
+
+result = Mean()(rr)
 
 #%% SEGMENTERS
-
 class Segment(object):
     """
     Base Segment, a time begin-end pair with a reference to the base signal and a name.
@@ -375,9 +397,7 @@ class Segment(object):
         return self._label
 
     def __call__(self, data=None):
-        print('Segment.__call__')
-        print(type(data))
-        return data.segment_time(self.get_begin_time(), self.get_end_time())
+        return data.p.segment_time(self.get_begin_time(), self.get_end_time())
 
 class SegmentationIterator(object):
     """
@@ -414,7 +434,6 @@ class Segmenter(object):
             # break    ==> keep
             # continue ==> drop
             b, e, label = self._next_segment()
-            
             #accoriding to segmentation method and params
             #b is None if the segment shold be discarded
             if b is None: 
@@ -428,8 +447,6 @@ class Segmenter(object):
         assert self.reference is not None
         #manage drop_cut
         
-        print('Segmenter_manage_drops')
-        print(type(self.reference))
         
         if e >= self.reference.p.get_end_time():
             if self._params['drop_cut']:
@@ -437,9 +454,9 @@ class Segmenter(object):
         
         #manage labels, drop_mixed
         if self.timeline is not None:
-            print(type(self.timeline))            
-            timeline_segment = self.timeline.p.segment_time(b, e).p.get_values()
             
+            timeline_segment = self.timeline.p.segment_time(b, e).p.get_values()
+
             if (timeline_segment == timeline_segment[0]).all():
                 #timeline values are the same within the segment
                 label = _np.array(timeline_segment[0]).ravel()
@@ -507,174 +524,59 @@ class FixedSegments(Segmenter):
         if self._t is None:
             self._t = self.reference.p.get_start_time()
         b = self._t
+        
         self._t += self._step
         e = b + self._width
         
         if b >= self.reference.p.get_end_time():
             raise StopIteration()
-
+        
         return self.manage_drops(b, e)
-    
-#%%
-import matplotlib.pyplot as plt
-data = _np.random.uniform(size = 10000)
-sampling_freq = 1000
-data = create_signal(data, sampling_freq=sampling_freq)
 
+def fmap(segmenter, algorithms, signal):
+   
+    if segmenter.reference is None:
+        segmenter(signal)
+    
+    result = []
+    
+    #for all algorithms
+    for alg in algorithms:
+        
+        result_algorithm = []
+        for i_seg, seg in enumerate(segmenter): #this generates segments from the segmenter
+            print(i_seg)
+            # result_segment = {'begin': seg.get_begin_time(),
+            #                   'end': seg.get_end_time(),
+            #                   'label': seg.get_label()}
+            
+            
+            #when called on a signal, a segment returns a portion of the signal
+            signal_segment = seg(signal)
+            
+            res = alg(signal_segment)
+
+            res.assign_coords(label=seg.get_label()[0])
+            
+            result_algorithm.append(res)
+        
+        result.append(_xr.concat(result_algorithm, dim='time'))
+
+    result = _xr.merge(result)
+    return result
+
+#%%
 x = _np.zeros(10000)
 x[2500:3000] = 1 
 x[5000:8000] = 2
 
 stim = data.p.clone(x, 'stimulus')
 
-segmenter = FixedSegments(0.5, 2, timeline=stim)
-# s = next(iter(segmenter.next_segment()))
+segmenter = FixedSegments(0.5, 2, timeline=stim, drop_mixed=False)
+
+result = fmap(segmenter, [Mean(), Min()], data)
 
 #%%
-signal = data
-
-segmenter(signal)
-        
-result_algorithm = {}
-for i_seg, seg in enumerate(segmenter): #this generates segments from the segmenter
-    print(i_seg)
-    result_segment = {'begin': seg.get_begin_time(),
-                      'end': seg.get_end_time(),
-                      'label': seg.get_label()}
-    
-    #when called on a signal, a segment returns a portion of the signal
-    signal_segment = seg(signal)
-    
-    result_segment['result'] = alg(signal_segment)
-    result_algorithm[i_seg] = result_segment
-
-#%%
-        #the following is to prepare labels and t
-        #that might be used later
-        #(to avoid messy code)
-        labels = []
-        values = []
-        t = []
-        for k,v in result_algorithm.items():
-            labels.append(v['label'])
-            values.append(v['result'])
-            t_ = v['begin'] + (v['end'] - v['begin']) / 2
-            t.append(t_)
-        
-        labels = _np.array(labels)
-        t = _np.array(t)
-        
-        #if no segments were processed
-        if len(labels) == 0: 
-            result[alg.__repr__()] = result_algorithm
-        
-        #if the algorithm returns a Signal
-        elif isinstance(values[0], _Signal):
-            result[alg.__repr__()] = result_algorithm
-        
-        #if the algorithm returns a numpy array
-        #we create Signals
-        elif isinstance(values[0], _np.ndarray):
-            
-            values = _np.stack(values, axis=0)
-            #BE CAREFUL HERE ABOUT THE NUMBER OF DIMS OF THE OUTPUT ARRAY
-            
-            if isinstance(segmenter, FixedSegments):
-                #since we used a FixedSegments, we can create an EvenlySignal
-                fsamp = 1/segmenter._step
-                
-                info = {'label': _Signal(labels, sampling_freq=fsamp, start_time=t[0]),
-                        'name': alg.__repr__()}
-                
-                info.update(signal.get_info())
-                
-                result[alg.__repr__()] = _Signal(values, sampling_freq=fsamp, 
-                                                 start_time=t[0], info=info)
-                
-            else:
-                fsamp = signal.get_sampling_freq()
-                info = {'label': _Signal(labels, sampling_freq=fsamp, start_time=t[0],
-                                         x_values = t, x_type='instants'),
-                        'name': alg.__repr__()}
-                
-                info.update(signal.get_info())
-                
-                result[alg.__repr__()] = _Signal(values, sampling_freq=fsamp, 
-                                                 start_time=t[0], info=info,
-                                                 x_values = t, x_type='instants')
-        
-        #if list or tuple of ndarrays
-        #(it is a special case we can try to manage)
-        #we create a list of Signals
-        elif (isinstance(values[0], list) or isinstance(values[0], tuple)) and \
-            sum([isinstance(x, _np.ndarray) for x in values[0]]) ==  len(values[0]):
-            # print(5)
-            number_signals = len(values[0])
-            signals_out = []
-            for i_signal in range(number_signals):
-                values_signal = []
-                for v in values:
-                    values_signal.append(v[i_signal])
-                values_signal = _np.stack(values_signal, axis=0)
-                
-                if isinstance(segmenter, FixedSegments):
-                    # print(6)
-                    #since we used a FixedSegments, we can create an EvenlySignal
-                    fsamp = 1/segmenter._step
-                    
-                    info = {'label': _Signal(labels, sampling_freq=fsamp, 
-                                             start_time=t[0]),
-                            'name': alg.__repr__()}
-                    
-                    info.update(signal.get_info())
-                    
-                    signals_out.append(_Signal(values_signal, sampling_freq=fsamp, 
-                                               start_time=t[0], info=info))
-                    
-                else:
-                    # print(7)
-                    fsamp = signal.get_sampling_freq()
-                    info = {'label': _Signal(labels, sampling_freq=fsamp, 
-                                             start_time= t[0],
-                                             x_values = t, x_type='instants'),
-                            'name': alg.__repr__()}
-                    
-                    info.update(signal.get_info())
-                    
-                    signals_out.append(_Signal(values_signal, sampling_freq=fsamp, 
-                                               start_time=t[0], info=info,
-                                               x_values = t, x_type='instants'))
-        
-            result[alg.__repr__()] = signals_out
-        
-        #all other cases
-        #just return the original dictionary
-        else:
-            # print(8)
-            result[alg.__repr__()] = result_algorithm
-            
-    return result
-#%%
-
-result = Test()(data)
-
-#%%
-result = Normalize()(data)
-
-plt.plot(data.signal.values[:, 0, 0])
-plt.plot(data.signal.values[:, 0, 1])
-
-plt.plot(result.signal.values[:, 0, 0])
-plt.plot(result.signal.values[:, 0, 1])
-
-#%%
-result = Mean()(data)
-
-
-
-#%%
-
-
 def get_portions(x):
     idx_changes = _np.where(_np.diff(x) != 0)[0]
     portions = _np.zeros(len(x))
@@ -684,7 +586,6 @@ def get_portions(x):
         idx_start_portion = idx_end_portion
     portions[idx_start_portion:] = portions[idx_start_portion-1]+1
     return(portions)
-
 
 portions = get_portions(x)
 

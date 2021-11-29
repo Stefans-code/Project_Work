@@ -2,32 +2,13 @@
 import numpy as _np
 import pandas as _pd
 import numpy.ma as _ma
-import xarray as xr
 
 # from scipy import interpolate as _interp
 from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _subplots,\
      tight_layout as _tight_layout, subplots_adjust as _subplots_adjust,\
          xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
 
-# from numbers import Number as _Number
-# import copy
-
-# def from_pickleable(pickle):
-#     """
-#     Builds a Signal using the pickleable tuple version of it.
-#     :param pickle: Tuple of the form (Signal, ph dict).
-#     :return: Signal
-#     """
-#     pass
-
-
-# def from_pickle(path):
-#     """
-#     Loads a Signal from a pickle file given the path.
-#     :param path: File system path to the pickle file.
-#     :return: A Signal.
-#     """
-#     pass
+import xarray as _xr
 
 def create_signal(data, times=None, sampling_freq=None,
                   start_time=0, info={}):
@@ -54,21 +35,21 @@ def create_signal(data, times=None, sampling_freq=None,
     start_time = times[0]
         
     #check dims
-    dims_template = ('time', 'channels', 'components', 'dim4', 'dim5')
-    assert data.ndim <= 5
+    dims_template = ('time', 'channel', 'component')
+    assert data.ndim <= 3
     dims = dims_template[:data.ndim]
     
     info['sampling_freq'] = sampling_freq
     info['start_time'] = start_time
     
-    signal = xr.DataArray(data, dims = dims,
-                          coords = {'time': times}, 
-                          attrs = info,
-                          name = 'signal')
+    signal = _xr.DataArray(data, dims = dims,
+                           coords = {'time': times}, 
+                           attrs = info,
+                           name = 'signal')
     
     return(signal.to_dataset())
 
-@xr.register_dataset_accessor('ph')
+@_xr.register_dataset_accessor('p')
 class Signal(object):
     def __init__(self, xarray_obj):
         self.ds = xarray_obj
@@ -130,7 +111,7 @@ class Signal(object):
     
     def get_nchannels(self):
         if self.has_multi_channels():
-            return(self.ds.dims['channels'])
+            return(self.ds.dims['channel'])
         else:
             return(1)
     
@@ -139,7 +120,7 @@ class Signal(object):
     
     def get_ncomponents(self):
         if self.has_multi_components():
-            return(self.ds.dims['components'])
+            return(self.ds.dims['component'])
         else:
             return(1)
     
@@ -220,81 +201,100 @@ class Signal(object):
             _tight_layout()
             _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
         
-data = _np.random.uniform(size = (1000, 10,5))
-sampling_freq = 1000
-signal = create_signal(data, sampling_freq=sampling_freq)
-# signal.ph.plot()
+#%%
+class Algorithm(object):
+
+    def __init__(self, **kwargs):
+        self._params = {}
+        self.set_params(**kwargs)  # already checked by __init__
+
+    def __call__(self, data):
+        assert isinstance(data, _xr.Dataset)
+        
+        #should only be applied on the main signal
+        #convert main signal to dataset
+        signal = data.signal.to_dataset()        
+        
+        #stack dimensions other than time
+        dimensions = list(signal.dims)
+        if len(dimensions)>1:
+            signal_stacked = signal.stack(new=dimensions[1:]).transpose('new', ...)
+        else:
+            signal_stacked = signal.expand_dims('new', axis=0)
+
+        signal_out = signal_stacked.map(self.algorithm)
+        signal_out = signal_out.transpose('time', ...)
+        
+        if len(dimensions)>1:
+            signal_out = signal_out.unstack()
+        else:
+            signal_out = signal_out.squeeze('new')
+
+        dataset_out = data.copy(data={'signal': signal_out.signal})
+        
+        return dataset_out
+
+    def __repr__(self):
+        return self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']
+
+    def set_params(self, **kwargs):
+        self._params.update(kwargs)
+
+    def set(self, **kwargs):
+        kk = self.get()
+        kk.update(kwargs)
+        self.__init__(**kk)
+
+    def get(self, param=None):
+        """
+        Placeholder for the subclasses
+        @return
+        """
+        if param is None:
+            return self._params
+        else:
+            return self._params[param]
+
+
+    def algorithm(cls, signal):
+        """
+        Placeholder for the subclasses
+        @raise NotImplementedError: Ever
+        :param params:
+        :param data:
+        """
+        pass
+
+class Normalize(Algorithm):
+    def __init__(self, **kwargs):
+        Algorithm.__init__(self, **kwargs)
+
+    def algorithm(self, signal):
+        print(type(signal))
+        print(signal.attrs)
+        print(signal.shape)
+        return (signal - _np.mean(signal)) / _np.std(signal)
 
 #%%
 
-'''        
-    def has_good(self, good_global=True):
-        if 'good' in self.ph['info'].keys():
-            if not good_global:
-                return True
-            else:
-                good = self.ph['info']['good']
-                if good.shape[0] == 1:
-                    return True
-                return False
-        return False
-    
-    def get_good(self):
-        assert self.has_good(), "Quality has not been computed yet"
-        
-        info = self.get_info()
-        is_good = info['good']
-        # assert is_good.shape[0] == 1, "Quality has not been computed globally. Please compute global quality first"
-        
-        if is_good.ndim == 1:
-            return(_np.array(_np.where(is_good))[0])
-        else:
-            return(_np.array(_np.where(is_good)[1:]))
-    
+#%%    
+import matplotlib.pyplot as plt
+data = _np.random.uniform(size = 1000)
+sampling_freq = 1000
+data = create_signal(data, sampling_freq=sampling_freq)
+# signal.ph.plot()
+
+result = Normalize()(data)
+
+plt.plot(data.signal.values[:])
+plt.plot(result.signal.values[:])
+
+stim = _np.zeros(1000)
+stim[250:300] = 1 
+stim[500:800] = 2
 
 
-    @property
-    def pickleable(self):
-        """
-        Returns a pickleable tuple of this Signal.
-        :return: Tuple (Signal, ph dict).
-        """
-        info = self.get_info()
-        
-        
-        info_pickle = {}
-        for info_key in info.keys():
-            if info_key == 'sqi':
-                info_sqi = {}
-                for k in info['sqi'].keys():
-                    info_sqi[k] = info['sqi'][k].pickleable
-                info_pickle['sqi'] = info_sqi
-            
-            elif info_key == 'good':
-                if hasattr(info['good'], 'pickleable'):
-                    info_pickle['good'] = info['good'].pickleable
-            
-            elif info_key == 'stim':
-                if hasattr(info['stim'], 'pickleable'):
-                    info_pickle['stim'] = info['stim'].pickleable
-            else:
-                info_pickle[info_key] = info[info_key]
-                
-        return self, self._optinfo, info_pickle
+#%%
+data.assign_coords(stim = ('time', stim))
 
-    def to_pickle(self, path):
-        """
-        Saves this Signal into a pickle file.
-        :param path: File system path to the file to write (create/overwrite).
-        """
-        from gzip import open
-        from pickle import dump
-        f = open(path, "wb")
-        dump(self.pickleable, f, protocol=2)
-        f.close()
-       
-    def __repr__(self):
-        return self.get_values().__repr__() + '\n'+\
-            f'{self.get_sampling_freq()} Hz \n'+\
-                f'{self.get_start_time()} s \n'
-'''
+data.rolling(stim)

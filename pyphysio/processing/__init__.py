@@ -1,102 +1,199 @@
-from ..signal import Signal as _Signal
-import numpy as _np
-import numpy.ma as _ma
 import xarray as _xr
+import numpy as _np
+from ..signal import create_signal
 
-def apply_on_signals(alg, signal):
-    print(alg)
-    print(type(signal))
+#enable dask?
+try:
+    import dask
+    scheduler = 'threads'
+    # available schedulers:
+    # #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
+except:
+    scheduler = 'single-thread'
     
-    signal_out = []
-    
-    for i_component in range(signal.get_ncomponents()):
-        component_out = []
-        
-        for i_channel in range(signal.get_nchannels()):
-            channel_data = signal[:, i_channel, i_component]
-            print(channel_data.shape)
-            channel_out = alg(channel_data)
-            if channel_out.ndim == 0:
-                print('dims 0')
-                #result is a scalar
-                channel_out = _np.array([channel_out]).reshape(1,1,1)
-            print(channel_out.shape)
-            component_out.append(channel_out)
-        
-        component_out = _np.concatenate(component_out, axis = 1)
-        print(component_out.shape)
-        signal_out.append(component_out)
-    
-    signal_out = _np.concatenate(signal_out, axis = 2)
-    # print(signal_out.shape)
-    return(signal_out)
-            
 class Algorithm(object):
-    """
-    This is the algorithm container super class. It should be used only to be extended.
-    """
-
     def __init__(self, **kwargs):
-        """
-        Incorporates the parameters and saves them in the instance.
-        @param params: Dictionary of string-value parameters passed by the user.
-        @type params: dict
-        @param _kwargs: Internal channel for subclasses kwargs parameters.
-        @type _kwargs: dict
-        @param kwargs: kwargs parameters to pass to the feature extractor.
-        @type kwargs: dict
-        """
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
+        
+        #if not specified algorithms operate on 1d signals
+        #and return a signal with the same size
+        self.dimensions = {}#'time': 0}
+    
+    @property
+    def name(self):
+        return(self.__class__.__name__)
+        
+    def __mapper_func__(self, signal_in):
+        # print('-----> Algorithm.__mapper_func__')
+        result_numpy = self.algorithm(signal_in)
+        result_out = self.__finalize__(result_numpy, signal_in)
+        # print('<----- Algorithm.__mapper_func__')
+        return(result_out)
 
-    def __call__(self, data):
-        """
-        Executes the algorithm using the parameters saved by the constructor.
-        @param data: The data.
-        @type data: TimeSeries
-        @return: The result.
-        """
+    def __call__(self, signal_in, add_signal=True, dimensions=None):
+        # print('----->', self.name, '__call__')
+        #This function iteratively calls the self.algorithm on each signal
+        #(i.e. channel+component)
+        # print('-----> Algorithm.__call__')
         
-        assert isinstance(data, _xr.Dataset), "The data must be a Signal (see class EvenlySignal and UnevenlySignal)."
+        #The user will mainly call Algorithms on a Dataset
+        #but the __call__ rolling mechanism assumes to operate on DataArray
+        if isinstance(signal_in, _xr.Dataset):
+            signal = signal_in.p.main_signal.copy(deep=True)
+        else:
+            # print(type(signal_in))
+            # print(signal_in.shape)
         
+            signal = signal_in.copy(deep=True)
         
-        signal_out = _xr.apply_ufunc(self.algorithm, data.signal,
-                                     keep_attrs=True,
-                                     input_core_dims=[['time']],
-                                     output_core_dims=[['time']])
+        signal_name = signal.name
+        #from here, signal is a DataArray
+        
+        #rely on algorithm self.dimensions to know how to proceed
+        if dimensions is None: 
+            dimensions = self.dimensions
 
-        signal_out = signal_out.transpose('time', ...)
+        if dimensions == 'none': 
+            #process all information at once
+            #used to avoid chunks in internal calls
+            signal_out = self.__mapper_func__(signal)
+            
+        else:
+            #use mapper
+            if dimensions == 'special':
+                #special algorithms that return DataArrays with non conventional
+                #dimensions (e.g. frequencies)
+                
+                #get chunk_dict and template from the algorithm's class
+                chunk_dict, template = self.__get_template__(signal)
+                
+            else:#typical usage
+                #will include all dimensions except for those
+                #along which the algorithm is applied
+                
+                chunk_dict = {}
+                template_shape = []
+                for dim in ('time', 'channel', 'component'):
+                    out_dim = signal.sizes[dim]
+                    
+                    if dim not in dimensions.keys():
+                        #the dimension is not used
+                        chunk_dict[dim] = 1
+                    else:
+                        if dimensions[dim] != 0:
+                            out_dim = dimensions[dim]
+                   
+                    template_shape.append(out_dim)
+                
+                #create template
+                output = _np.zeros(template_shape)
+                template = create_signal(output, 
+                                         times=signal.coords['time'].values[:output.shape[0]],
+                                         name='random')
+                template = template.p.main_signal
+                template.name = signal_name
+                
+            template_dask = template.chunk(chunk_dict)
+            signal_dask = signal.chunk(chunk_dict)
+    
+            mapper =  _xr.map_blocks(self.__mapper_func__, 
+                                      signal_dask, 
+                                      template = template_dask)
+            #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
+            signal_out = mapper.load(scheduler='distributed') #distributed, single-threaded
+
         
-        dataset_out = data.copy(data={'signal': signal_out})
+        #The user will mainly call Algorithms on a Dataset
+        #so it will expect a Dataset as result
+        if isinstance(signal_in, _xr.Dataset):
+            #add windowing info
+            for dim in signal_out.dims:
+                if signal_out.sizes[dim] == 1 and signal_in.sizes[dim] != 1:
+                    #there has been a windowing operation
+                    coord_start = signal_in.coords[dim].values[0]
+                    coord_stop = signal_in.coords[dim].values[-1]
+                        
+                    signal_out = signal_out.assign_coords({f'{dim}_start': (dim, [coord_start])})
+                    signal_out = signal_out.assign_coords({f'{dim}_stop': (dim, [coord_stop])})
+            #transform to Dataset
+            signal_ds_out = signal_in.copy(deep=True)
+            
+            signal_name = signal.name
+            output_name = f'{signal_name}_{self.name}'
+            signal_ds_out = signal_ds_out.assign({output_name:signal_out})
+            signal_ds_out.attrs['MAIN'] = output_name
+            
+            if add_signal:
+                signal_ds_out.attrs['history'].append(self.name)
+            else:
+                signal_ds_out = signal_ds_out.drop(signal_name)
+                signal_ds_out.attrs['history'] = [output_name]
+            
+            # print('<-----', self.name, '__call__ [Dataset]')
+            return(signal_ds_out)
         
-        # if values_out.ndim == data.ndim:
-        #     if values_out.mask.ndim == values_out.data.ndim:
-        #         return data.clone_properties(values_out.data, 
-        #                                      values_out.mask)
-        #     else:
-        #         return data.clone_properties(values_out.data,
-        #                                      _np.zeros_like(values_out.data).astype(bool))
-        # else:
-        #     if values_out.ndim == (data.ndim - 1):
-        #         # print('returning a scalar')
-        #         return values_out
-        #     if values_out.ndim == (data.ndim + 1):
-        #         # print('returning a list')
-        #         # print(values_out.shape)
-        #         # print(values_out.data.shape)
-        #         # print(values_out.mask.shape)
-        #         result = []
-        #         for i in range(values_out.shape[0]):
-        #             if values_out.mask.ndim == values_out.data.ndim:
-        #                 result.append(data.clone_properties(values_out.data[i,:], 
-        #                                                     values_out.mask[i,:]))
+        # print('<-----', self.name, '__call__')
+        return(signal_out)        
+        
+    def __finalize__(self, result, signal_in, dimensions='none'):
+        '''
+        General function to obtain a coherent output 
+        from the calls to self.algorithm.
+        The output should be a dataaarry or dataset
+        '''
+        
+        #dimensions should be either 'none'
+        #or the dimensions dict used to call the algorithm
+        
+        # print('-----> Algorithm.__finalize__')
+        # if dimensions != 'none':
+
+        #     expected_shape = []
+        #     for dim in ('time', 'channel', 'component'):
+        #         in_dim = signal_in.sizes[dim]
+                
+        #         if dim not in dimensions.keys():
+        #             #the algorithm is not applies along the dimension
+        #             # so expect the same shape in output
+        #             expected_shape.append(in_dim)
+        #         else:
+        #             #the shape can be changed
+        #             if dimensions[dim] == 0:
+        #                 #shape is not altered
+        #                 expected_shape.append(in_dim)
         #             else:
-        #                 result.append(data.clone_properties(values_out.data[i,:], 
-        #                                                     _np.zeros_like(values_out.data[i,:]).astype(bool))) 
-        #         return result
-        #     else:
-        return dataset_out
+        #                 expected_shape.append(dimensions[dim]) #typically 1
+            
+        #     result_shape = numpy_out.shape
+        print(result.shape)
+        print(type(signal_in))
+        if result.ndim == 1:
+            result = _np.expand_dims(result, [1,2])
 
+        signal_out = _xr.DataArray(result, 
+                                   dims=('time', 'channel', 'component'), 
+                                   name=signal_in.name)
+        
+        for dim in ('time', 'channel', 'component'):
+            
+            if signal_in.sizes[dim] == signal_out.sizes[dim]:
+                #same size --> same coords
+                signal_out = signal_out.assign_coords({dim:signal_in.coords[dim].values})
+                
+            elif signal_out.sizes[dim] == 1: 
+                #indicators or windowed algorithms
+                coord_start = signal_in.coords[dim].values[0]
+                signal_out = signal_out.assign_coords({dim:[coord_start]})
+                
+            else:
+                #we do not know how to assign coordinates to this dimension
+                pass
+                    
+        signal_out.attrs = signal_in.attrs.copy()
+        # print('<----- Algorithm.__finalize__')       
+        return(signal_out)
+    
     def __repr__(self):
         return self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']
 
@@ -117,7 +214,6 @@ class Algorithm(object):
             return self._params
         else:
             return self._params[param]
-
 
     def algorithm(cls, signal):
         """

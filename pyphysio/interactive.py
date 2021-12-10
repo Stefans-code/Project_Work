@@ -4,8 +4,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as _np
-from .indicators.timedomain import Min, Max
-from .signal import Signal as _Signal
+from . import create_signal
 
 class _MouseSelectionFilter(object):
     def __init__(self, onselect):
@@ -73,10 +72,10 @@ class Annotate(object):
         self.min -= self.margin
 
         
-        self.peaks_t = self.ibi.get_times()
-        self.peaks_v = self.ibi.get_values()
+        self.peaks_t = self.ibi.p.get_times()
+        self.peaks_v = self.ibi.p.get_values()
         
-        self.p_sig.plot(self.ecg.get_times(), self.ecg.get_values(), 'b')
+        self.p_sig.plot(self.ecg.p.get_times(), self.ecg.p.get_values(), 'b')
 
         self.p_res.plot(self.peaks_t, self.peaks_v, 'b'),
         self.p_res.plot(self.peaks_t, self.peaks_v, 'go')
@@ -87,7 +86,7 @@ class Annotate(object):
             left = None
             right = None
             radius = .3
-            radiusi = int(radius * self.ecg.get_sampling_freq())
+            radiusi = int(radius * self.ecg.p.get_sampling_freq())
 
             @staticmethod
             def on_move(event):
@@ -99,7 +98,7 @@ class Annotate(object):
                     Cursor.radiusi += 3
                 elif event.button == "down":
                     Cursor.radiusi -= 7
-                Cursor.radius = Cursor.radiusi / self.ecg.get_sampling_freq()
+                Cursor.radius = Cursor.radiusi / self.ecg.p.get_sampling_freq()
                 Cursor.draw(event)
 
             @staticmethod
@@ -133,10 +132,10 @@ class Annotate(object):
                 if dist_after is not None and dist_after < Cursor.radius:
                     return self.peaks_t[nearest_after], ydata, nearest_after, False
 
-            s = self.ecg.segment_time(xdata - Cursor.radius, xdata + Cursor.radius)
+            s = self.ecg.p.segment_time(xdata - Cursor.radius, xdata + Cursor.radius)
             s = _np.array(s)
             m = find_peak(s)
-            return xdata - Cursor.radius + m / self.ecg.get_sampling_freq(), ydata, nearest_after, True
+            return xdata - Cursor.radius + m / self.ecg.p.get_sampling_freq(), ydata, nearest_after, True
 
         class Selector(object):
             selector = None
@@ -192,12 +191,12 @@ class Annotate(object):
         # do not change!
         self.peaks_v = _np.diff(self.peaks_t)
         self.peaks_v = _np.r_[self.peaks_v[0], self.peaks_v]
-            
-        self.ibi_ok =  _Signal(values=self.peaks_v, mask=None,
-                               sampling_freq=self.ibi.get_sampling_freq(),
-                               info=self.ibi.get_info(),
-                               x_values=self.peaks_t,
-                               x_type='instants')
+        
+        ibi_ok = create_signal(self.peaks_v, 
+                               times=self.peaks_t, 
+                               info = self.ibi.p.get_info())
+        self.ibi_ok =  ibi_ok
+        
     def __call__(self):
         return self.ibi_ok
     

@@ -1,18 +1,15 @@
 # coding=utf-8
 # from __future__ import division
 import numpy as _np
-import numpy.ma as _ma
 import scipy.stats as _stats
 from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_design as _filter_design, \
     deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve, iirnotch as _iirnotch
 # from matplotlib.pyplot import plot as _plot
 from . import Algorithm as _Algorithm
-from ..signal import Signal as _Signal
 # from ..Utility import abstractmethod as _abstract
-from .tools import SignalRange
+from .tools import SignalRange as _SignalRange
 from collections import Sequence
 # __author__ = 'AleB'
-
 
 class Normalize(_Algorithm):
     """
@@ -46,25 +43,32 @@ class Normalize(_Algorithm):
         if norm_method == "custom":
             assert norm_range != 0, "norm_range must not be zero"
         _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
+        self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
-        # from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
+        from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
         params = self._params
-        # method = params['norm_method']
-        # if method == "mean":
-        #     return signal - _Mean()(signal)
-        # elif method == "standard":
-        #     return (signal - _Mean()(signal)) / _StDev()(signal)
-        # elif method == "min":
-        #     return signal - _Min(signal)
-        # elif method == "maxmin":
-        #     return (signal - _Min(signal)) / (_Max(signal) - _Min(signal))
-        # elif method == "custom":
-        #     result = (signal - params['norm_bias']) / params['norm_range']
-        #     return result
-        print(type(signal))
-        print(signal.shape)
-        return (signal - _np.mean(signal)) / _np.std(signal)
+        method = params['norm_method']
+        signal_values = signal.values
+        if method == "mean":
+            return signal_values - _Mean()(signal, dimensions='none').values
+        elif method == "standard":
+            mean = _Mean()(signal, dimensions='none').values
+            std = _StDev()(signal, dimensions='none').values
+            
+            result = (signal_values - mean) / std
+            return(result)
+            
+        elif method == "min":
+            return signal_values - _Min()(signal, dimensions='none').values
+        elif method == "maxmin":
+            return (signal_values - _Min()(signal, dimensions='none').values) / \
+                (_Max()(signal, dimensions='none').values - _Min()(signal, dimensions='none').values)
+        elif method == "custom":
+            result = (signal_values - params['norm_bias']) / params['norm_range']
+            return result
+        else:
+            raise ValueError
 
 class IIRFilter(_Algorithm):
     """
@@ -97,25 +101,23 @@ class IIRFilter(_Algorithm):
     for additional information
     """
 
-    def __init__(self, fp, fs, loss=.1, att=40, ftype='butter'):
+    def __init__(self, fp, fs, loss=.1, att=40, ftype='butter', safe=True):
         assert loss > 0, "Loss value should be positive"
         assert att > 0, "Attenuation value should be positive"
         assert att > loss, "Attenuation value should be greater than loss value"
         assert ftype in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel'],\
             "Filter type must be in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel']"
-        _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, ftype=ftype)
+        _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, ftype=ftype, safe=safe)
+        self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
-        assert not signal.is_masked(), 'Filtering masked signal is undefined.'
-        
-        if len(signal.get_values().ravel()) <= 33:
-            print('Signal too short. Returning original signal.')
-            return signal
-        
+        # print('----->', self.name)
+        # print(signal.shape)
         params = self._params
-        fsamp = signal.get_sampling_freq()
+        fsamp = signal.p.get_sampling_freq()
         fp, fs, loss, att, ftype = params["fp"], params["fs"], params["loss"], params["att"], params["ftype"]
-
+        safe = params["safe"]
+        
         nyq = 0.5 * fsamp
         fp = _np.array(fp)
         fs = _np.array(fs)
@@ -125,13 +127,15 @@ class IIRFilter(_Algorithm):
 
         b, a = _filter_design.iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
 
-        sig_filtered = signal.clone_properties(_filtfilt(b, a, signal.get_values().ravel()))
+        sig_filtered = _filtfilt(b, a, signal.values.ravel(), axis=0)
 
-        if _np.isnan(sig_filtered[0]):
-            print('Filter parameters allow no solution. Returning original signal.')
-            return signal
-        else:
-            return sig_filtered
+        if safe:
+            if _np.isnan(sig_filtered[0]):
+                print('Filter parameters allow no solution. Returning original signal.')
+                return signal.values
+
+        # print('<-----', self.name)
+        return sig_filtered
 
 class NotchFilter(_Algorithm):
     """
@@ -155,28 +159,29 @@ class NotchFilter(_Algorithm):
     for additional information
     """
 
-    def __init__(self, f, Q=30):
+    def __init__(self, f, Q=30, safe=True):
         assert f > 0
         assert Q > 0
-        _Algorithm.__init__(self, f=f, Q=Q)
+        _Algorithm.__init__(self, f=f, Q=Q, safe=safe)
+        self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
-        assert not signal.is_masked(), 'Filtering masked signal is undefined.'
-        
         params = self._params
-        fsamp = signal.get_sampling_freq()
+        fsamp = signal.p.get_sampling_freq()
         f = params["f"]
         Q = params["Q"]
+        safe = params["safe"]
         
         b, a = _iirnotch(f, Q, fsamp)
         
-        sig_filtered = signal.clone_properties(_filtfilt(b, a, signal.get_values().ravel()))
-
-        if _np.isnan(sig_filtered[0]):
-            print('Filter parameters allow no solution. Returning original signal.')
-            return signal
-        else:
-            return sig_filtered
+        sig_filtered = _filtfilt(b, a, signal.values.ravel(), axis=0)
+        print(sig_filtered.shape)
+        if safe:
+            if _np.isnan(sig_filtered[0]):
+                print('Filter parameters allow no solution. Returning original signal.')
+                return signal.values
+        
+        return sig_filtered
         
 
 class FIRFilter(_Algorithm):
@@ -210,44 +215,42 @@ class FIRFilter(_Algorithm):
     for additional information
     """
 
-    def __init__(self, fp, fs, loss=0.1, att=40, wtype='hamming'):
-        assert loss > 0, "Loss value should be positive"
+    def __init__(self, fp, fs, att=40, wtype='hamming', safe=True):
         assert att > 0, "Attenuation value should be positive"
-        assert att > loss, "Attenuation value should be greater than loss value"
         assert wtype in ['hamming'],\
             "Window type must be in ['hamming']"
-        _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, wtype=wtype)
+        _Algorithm.__init__(self, fp=fp, fs=fs, att=att, wtype=wtype, safe=True)
+        self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
-        assert not signal.is_masked(), 'Filtering masked signal is undefined.'
-        
         params = self._params
-        fsamp = signal.get_sampling_freq()
-        fp, fs, loss, att, wtype = params["fp"], params["fs"], params["loss"], params["att"], params["wtype"]
-
+        fsamp = signal.p.get_sampling_freq()
+        fp, fs, att, wtype = params["fp"], params["fs"], params["att"], params["wtype"]
+        safe = params["safe"]
         fp = _np.array(fp)
         fs = _np.array(fs)
         
-        if att>0:
-            att = -att
-        d1 = 10**(loss/10)
-        d2 = 10**(att/10)
+        if fp.ndim == 0:
+            fp = _np.expand_dims(fp, 0)
+            
+        if fs.ndim == 0:
+            fs = _np.expand_dims(fs, 0)
+
+        # d1 = 10**(loss/10)
+        # d2 = 10**(att/10)
         Dsamp = _np.min(abs(fs-fp))/fsamp
         
 
         # from https://dsp.stackexchange.com/questions/31066/how-many-taps-does-an-fir-filter-need
-        N = int(2/3*_np.log10(1/(10*d1*d2))*fsamp/Dsamp)
-                
+        # N = int(2/3*_np.log10(1/(10*d1*d2))*fsamp/Dsamp)
+        
+        N = int(att/(22*Dsamp))
+        
+        # print(N)                
         pass_zero=True
                   
-        if isinstance(fp, Sequence):
-            if fp[0]>fs[0]:
-                pass_zero=False
-        else:    
-            if fp[0]>fs[0]:
-                pass_zero=False
-        
-            
+        if fp[0]>fs[0]:
+            pass_zero=False
         
         nyq = 0.5 * fsamp
         fp = _np.array(fp)
@@ -255,26 +258,29 @@ class FIRFilter(_Algorithm):
         
         if N%2 ==0:
             N+=1
+            
+        print(N)
         b = _firwin(N, wp, width=Dsamp, window=wtype, pass_zero=pass_zero)
-        sig_filtered = signal.clone_properties(_convolve(signal.get_values().ravel(), b, mode='same'))
+        sig_filtered = _convolve(signal.values.ravel(), b, mode='same')
 
-        if _np.isnan(sig_filtered[0]):
-            print('Filter parameters allow no solution. Returning original signal.')
-            return signal
-        else:
-            return sig_filtered
+        if safe:
+            if _np.isnan(sig_filtered[0]):
+                print('Filter parameters allow no solution. Returning original signal.')
+                return signal.values
+        
+        return sig_filtered
 
 class KalmanFilter(_Algorithm):
-    def __init__(self, R, ratio=1, win_len=1, win_step=0.5):
+    def __init__(self, R, ratio, win_len=1, win_step=0.5):
         assert R > 0, "R should be positive"
-        if ratio is not None:
-            assert ratio > 1, "ratio should be >1"
+        assert ratio > 1, "ratio should be >1"
         assert win_len > 0, "Window length value should be positive"
         assert win_step > 0, "Window step value should be positive"
         
         _Algorithm.__init__(self, R=R, ratio=ratio, win_len=win_len, win_step=win_step)
+        self.dimensions = {'time' : 0}
         
-    def algorithm(self, signal, params):
+    def algorithm(self, signal):
         params = self._params
         R = params['R']
         ratio = params['ratio']
@@ -283,12 +289,12 @@ class KalmanFilter(_Algorithm):
         
         sz = len(signal)
         
-        rr = SignalRange(win_len, win_step)(signal)
+        rr = _SignalRange(win_len, win_step)(signal, dimensions='none').values
         Q = _np.nanmedian(rr)/ratio
             
         P = 1
         
-        x_out = signal.get_values().ravel().copy()
+        x_out = signal.values.ravel()
         for k in range(1,sz):
                 x_ = x_out[k-1]
                 P_ = P + Q
@@ -298,15 +304,14 @@ class KalmanFilter(_Algorithm):
                 x_out[k] = x_ + K * (x_out[k] - x_)
                 P = (1 - K ) * P_
 
-        x_out = signal.clone_properties(x_out)
         return(x_out)
 
 
 class ImputeNAN(_Algorithm):
     def __init__(self, win_len=5, allnan='nan'):
         assert win_len>0, "win_len should be >0"
-        assert allnan in ['zeros', 'nan']
-        _Algorithm.__init__(self, win_len = win_len, allnan=allnan)
+        _Algorithm.__init__(self, win_len = win_len)
+        self.dimensions = {'time' : 0}
         
     def algorithm(self, signal):
         def group_consecutives(vals, step=1):
@@ -325,18 +330,12 @@ class ImputeNAN(_Algorithm):
 
         #%
         params = self._params
-        win_len = params['win_len']*signal.get_sampling_freq()
-        allnan = params['allnan']
-        
-        s = signal.get_values().ravel().copy()
+        win_len = params['win_len']*signal.p.get_sampling_freq()
+                
+        s = signal.values.ravel()
         if _np.isnan(s).all():
-            if allnan == 'nan':
-                return(signal)
-            else:
-                s = _np.zeros_like(s)
-                s_out = signal.clone_properties(s)
-                return(s_out)
-        
+            return(signal.values)
+            
         idx_nan = _np.where(_np.isnan(s))[0]
         segments = group_consecutives(idx_nan)
 
@@ -373,8 +372,7 @@ class ImputeNAN(_Algorithm):
                     s_nan = _np.nanmean(s)*_np.ones(len(SEG))
                 s[SEG] = s_nan
         
-        signal_out = signal.clone_properties(s)
-        return(signal_out)
+        return(s)
 
 
 class RemoveSpikes(_Algorithm):
@@ -385,6 +383,7 @@ class RemoveSpikes(_Algorithm):
         assert D>=0, "D should be >= 0.0"
         assert method in ['linear', 'step']
         _Algorithm.__init__(self, K=K, N=N, dilate=dilate, D=D, method=method)
+        self.dimensions = {'time' : 0}
     
     def algorithm(self, signal):
         params = self._params
@@ -393,10 +392,10 @@ class RemoveSpikes(_Algorithm):
         dilate = params['dilate']
         D = params['D']
         method = params['method']
-        fs = signal.get_sampling_freq()
+        fs = signal.p.get_sampling_freq()
         
         
-        s = signal.get_values().ravel().copy()
+        s = signal.values.ravel()
         sig_diff = abs(s[N:] - s[:-N])
         ds_mean = _np.nanmean(sig_diff)
         
@@ -407,7 +406,7 @@ class RemoveSpikes(_Algorithm):
         spikes = _np.convolve(spikes, win, 'same')
         idx_spikes = _np.where(spikes>0)[0]
         
-        x_out = signal.get_values().ravel().copy()
+        x_out = signal.values.ravel()
         
         #TODO check linear connector method
         if method == 'linear':
@@ -428,64 +427,8 @@ class RemoveSpikes(_Algorithm):
             for IDX in idx_spikes:
                 delta = x_out[IDX] - x_out[IDX-1]
                 x_out[IDX:] = x_out[IDX:] - D*delta
-        x_out = signal.clone_properties(x_out)
-        return(x_out)
-
-class DenoiseEDA(_Algorithm):
-    """
-    Remove noise due to sensor displacement from the EDA signal.
-    
-    Parameters
-    ----------
-    threshold : float, >0
-        Threshold to detect the noise
         
-    Optional parameters
-    -------------------
-    
-    win_len : float, >0, default = 2
-        Length of the window
-   
-    Returns
-    -------
-    signal : EvenlySignal
-        De-noised signal
-            
-    """
-
-    def __init__(self, threshold, win_len=2):
-        assert threshold > 0, "Threshold value should be positive"
-        assert win_len > 0, "Window length value should be positive"
-        _Algorithm.__init__(self, threshold=threshold, win_len=win_len)
-
-    @classmethod
-    def algorithm(self, signal):
-        params = self._params
-        threshold = params['threshold']
-        win_len = params['win_len']
-
-        s = signal.get_values().ravel().copy()
-        # remove fluctiations
-        noise = ConvolutionalFilter(irftype='triang', win_len=win_len, normalize=True)(abs(_np.diff(s)))
-
-        # identify noisy portions
-        idx_ok = _np.where(noise <= threshold)[0]
-
-        # fix start and stop of the signal for the following interpolation
-        if idx_ok[0] != 0:
-            idx_ok = _np.r_[0, idx_ok].astype(int)
-
-        if idx_ok[-1] != len(signal) - 1:
-            idx_ok = _np.r_[idx_ok, len(signal) - 1].astype(int)
-
-        denoised = _Signal(signal[idx_ok], sampling_freq=signal.get_sampling_freq(),
-                           start_time = signal.get_start_time(),
-                           x_values=idx_ok, x_type='indices')
-
-        # interpolation
-        signal_out = denoised.fill('linear')
-        return signal_out
-
+        return(x_out)
 
 class ConvolutionalFilter(_Algorithm):
     """
@@ -517,6 +460,7 @@ class ConvolutionalFilter(_Algorithm):
             "IRF type must be in ['gauss', 'rect', 'triang', 'dgauss', 'custom']"
         assert irftype == 'custom' or win_len > 0, "Window length value should be positive"
         _Algorithm.__init__(self, irftype=irftype, win_len=win_len, irf=irf, normalize=normalize)
+        self.dimensions = {'time' : 0}
 
     # TODO (Andrea): TEST normalization and results
     def algorithm(self, signal):
@@ -524,7 +468,7 @@ class ConvolutionalFilter(_Algorithm):
         irftype = params["irftype"]
         normalize = params["normalize"]
 
-        fsamp = signal.get_sampling_freq()
+        fsamp = signal.p.get_sampling_freq()
         irf = None
 
         if irftype == 'custom':
@@ -562,13 +506,13 @@ class ConvolutionalFilter(_Algorithm):
         if normalize:
             irf = irf / _np.sum(irf)
         
-        s = signal.get_values().ravel().copy()
+        s = signal.values.ravel()
         
         signal_ = _np.r_[_np.ones(n) * s[0], s, _np.ones(n) * s[-1]]  # TESTME
 
         signal_f = _np.convolve(signal_, irf, mode='same')
 
-        signal_out = signal.clone_properties(signal_f[n:-n])
+        signal_out = signal_f[n:-n]
         return signal_out
 
 
@@ -600,6 +544,7 @@ class DeConvolutionalFilter(_Algorithm):
     def __init__(self, irf, normalize=True, deconv_method='sps'):
         assert deconv_method in ['fft', 'sps'], "Deconvolution method not valid"
         _Algorithm.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
+        self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
         params = self._params
@@ -607,7 +552,7 @@ class DeConvolutionalFilter(_Algorithm):
         normalize = params["normalize"]
         deconvolution_method = params["deconv_method"]
 
-        s = signal.get_values().ravel().copy()
+        s = signal.values.ravel()
         if normalize:
             irf = irf / _np.sum(irf)
         if deconvolution_method == 'fft':
@@ -617,11 +562,75 @@ class DeConvolutionalFilter(_Algorithm):
             out = _np.fft.ifft(fft_signal / fft_irf)
         elif deconvolution_method == 'sps':
             print('sps based deconvolution needs to be tested. Use carefully.')
-            out, _ = _deconvolve(s, irf)
+            out_dec, _ = _deconvolve(s, irf)
+            
+            #fix size
+            #TODO half before, half after?
+            out = _np.ones(len(signal))*out_dec[-1]
+            out[:len(out_dec)] = out_dec
         else:
             print('Deconvolution method not implemented. Returning original signal.')
             out = s
+        print(len(out))
+        print(len(signal))
+        return out
 
-        out_signal = signal.clone_properties(out)
 
-        return out_signal
+'''
+# TODO: check and convert to xarray
+
+class DenoiseEDA(_Algorithm):
+    """
+    Remove noise due to sensor displacement from the EDA signal.
+    
+    Parameters
+    ----------
+    threshold : float, >0
+        Threshold to detect the noise
+        
+    Optional parameters
+    -------------------
+    
+    win_len : float, >0, default = 2
+        Length of the window
+   
+    Returns
+    -------
+    signal : EvenlySignal
+        De-noised signal
+            
+    """
+
+    def __init__(self, threshold, win_len=2):
+        assert threshold > 0, "Threshold value should be positive"
+        assert win_len > 0, "Window length value should be positive"
+        _Algorithm.__init__(self, threshold=threshold, win_len=win_len)
+
+    @classmethod
+    def algorithm(self, signal):
+        params = self._params
+        threshold = params['threshold']
+        win_len = params['win_len']
+
+        s = signal.values.ravel()
+        # remove fluctuations
+        noise = ConvolutionalFilter(irftype='triang', win_len=win_len, normalize=True)(abs(_np.diff(s)))
+
+        # identify noisy portions
+        idx_ok = _np.where(noise <= threshold)[0]
+
+        # fix start and stop of the signal for the following interpolation
+        if idx_ok[0] != 0:
+            idx_ok = _np.r_[0, idx_ok].astype(int)
+
+        if idx_ok[-1] != len(signal) - 1:
+            idx_ok = _np.r_[idx_ok, len(signal) - 1].astype(int)
+
+        denoised = _Signal(signal[idx_ok], sampling_freq=signal.get_sampling_freq(),
+                           start_time = signal.get_start_time(),
+                           x_values=idx_ok, x_type='indices')
+
+        # interpolation
+        signal_out = denoised.fill('linear')
+        return signal_out
+'''    

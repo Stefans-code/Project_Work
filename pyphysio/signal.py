@@ -2,90 +2,93 @@
 import numpy as _np
 import pandas as _pd
 import numpy.ma as _ma
-import xarray as xr
+import xarray as _xr
+from copy import copy
 
-# from scipy import interpolate as _interp
+_xr.set_options(keep_attrs=True)
+
 from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _subplots,\
      tight_layout as _tight_layout, subplots_adjust as _subplots_adjust,\
          xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
 
-# from numbers import Number as _Number
-# import copy
-
-# def from_pickleable(pickle):
-#     """
-#     Builds a Signal using the pickleable tuple version of it.
-#     :param pickle: Tuple of the form (Signal, ph dict).
-#     :return: Signal
-#     """
-#     pass
-
-
-# def from_pickle(path):
-#     """
-#     Loads a Signal from a pickle file given the path.
-#     :param path: File system path to the pickle file.
-#     :return: A Signal.
-#     """
-#     pass
 
 def create_signal(data, times=None, sampling_freq=None,
-                  start_time=0, info={}):
+                  start_time=0, name='signal', info={}):
     
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
+    
+    if data.ndim == 1:
+        data = _np.expand_dims(data, [1,2])
+    elif data.ndim == 2:
+        data = _np.expand_dims(data, 2)
+    elif data.ndim > 3:
+        raise ValueError
+    
     
     if sampling_freq is None: #defined by times
         assert len(times) == data.shape[0]
         
-        #check if there is a fsamp, else fsamp is None (unevenly)
-        dt = _np.unique(_np.diff(times))
-        if len(dt)==1:
-            sampling_freq = 1/dt[0]
+        # #check if there is a fsamp, else fsamp is None (unevenly)
+        # dt = _np.unique(_np.diff(times))
+        
+        # if len(dt)==1:
+        #     sampling_freq = 1/dt[0]
         
         #create pandas TimedeltaIndex times
-        times = _pd.to_timedelta(times, unit='s')
+        # times = _pd.to_timedelta(times, unit='s') #NOT OK FOR SAVING
         
     else: #defined by sampling freq
         assert sampling_freq > 0
-        #define times as TimedeltaIndex
-        times = _pd.timedelta_range(start=start_time, periods = data.shape[0], freq=f'{10**9/sampling_freq}ns')
+        
+        decimals = _np.max([5, int(_np.ceil(_np.log10(sampling_freq)))])
+        times = _np.round(_np.arange(0, data.shape[0])/sampling_freq + start_time, 
+                          decimals = decimals)
         
     #start_time is times[0]
     start_time = times[0]
         
-    #check dims
-    dims_template = ('time', 'channels', 'components', 'dim4', 'dim5')
-    assert data.ndim <= 5
-    dims = dims_template[:data.ndim]
+    #check dims and set coordinates
+    dims = ('time', 'channel', 'component')
     
-    info['sampling_freq'] = sampling_freq
-    info['start_time'] = start_time
+    coords = {'time':times}
     
-    signal = xr.DataArray(data, dims = dims,
-                          coords = {'time': times}, 
-                          attrs = info,
-                          name = 'signal')
-    
-    return(signal.to_dataset())
-
-@xr.register_dataset_accessor('ph')
-class Signal(object):
-    def __init__(self, xarray_obj):
-        self.ds = xarray_obj
-    
-    def __getitem__(self, item):
-        print(item)
+    for i_dim in _np.arange(1,3): #assign coords to other dimensions
+        coords[dims[i_dim]] = _np.arange(data.shape[i_dim])
         
+    # info['sampling_freq'] = sampling_freq
+    # info['start_time'] = start_time
+        
+    signal = _xr.DataArray(data, dims = dims,
+                           coords = coords, 
+                           attrs = info,
+                           name = name).to_dataset()
+    
+    signal.attrs['MAIN'] = name
+    signal.attrs['history'] = [name]
+    
+    return signal
+
+@_xr.register_dataarray_accessor('p')
+class PyphysioDataArray(object):
+    def __init__(self, xdataarray):
+        self.da = xdataarray
+    
     @property
-    def signal(self):
-        return self.ds['signal']
+    def main_signal(self):
+        return self.da
+    
+    def clone(self, values, name='signal'):
+        assert values.shape[0] == self.da.values.shape[0]
+        signal_clone = create_signal(values, times = self.da.coords['time'].values,
+                                     name = name, info=copy(self.da.attrs))
+        return(signal_clone)
     
     def get_values(self):
-        return self.signal.values
+        return self.da.values
 
     def get_times(self):
-        time = self.signal.coords['time'].values
-        time = time/_np.timedelta64(1, 's')
+        time = self.da.coords['time'].values
+        # time = time/_np.timedelta64(1, 's')
         return time
     
     def segment_time(self, t_start, t_stop=None):
@@ -104,11 +107,12 @@ class Signal(object):
         portion : UnvenlySignal
             The selected portion
         """
-        t_start_timedelta = _pd.to_timedelta(t_start, 's')
-        t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
+        # t_start_timedelta = _pd.to_timedelta(t_start, 's')
+        # t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
         
-        sub_dataset = self.ds.sel(time = slice(t_start_timedelta,
-                                               t_stop_timedelta))
+        #TODO t_stop - 1/fsamp
+        sub_dataset = self.da.sel(time = slice(t_start,
+                                               t_stop))
         return sub_dataset
     
     def get_start_time(self):
@@ -120,31 +124,35 @@ class Signal(object):
         return(times[-1])
 
     def get_sampling_freq(self):
-        return self.signal.attrs['sampling_freq']
+        dt = _np.unique(_np.diff(self.get_times()).round(10))
+        if len(dt)==1:
+            return 1/dt[0]
+        
+        return None
     
     def get_duration(self):
         return self.get_end_time() - self.get_start_time()
 
     def has_multi_channels(self):
-        return(len(self.ds.dims)>1)
+        return(len(self.da.dims)>1)
     
     def get_nchannels(self):
         if self.has_multi_channels():
-            return(self.ds.dims['channels'])
+            return(int(_np.max(self.da.coords['channel'])+1))
         else:
             return(1)
     
     def has_multi_components(self):
-        return(len(self.ds.dims)>2)
+        return(len(self.da.dims)>2)
     
     def get_ncomponents(self):
         if self.has_multi_components():
-            return(self.ds.dims['components'])
+            return(int(_np.max(self.da.coords['component'])+1))
         else:
             return(1)
     
     def get_info(self):
-        return self.signal.attrs
+        return self.da.attrs
 
     def plot(self, marker=None, ncols=4, sharey=True):
         fig = _gcf()
@@ -152,7 +160,7 @@ class Signal(object):
         v_ = self.get_values()
         linestyle='solid'
         #if single signal, then plot
-        if len(self.ds.dims) == 1:
+        if len(self.da.dims) == 1:
             
             #TODO if existing figure has many axes, 
             #replicate the plot on each axis
@@ -219,80 +227,71 @@ class Signal(object):
             _xlim(self.get_start_time(), self.get_end_time())
             _tight_layout()
             _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
-        
 
-    def test_ph(self):
-        print(self.ph.get_sampling_freq())
-#%%
-
-'''        
-    def has_good(self, good_global=True):
-        if 'good' in self.ph['info'].keys():
-            if not good_global:
-                return True
-            else:
-                good = self.ph['info']['good']
-                if good.shape[0] == 1:
-                    return True
-                return False
-        return False
+@_xr.register_dataset_accessor('p')
+class PyPhysioDataset(object):
+    def __init__(self, xdataset):
+        self.ds = xdataset
     
-    def get_good(self):
-        assert self.has_good(), "Quality has not been computed yet"
-        
-        info = self.get_info()
-        is_good = info['good']
-        # assert is_good.shape[0] == 1, "Quality has not been computed globally. Please compute global quality first"
-        
-        if is_good.ndim == 1:
-            return(_np.array(_np.where(is_good))[0])
-        else:
-            return(_np.array(_np.where(is_good)[1:]))
+    # def clone(self, values, name='signal'):
+    #     assert values.shape[0] == self.da.values.shape[0]
+    #     signal_clone = create_signal(values, times = self.da.coords['time'].values,
+    #                                  name = name, info=self.da.attrs)
+    #     return(signal_clone)
     
-
-
     @property
-    def pickleable(self):
+    def main_signal(self):
+        main_signal = self.ds.attrs['MAIN']
+        da = self.ds[main_signal]
+        return da
+    
+    def get_values(self):
+        return self.main_signal.p.get_values()
+    
+    def get_times(self):
+        time = self.main_signal.p.get_times()
+        return time
+    
+    def segment_time(self, t_start, t_stop=None):
         """
-        Returns a pickleable tuple of this Signal.
-        :return: Tuple (Signal, ph dict).
-        """
-        info = self.get_info()
-        
-        
-        info_pickle = {}
-        for info_key in info.keys():
-            if info_key == 'sqi':
-                info_sqi = {}
-                for k in info['sqi'].keys():
-                    info_sqi[k] = info['sqi'][k].pickleable
-                info_pickle['sqi'] = info_sqi
-            
-            elif info_key == 'good':
-                if hasattr(info['good'], 'pickleable'):
-                    info_pickle['good'] = info['good'].pickleable
-            
-            elif info_key == 'stim':
-                if hasattr(info['stim'], 'pickleable'):
-                    info_pickle['stim'] = info['stim'].pickleable
-            else:
-                info_pickle[info_key] = info[info_key]
-                
-        return self, self._optinfo, info_pickle
+        Segment the signal given a time interval
 
-    def to_pickle(self, path):
+        Parameters
+        ----------
+        t_start : float
+            The instant of the start of the interval
+        t_stop : float 
+            The instant of the end of the interval. By default is the end of the signal
+
+        Returns
+        -------
+        portion : UnvenlySignal
+            The selected portion
         """
-        Saves this Signal into a pickle file.
-        :param path: File system path to the file to write (create/overwrite).
-        """
-        from gzip import open
-        from pickle import dump
-        f = open(path, "wb")
-        dump(self.pickleable, f, protocol=2)
-        f.close()
-       
-    def __repr__(self):
-        return self.get_values().__repr__() + '\n'+\
-            f'{self.get_sampling_freq()} Hz \n'+\
-                f'{self.get_start_time()} s \n'
-'''
+        # t_start_timedelta = _pd.to_timedelta(t_start, 's')
+        # t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
+        
+        #TODO t_stop - 1/fsamp
+        sub_dataset = self.ds.sel(time = slice(t_start,
+                                               t_stop))
+        return sub_dataset
+    
+    def get_start_time(self):
+        return self.main_signal.p.get_start_time()
+        
+    def get_end_time(self):
+        return self.main_signal.p.get_end_time()
+
+    def get_sampling_freq(self):
+        return self.main_signal.p.get_sampling_freq()
+    
+    def get_duration(self):
+        return self.main_signal.p.get_duration()
+
+    def get_info(self):
+        return self.ds.attrs
+
+    def plot(self, marker=None, ncols=4, sharey=True):
+        self.main_signal.p.plot(marker=marker,
+                                ncols=ncols,
+                                sharey=sharey)

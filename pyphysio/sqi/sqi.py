@@ -5,7 +5,7 @@ from . import SignalQualityIndicator as _SignalQualityIndicator
 from ..indicators.frequencydomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
 from ..processing.filters import ImputeNAN as _ImputeNAN
-
+from ..processing.tools import Diff as _Diff
 
 class Kurtosis(_SignalQualityIndicator):
     """
@@ -14,35 +14,44 @@ class Kurtosis(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
+        self.dimensions = {'time':1}
 
-    def algorithm(self, data):
-        k = _sps.kurtosis(data.get_values().ravel())
-        return(k)
+    def algorithm(self, signal):
+        signal_values = signal.values.ravel()
+        k = _sps.kurtosis(signal_values)
+        k_out = _np.array([[k]])
+        return(k_out)
 
 class Entropy(_SignalQualityIndicator):
     def __init__(self, threshold, nbins=25, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, nbins=nbins, **kwargs)
+        self.dimensions = {'time':1}
     
-    def algorithm(self, data):
+    def algorithm(self, signal):
+        signal_values = signal.values.ravel()
         params = self._params
         nbins=params['nbins']
-        p_data = _np.histogram(data.get_values().ravel().reshape(-1,1), bins=nbins)[0]/len(data) # calculates the probabilities
+        p_data = _np.histogram(signal_values.reshape(-1,1), bins=nbins)[0]/len(signal_values) # calculates the probabilities
         entropy = _sps.entropy(_np.array(p_data))  # input probabilities to get the entropy 
-        return entropy
+        entropy_out = _np.array([[entropy]])
+        return entropy_out
 
 class DerivativeEnergy(_SignalQualityIndicator):
     """
     Compute the Derivative Energy
 
     """
-    def __init__(self, threshold, **kwargs):
-        #TODO, use Diff with custom spacing
-        _SignalQualityIndicator.__init__(self, threshold, **kwargs)
+    def __init__(self, threshold, dt=0.01, **kwargs):
+        assert dt>0
+        _SignalQualityIndicator.__init__(self, threshold, dt = dt, **kwargs)
+        self.dimensions = {'time':1}
     
-    def algorithm(self, data):
-        x = data.get_values().ravel()
-        de = _np.sqrt(_np.nanmean(_np.power(_np.diff(x), 2)))
-        return(de)
+    def algorithm(self, signal):
+        signal_values = signal.values.ravel()
+        degree = int(signal.p.get_sampling_freq()*self.params['dt'])
+        de = _np.sqrt(_np.mean(_np.power(_Diff(degree=degree)(signal).values, 2)))
+        de_out = _np.array([[de]])
+        return de_out
         
 class SpectralPowerRatio(_SignalQualityIndicator):
     """
@@ -51,16 +60,17 @@ class SpectralPowerRatio(_SignalQualityIndicator):
     """
     def __init__(self, threshold, method='ar', bandN=[5,14], bandD=[5,50],**kwargs):
         _SignalQualityIndicator.__init__(self, threshold, method=method, bandN=bandN, bandD=bandD, **kwargs)
+        self.dimensions = {'time':1}
 
     
-    def algorithm(self, data):
+    def algorithm(self, signal):
         params = self._params
         bandN = params['bandN']
         bandD = params['bandD']
-        assert bandD[1] < data.get_sampling_freq()/2, 'The higher frequency in bandD is greater than fsamp/2: cannot compute power' # CHECK: check sampling frequency of the signal (e.g. <=128)
-        p_N = _PowerInBand(bandN[0], bandN[1], params['method'])(data)
-        p_D = _PowerInBand(bandD[0],bandD[1], params['method'])(data)
-        return(p_N/p_D)
+        assert bandD[1] < signal.p.get_sampling_freq()/2, 'The higher frequency in bandD is greater than fsamp/2: cannot compute power' # CHECK: check sampling frequency of the signal (e.g. <=128)
+        p_N = _PowerInBand(bandN[0], bandN[1], params['method'])(signal)
+        p_D = _PowerInBand(bandD[0],bandD[1], params['method'])(signal)
+        return(_np.array(p_N/p_D))
 
 class CVSignal(_SignalQualityIndicator):
     """
@@ -72,13 +82,15 @@ class CVSignal(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
+        self.dimensions = {'time':1}
 
-    def algorithm(self, data):
-        data_values= data.get_values()
-        mean = _ma.mean(data_values)
-        sd = _ma.std(data_values)
-        cv = 100*sd/mean
-        return(cv)
+    def algorithm(self, signal):
+        signal_values = signal.values.ravel()
+        mean = _np.mean(signal_values)
+        sd = _np.std(signal_values)
+        cv = float(100*sd/mean)
+        
+        return _np.array([cv])
 
 class PercentageNAN(_SignalQualityIndicator):
     """
@@ -87,8 +99,10 @@ class PercentageNAN(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
+        self.dimensions = {'time':1}
 
-    def algorithm(self, data):
-        n_nan = _np.sum(_np.isnan(data))
-        data = _ImputeNAN()(data)
-        return(100*n_nan/len(data))
+    def algorithm(self, signal):
+        signal_values = signal.values
+        n_nan = _np.sum(_np.isnan(signal_values))
+        perc = 100*n_nan/len(signal_values)
+        return _np.array([[perc]])

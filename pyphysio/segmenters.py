@@ -3,7 +3,7 @@ import numpy as _np
 from copy import copy as _cpy
 # from numpy import asarray as _asarray
 # from ..Utility import abstractmethod as _abstract
-from .signal import Signal as _Signal
+import xarray as _xr
 # from numbers import Number as _Number
 # __author__ = 'AleB'
 
@@ -29,16 +29,17 @@ class Segment(object):
         return self._end
 
     def get_label(self):
-        return self._label
+        return float(self._label)
 
     def __call__(self, data=None):
-        return data.segment_time(self.get_begin_time(), self.get_end_time())
+        data_segment = data.p.segment_time(self.get_begin_time(), self.get_end_time())
+        return data_segment
 
     def __repr__(self):
         return '[%s:%s' % (str(self.get_begin_time()), str(self.get_end_time())) + (
             ":%s]" % self._label if self._label is not None else "]")
 
-class SegmentationIterator(object):
+class _SegmentationIterator(object):
     """
     A generic iterator that is called from each WindowGenerator from the __iter__ method.
     """
@@ -64,6 +65,7 @@ class _Segmenter(object):
         self._params.update(kwargs)
         self.timeline = timeline
         self.reference = None
+        
 
     def next_segment(self):
         assert self.reference is not None
@@ -72,12 +74,10 @@ class _Segmenter(object):
             # break    ==> keep
             # continue ==> drop
             b, e, label = self._next_segment()
-            
             #accoriding to segmentation method and params
             #b is None if the segment shold be discarded
             if b is None: 
                 continue
-
             break
 
         s = Segment(b, e, label)
@@ -86,14 +86,16 @@ class _Segmenter(object):
     def manage_drops(self, b, e):
         assert self.reference is not None
         #manage drop_cut
-        if e >= self.reference.get_end_time():
+        
+        
+        if e >= self.reference.p.get_end_time():
             if self._params['drop_cut']:
                 return([None, None, None])
         
         #manage labels, drop_mixed
         if self.timeline is not None:
-            timeline_segment = self.timeline.segment_time(b, e).get_values()
-            
+            timeline_segment = self.timeline.p.segment_time(b, e).p.get_values()
+
             if (timeline_segment == timeline_segment[0]).all():
                 #timeline values are the same within the segment
                 label = _np.array(timeline_segment[0]).ravel()
@@ -109,10 +111,9 @@ class _Segmenter(object):
     
     def __call__(self, reference=None):
         if reference is not None:
-            assert isinstance(reference, _Signal), "The provided reference signal should be a Signal"
             self.reference = reference
         else:
-            assert self.timeline is not None, "The timeline should be not None if not providing a reference signal"
+            assert self.timeline is not None
             self.reference = self.timeline
         
     @classmethod
@@ -120,7 +121,7 @@ class _Segmenter(object):
         pass
 
     def __iter__(self):
-        return SegmentationIterator(self)
+        return _SegmentationIterator(self)
 
     def __repr__(self):
         if self.reference is not None:
@@ -158,9 +159,6 @@ class FixedSegments(_Segmenter):
     """
 
     def __init__(self, step, width=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
-        assert timeline is None or isinstance(timeline, _Signal),\
-            "The parameter 'labels' should be a Signal."
-        
         super(FixedSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         assert step > 0
         assert width is None or width > 0
@@ -171,14 +169,15 @@ class FixedSegments(_Segmenter):
         
     def _next_segment(self):
         if self._t is None:
-            self._t = self.reference.get_start_time()
+            self._t = self.reference.p.get_start_time()
         b = self._t
-        self._t += self._step
-        e = b + self._width
         
-        if b >= self.reference.get_end_time():
+        self._t += self._step
+        e = b + self._width - 0.0001
+        
+        if b >= self.reference.p.get_end_time():
             raise StopIteration()
-
+        
         return self.manage_drops(b, e)
 
 class CustomSegments(_Segmenter):
@@ -205,8 +204,6 @@ class CustomSegments(_Segmenter):
 
     def __init__(self, begins, ends, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
         #TODO: timeline can also be a list with labels of each segment
-        assert timeline is None or isinstance(timeline, _Signal),\
-            "The parameter 'labels' should be an EvenlySignal."
         super(CustomSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         
         assert len(begins) == len(ends), "The number of begins has to be equal to the number of ends :)"
@@ -242,22 +239,22 @@ class LabelSegments(_Segmenter):
     """
 
     def __init__(self, timeline, drop_mixed=True, drop_cut=True, **kwargs):
-        assert timeline is None or isinstance(timeline, _Signal),\
-            "The parameter 'labels' should be an EvenlySignal."
         super(LabelSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         self._i = 0
         
     def _next_segment(self):
-        if self._i >= len(self.timeline):
+        timeline_values = self.timeline.p.main_signal.values
+        if self._i >= len(timeline_values):
             raise StopIteration()
         end = self._i
-        while end < len(self.timeline) and self.timeline[self._i] == self.timeline[end]:
+        
+        while end < len(timeline_values) and timeline_values[self._i] == timeline_values[end]:
             end += 1
         
-        b = self.timeline.idx2time(self._i)
-        e = self.timeline.idx2time(end)
+        b = self.timeline.p.get_times()[self._i]
+        e = self.timeline.p.get_times()[end-1]
         self._i = end
-        return b, e, self.timeline[end-1]
+        return b, e, timeline_values[end-1]
 
 class RandomFixedSegments(_Segmenter):
     """
@@ -285,38 +282,33 @@ class RandomFixedSegments(_Segmenter):
     """
 
     def __init__(self, N, width, reference=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
-        assert timeline is None or isinstance(timeline, _Signal),\
-            "The parameter 'labels' should be an EvenlySignal."
         super(RandomFixedSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         assert N > 0
         assert width > 0
+        
+        assert (reference is not None) or (timeline is not None), "Either a reference signal or a timeline should be provided"
         
         self._N = N
         self._width = width
         self._i = -1
         self.reference = reference
+        self.timeline = timeline
         
+        
+                
         if reference is None:
-            print('\n\n >>> No reference signal provided: new random segments will be generated for each channel/component. Expect funny results')
-            self.tst = None
+            t_st = self.timeline.p.get_start_time()
+            t_sp = self.timeline.p.get_end_time() - self._width
+            tst = _np.random.uniform(t_st, t_sp, self._N)
         else:
-            t_st = self.reference.get_start_time()
-            t_sp = self.reference.get_end_time() - self._width
+            t_st = self.reference.p.get_start_time()
+            t_sp = self.reference.p.get_end_time() - self._width
             tst = _np.random.uniform(t_st, t_sp, self._N)
 
-            #timestamps should be strictly (--> _np.unique) monotonic
-            self.tst = _np.unique(tst[_np.argsort(tst)])
+        #timestamps should be strictly (--> _np.unique) monotonic
+        self.tst = _np.unique(tst[_np.argsort(tst)])
             
     def _next_segment(self):
-        
-        if self.tst is None: #needs initialization
-            t_st = self.reference.get_start_time()
-            t_sp = self.reference.get_end_time() - self._width
-            tst = _np.random.uniform(t_st, t_sp, self._N)
-
-            #timestamps should be strictly (--> _np.unique) monotonic
-            self.tst = _np.unique(tst[_np.argsort(tst)])
-        
         self._i += 1
         if self._i < self._N:
             b = self.tst[self._i]
@@ -326,142 +318,31 @@ class RandomFixedSegments(_Segmenter):
             raise StopIteration()
             
 def fmap(segmenter, algorithms, signal):
-    """
-    Generates a list of a list of results for each segment.
-
-    [[result for each algorithm] for each segment]
-    :param segments: An iterable of segments (e.g. an initialized SegmentGenerator)
-    :param algorithms: A list of algorithms
-    :param alt_signal: The signal that will be used instead of the one referenced in the segments
-
-    :return: values, col_names A tuple: matrix (segment x algorithms) containing a value for each
-     algorithm, the list of the algorithm names.
-    """
-
+   
     if segmenter.reference is None:
         segmenter(signal)
     
-    result = {}
+    result = []
     
+    # signal_name = signal.p.main_signal.name
     #for all algorithms
     for alg in algorithms:
-        
-        result_algorithm = {}
+        # print(alg.name)
+        result_algorithm = []
         for i_seg, seg in enumerate(segmenter): #this generates segments from the segmenter
-            result_segment = {'begin': seg.get_begin_time(),
-                              'end': seg.get_end_time(),
-                              'label': seg.get_label()}
-            
-            #when called on a signal, a segment returns a portion of the signal
+            # print(seg.get_begin_time())    
             signal_segment = seg(signal)
             
-            result_segment['result'] = alg(signal_segment)
-            result_algorithm[i_seg] = result_segment
-        
-        #the following is to prepare labels and t
-        #that might be used later
-        #(to avoid messy code)
-        labels = []
-        values = []
-        t = []
-        for k,v in result_algorithm.items():
-            labels.append(v['label'])
-            values.append(v['result'])
-            t_ = v['begin'] + (v['end'] - v['begin']) / 2
-            t.append(t_)
-        
-        labels = _np.array(labels)
-        t = _np.array(t)
-        
-        #if no segments were processed
-        if len(labels) == 0: 
-            result[alg.__repr__()] = result_algorithm
-        
-        #if the algorithm returns a Signal
-        elif isinstance(values[0], _Signal):
-            result[alg.__repr__()] = result_algorithm
-        
-        #if the algorithm returns a numpy array
-        #we create Signals
-        elif isinstance(values[0], _np.ndarray):
+            res = alg(signal_segment, add_signal=False)
+            # res = res.drop(signal_name)
+            res = res.dropna(dim='time', how='all')
+            res = res.assign_coords(label=('time', [seg.get_label()]))
             
-            values = _np.stack(values, axis=0)
-            #BE CAREFUL HERE ABOUT THE NUMBER OF DIMS OF THE OUTPUT ARRAY
-            
-            if isinstance(segmenter, FixedSegments):
-                #since we used a FixedSegments, we can create an EvenlySignal
-                fsamp = 1/segmenter._step
-                
-                info = {'label': _Signal(labels, sampling_freq=fsamp, start_time=t[0]),
-                        'name': alg.__repr__()}
-                
-                info.update(signal.get_info())
-                
-                result[alg.__repr__()] = _Signal(values, sampling_freq=fsamp, 
-                                                 start_time=t[0], info=info)
-                
-            else:
-                fsamp = signal.get_sampling_freq()
-                info = {'label': _Signal(labels, sampling_freq=fsamp, start_time=t[0],
-                                         x_values = t, x_type='instants'),
-                        'name': alg.__repr__()}
-                
-                info.update(signal.get_info())
-                
-                result[alg.__repr__()] = _Signal(values, sampling_freq=fsamp, 
-                                                 start_time=t[0], info=info,
-                                                 x_values = t, x_type='instants')
-        
-        #if list or tuple of ndarrays
-        #(it is a special case we can try to manage)
-        #we create a list of Signals
-        elif (isinstance(values[0], list) or isinstance(values[0], tuple)) and \
-            sum([isinstance(x, _np.ndarray) for x in values[0]]) ==  len(values[0]):
-            # print(5)
-            number_signals = len(values[0])
-            signals_out = []
-            for i_signal in range(number_signals):
-                values_signal = []
-                for v in values:
-                    values_signal.append(v[i_signal])
-                values_signal = _np.stack(values_signal, axis=0)
-                
-                if isinstance(segmenter, FixedSegments):
-                    # print(6)
-                    #since we used a FixedSegments, we can create an EvenlySignal
-                    fsamp = 1/segmenter._step
-                    
-                    info = {'label': _Signal(labels, sampling_freq=fsamp, 
-                                             start_time=t[0]),
-                            'name': alg.__repr__()}
-                    
-                    info.update(signal.get_info())
-                    
-                    signals_out.append(_Signal(values_signal, sampling_freq=fsamp, 
-                                               start_time=t[0], info=info))
-                    
-                else:
-                    # print(7)
-                    fsamp = signal.get_sampling_freq()
-                    info = {'label': _Signal(labels, sampling_freq=fsamp, 
-                                             start_time= t[0],
-                                             x_values = t, x_type='instants'),
-                            'name': alg.__repr__()}
-                    
-                    info.update(signal.get_info())
-                    
-                    signals_out.append(_Signal(values_signal, sampling_freq=fsamp, 
-                                               start_time=t[0], info=info,
-                                               x_values = t, x_type='instants'))
-        
-            result[alg.__repr__()] = signals_out
-        
-        #all other cases
-        #just return the original dictionary
-        else:
-            # print(8)
-            result[alg.__repr__()] = result_algorithm
-            
+            result_algorithm.append(res)
+
+        result.append(_xr.concat(result_algorithm, dim='time'))
+
+    result = _xr.merge(result)
     return result
 
 def indicators2df(fmap_results):

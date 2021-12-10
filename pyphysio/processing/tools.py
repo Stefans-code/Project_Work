@@ -1,15 +1,19 @@
 # coding=utf-8
 # from __future__ import division
 import numpy as _np
-import numpy.ma as _ma
+import xarray as _xr
+
+
 from scipy.signal import welch as _welch, periodogram as _periodogram, freqz as _freqz
 import pycwt.wavelet as wave
 from scipy import linalg as _linalg
 
 from . import Algorithm as _Algorithm
-from ..signal import Signal as _Signal
+from ..signal import create_signal
 
-class Diff(_Algorithm):
+_xr.set_options(keep_attrs = True)
+
+class Diff(_Algorithm): #xarray done
     """
     Computes the differences between adjacent samples.
 
@@ -28,26 +32,28 @@ class Diff(_Algorithm):
     def __init__(self, degree=1):
         assert degree > 0, "The degree value should be positive"
         _Algorithm.__init__(self, degree=degree)
+        self.dimensions = {'time' : 0}
 
     
     def algorithm(self, signal):
         """
         Calculates the differences between consecutive values
         """
+        
+        signal_values = signal.values.ravel()
         params = self._params
         degree = params['degree']
 
-        sig_1 = signal[:-degree]
-        sig_2 = signal[degree:]
+        sig_1 = signal_values[:-degree]
+        sig_2 = signal_values[degree:]
 
-        out = _Signal(data=sig_2 - sig_1,
-                      sampling_freq=signal.get_sampling_freq(),
-                      info=signal.get_info(),
-                      start_time=signal.get_start_time() + degree / signal.get_sampling_freq())
+        diff = sig_2 - sig_1
+        out = _np.ones(len(signal_values))*diff[-1]
+        out[:len(diff)] = diff
 
         return out
     
-class PeakDetection(_Algorithm):
+class PeakDetection(_Algorithm): #xarray done
     """
     Estimate the maxima and the minima in the signal (in particular for periodic signals).
 
@@ -75,25 +81,28 @@ class PeakDetection(_Algorithm):
         Array containing values of the minima
     """
 
-    def __init__(self, delta, refractory=0, start_max=True):
+    def __init__(self, delta, refractory=0, start_max=True, return_peaks = True):
         delta = _np.array(delta)
         assert delta.ndim <= 1, "Delta value should be 1 or 0-dimensional"
         assert delta.all() > 0, "Delta value/s should be positive"
         assert refractory >= 0, "Refractory value should be non negative"
-        _Algorithm.__init__(self, delta=delta, refractory=refractory, start_max=start_max)
+        _Algorithm.__init__(self, delta=delta, refractory=refractory, start_max=start_max, return_peaks=return_peaks)
+        self.dimensions = {'time' : 0}
 
+    def __finalize__(self, res_sig, arr_windows):
+        return(res_sig)
     
     def algorithm(self, signal):
-
         params = self._params
         refractory = params['refractory']
         if refractory == 0:  # if 0 then do not skip samples
             refractory = 1
         else:  # else transform the refractory from seconds to samples
-            refractory = refractory * signal.get_sampling_freq()
+            refractory = refractory * signal.p.get_sampling_freq()
         look_for_max = params['start_max']
         delta = params['delta']
 
+        return_peaks = params['return_peaks']
         minp = []
         maxp = []
 
@@ -104,7 +113,7 @@ class PeakDetection(_Algorithm):
         if scalar:
             d = delta
 
-        s = signal.get_values().ravel()
+        s = signal.values.ravel()
         if not scalar and len(delta) != len(signal):
             print("delta vector's length differs from signal's one, returning empty.")
         else:
@@ -146,89 +155,19 @@ class PeakDetection(_Algorithm):
                         mx_pos_candidate = i
 
                         look_for_max = True
+        
+        out = _np.ones_like(signal.values)*_np.nan
+        
+        if return_peaks:
+            out[maxp] = signal.values[maxp]
+        else:
+            out[minp] = signal.values[minp]
+        
+        out_xarray = signal.copy(data = out)
 
-        return _np.array(maxp), _np.array(minp), _np.array(maxv), _np.array(minv)
+        return out_xarray
 
-class PeakSelection(_Algorithm):
-    """
-    Identify the start and the end indexes of each peak in the signal, using derivatives.
-
-    Parameters
-    ----------
-    indices : array, >=0
-        Array containing indexes (first column) and values (second column) of the maxima
-    win_pre : float, >0
-        Duration (in seconds) of interval before the peak that is considered to find the start of the peak
-    win_post : float, >0
-        Duration (in seconds) of interval after the peak that is considered to find the end of the peak
-    
-    Returns
-    -------
-    starts : array
-        Array containing start indexes
-    ends : array
-        Array containing end indexes
-    """
-
-    def __init__(self, indices, win_pre, win_post):
-        indices = _np.array(indices)
-        assert indices.ndim < 2, "Parameter indices has to be 1 or 0-dimensional"
-        assert indices.all() >= 0, "Parameter indices contains negative values"
-        assert win_pre > 0, "Window pre peak value should be positive"
-        assert win_post > 0, "Window post peak value should be positive"
-        _Algorithm.__init__(self, indices=indices, win_pre=win_pre, win_post=win_post)
-
-    
-    def algorithm(self, signal):
-        params = self._params
-        i_peaks = params['indices']
-        i_pre_max = int(params['win_pre'] * signal.get_sampling_freq())
-        i_post_max = int(params['win_post'] * signal.get_sampling_freq())
-
-        ZERO = 0.01
-
-        i_start = _np.empty(len(i_peaks), int)
-        i_stop = _np.empty(len(i_peaks), int)
-
-        signal_dt = Diff()(signal)
-        for i in range(len(i_peaks)):
-            i_pk = int(i_peaks[i])
-
-            if i_pk < i_pre_max:
-                i_st = 0
-                i_sp = i_pk + i_post_max
-            elif i_pk >= len(signal_dt) - i_post_max:
-                i_st = i_pk - i_pre_max
-                i_sp = len(signal_dt) - 1
-            else:
-                i_st = i_pk - i_pre_max
-                i_sp = i_pk + i_post_max
-
-            # find START
-            signal_dt_pre = signal_dt[i_st:i_pk]
-            i_pre = len(signal_dt_pre) - 1
-
-            # OR below is to allow small fluctuations (?)
-
-            while i_pre > 0 and (signal_dt_pre[i_pre] > 0 or abs(signal_dt_pre[i_pre]) <= ZERO):
-                i_pre -= 1
-
-            i_start[i] = i_st + i_pre + 1
-
-            # find STOP
-            signal_dt_post = signal_dt[i_pk: i_sp]
-            i_post = 1
-
-            # OR below is to allow small fluctuations (?)
-            while i_post < len(signal_dt_post) - 1 and (
-                            signal_dt_post[i_post] < 0 or abs(signal_dt_post[i_post]) <= ZERO):
-                i_post += 1
-
-            i_stop[i] = i_pk + i_post
-
-        return i_start, i_stop
-
-class SignalRange(_Algorithm):
+class SignalRange(_Algorithm): #xarray done
     """
     Estimate the local range of the signal by sliding windowing
 
@@ -254,6 +193,7 @@ class SignalRange(_Algorithm):
         assert win_len > 0, "Window length should be positive"
         assert win_step > 0, "Window step should be positive"
         _Algorithm.__init__(self, win_len=win_len, win_step=win_step, smooth=smooth)
+        self.dimensions = {'time' : 0}
 
     
     def algorithm(self, signal):
@@ -262,21 +202,22 @@ class SignalRange(_Algorithm):
         win_step = params['win_step']
         smooth = params['smooth']
 
-        fsamp = signal.get_sampling_freq()
+        fsamp = signal.p.get_sampling_freq()
         idx_len = int(win_len * fsamp)
         idx_step = int(win_step * fsamp)
         
+        signal_values = signal.values
         # print('>>> signalrange')
         if len(signal) < idx_len:
             print("Input signal is shorter than the window length.")
             return _np.max(signal) - _np.min(signal)
         else:
-            windows = _np.arange(0, len(signal) - idx_len + 1, idx_step)
-            deltas = _np.zeros(len(signal))
+            windows = _np.arange(0, len(signal_values) - idx_len + 1, idx_step)
+            deltas = _np.zeros(len(signal_values))
 
             curr_delta = 0
             for start in windows:
-                portion_curr = signal[start: start + idx_len]
+                portion_curr = signal_values[start: start + idx_len]
                 curr_delta = _np.max(portion_curr) - _np.min(portion_curr)
                 deltas[start:start + idx_len] = curr_delta
 
@@ -288,7 +229,7 @@ class SignalRange(_Algorithm):
             # print('<<< signalrange')
             return deltas
 
-class PSD(_Algorithm):
+class PSD(_Algorithm): #xarray done
     """
     Estimate the power spectral density (PSD) of the signal.
 
@@ -336,13 +277,17 @@ class PSD(_Algorithm):
         
         _Algorithm.__init__(self, method=method, nfft=nfft, window=window, min_order=min_order,
                        max_order=max_order, normalize=normalize, remove_mean=remove_mean, **kwargs)
-
+        
+        self.dimensions = 'special'
+        
     # TODO (Feature - Issue #15): consider point below:
     # A density spectrum considers the amplitudes per unit frequency.
     # Density spectra are used to compare spectra with different frequency resolution as the
     # magnitudes are not influenced by the resolution because it is per Hertz. The amplitude
     # spectra on the other hand depend on the chosen frequency resolution.
 
+    def __finalize__(self, res_sig, arr_window):
+        return res_sig
     
     def algorithm(self, signal):
         params = self._params
@@ -352,22 +297,24 @@ class PSD(_Algorithm):
         normalize = params['normalize']
         remove_mean = params['remove_mean']
 
-        assert not signal.is_masked(), "The PSD cannot be computed on masked signals"
-
-        fsamp = signal.get_sampling_freq()
+        fsamp = signal.p.get_sampling_freq()
         
-        signal = signal.get_values().ravel()
+        signal_values = signal.values.ravel()
         
         if remove_mean:
-            signal = signal - _np.mean(signal)
+            signal_values = signal_values - _np.mean(signal_values)
 
         if method == 'fft':
-            freqs, psd = _periodogram(signal, fs=fsamp, window = window, nfft=nfft, return_onesided=True)
+            freqs, psd = _periodogram(signal_values, fs=fsamp, window = window, nfft=nfft, return_onesided=True)
 
         elif method == 'welch':
-            freqs, psd = _welch(signal, fsamp, window=window, return_onesided=True, nfft=nfft)
+            freqs, psd = _welch(signal_values, fsamp, window=window, return_onesided=True, nfft=nfft)
 
         elif method == 'ar':
+            raise NotImplementedError
+            
+            #TODO CHECK THAT IT IS CORRECT
+            '''
             # print("Using AR method: results might not be comparable with other methods")
             #methods derived from: https://github.com/mpastell/pyageng
             def autocorr(x, lag=30):
@@ -385,12 +332,12 @@ class PSD(_Algorithm):
                 params = _np.linalg.inv(R).dot(r)
                 return(params)
                 
-            def AIC_yule(signal, order):
+            def AIC_yule(signal_values, order):
                 #this is from library spectrum: https://github.com/cokelaer/spectrum
-                N = len(signal)
+                N = len(signal_values)
                 assert N>=order, "The number of samples in the signal should be >= to the model order"
                 
-                C = _np.correlate(signal, signal, mode='full')/N
+                C = _np.correlate(signal_values, signal_values, mode='full')/N
                 r = C[N-1:]
                 
                 T0  = r[0]
@@ -425,62 +372,142 @@ class PSD(_Algorithm):
             min_order = params['min_order']
             max_order = params['max_order']
             
-            if len(signal) <= max_order:
+            if len(signal_values) <= max_order:
                 # print("Input signal too short: try another 'method', a lower 'max_order', or a longer signal")
                 freqs = _np.linspace(start=0, stop=fsamp / 2, num=1024)
                 p = _np.repeat(_np.nan, 1024)
                 return _np.squeeze(freqs), _np.squeeze(p)
-
+            
+            signal_values = signal.p.main_signal.values.ravel()
             orders = _np.arange(min_order, max_order + 1)
-            aics = [AIC_yule(signal, x) for x in orders]
+            aics = [AIC_yule(signal_values, x) for x in orders]
             best_order = orders[_np.argmin(aics)]
 
-            params = aryw(signal, best_order)
+            params = aryw(signal_values, best_order)
             a = _np.concatenate([_np.ones(1), -params])
             w, P = _freqz(1, a, whole = False, worN = nfft)
             
             psd = 2*_np.abs(P)/fsamp
+            '''
             
-        else:
-            print('Method not understood, using welch.')
-            bands_w, psd = _welch(signal, fsamp, nfft=nfft, scaling = 'spectrum')
 
         freqs = _np.linspace(start=0, stop=fsamp / 2, num=len(psd))
 
         # NORMALIZE
         if normalize:
             psd /= _np.sum(psd)
-        return _np.squeeze(freqs), _np.squeeze(psd)
+      
+        # out = signal.copy(deep=True)
+        # out = out.expand_dims({'freq':freqs}, axis=0)[:,0]
+        # out.name = signal.name+'_'+self.name
+        # out.values = _np.expand_dims(psd,[1,2])
+        
+        psd = _np.expand_dims(psd,[1, 2])
+        
+        out = signal.copy(deep=True)
+        out = out.expand_dims({'freq':freqs}, axis=0)[:,0]
+        out = out.drop('time')
+        # out.name = signal.name+'_'+self.name
+        # print(out)
+        
+        out.values = psd
+        return out
 
-class Wavelet(_Algorithm):
+    def __get_template__(self, signal):
+        nfft = self._params['nfft']
+        N = int(nfft/2 + 1)
+        out = _np.zeros(shape=(N, #1,
+                               signal.sizes['channel'], 
+                               signal.sizes['component']))
+        
+        fsamp = signal.p.get_sampling_freq()
+        
+        freqs = _np.linspace(start=0, stop=fsamp / 2, num=N)
+        
+        out = _xr.DataArray(out, dims=('freq', 'channel', 'component'), #'time', 'channel', 'component'),
+                            coords = {'freq': freqs,
+                                      # 'time': [signal.coords['time'].values[0]],
+                                      'channel': signal.coords['channel'],
+                                      'component': signal.coords['component']})
+        # print(out)
+        return {'channel': 1, 'component':1}, out
+    
+class Wavelet(_Algorithm): #xarray dones
     """
     TODO
     """
-    def __init__(self, detrend=True, mother = None, **kwargs):
+    def __init__(self, detrend=True, mother = None, J = None, **kwargs):
         mother = wave.Morlet(6) if mother is None else mother
-        _Algorithm.__init__(self, detrend = detrend, mother = mother, **kwargs)
+        
+        if J is None:
+            J = 68 #default value in cwt function
+        else:
+            assert J>1
+            
+        
+        _Algorithm.__init__(self, detrend = detrend, mother = mother, J=J, **kwargs)
+        self.dimensions = 'special'
+        
+    def __finalize__(self, res_sig, arr_window):
+        return res_sig
     
     def algorithm(self, signal):
         params = self._params
-        t = signal.get_times()
-        t0 = signal.get_start_time()
-        dt = 1/signal.get_sampling_freq()
+        
+        fsamp = signal.p.get_sampling_freq()
+        t = signal.p.get_times()
+        t0 = signal.p.get_start_time()
+        dt = 1/fsamp
         
         detrend = params['detrend']
+        signal_values = signal.values.ravel()
+        
         if detrend:
             #% detrend
-            p = _np.polyfit(t - t0, signal, 1)
-            signal = signal - _np.polyval(p, t - t0)
+            p = _np.polyfit(t - t0, signal_values, 1)
+            signal_values = signal_values - _np.polyval(p, t - t0)
             
         #% wavelet
+        J = params['J']
+        freqs = _np.logspace(1, _np.log10(fsamp/2), J+1)[::-1]
+        
         mother = params['mother']
-        w, scales, freqs, coi, fft, fftfreqs = wave.cwt(signal, dt, wavelet=mother)
+        w, scales, freqs, coi, fft, fftfreqs = wave.cwt(signal_values, dt, 
+                                                        wavelet=mother,
+                                                        J=J,
+                                                        freqs=freqs)
         
         power = (_np.abs(w)) ** 2
         power /= scales[:, None]
-        return freqs, power
+        power = _np.expand_dims(power,[2,3])
 
-class Maxima(_Algorithm):
+        out = signal.copy(deep=True)
+        out = out.expand_dims({'freq':freqs}, axis=0)
+        # out.name = signal.name+'_'#+self.name
+        
+        out.values = power
+        return out
+    
+    def __get_template__(self, signal):
+        J = self._params['J']
+        N = signal.shape[0]
+        out = _np.zeros(shape=(J+1, N,
+                               signal.sizes['channel'], 
+                               signal.sizes['component']))
+        
+        fsamp = signal.p.get_sampling_freq()
+        freqs = _np.logspace(1, _np.log10(fsamp/2), J+1)[::-1]
+        
+        out = _xr.DataArray(out, dims=('freq', 'time', 'channel', 'component'),
+                            coords = {'freq': freqs,
+                                      'time': signal.coords['time'].values,
+                                      'channel': signal.coords['channel'],
+                                      'component': signal.coords['component']})
+        # print(out)
+        return {'channel': 1, 'component':1}, out
+        
+
+class Maxima(_Algorithm): #xarray done
     """
     Find all local maxima in the signal
 
@@ -514,38 +541,39 @@ class Maxima(_Algorithm):
         if method == 'windowing':
             assert win_len > 0, "Window length should be positive"
             assert win_step > 0, "Window step should be positive"
-            _Algorithm.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
-        elif method == 'complete':
-            _Algorithm.__init__(self, method=method, refractory=refractory)
-        
-        
+        _Algorithm.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
+        self.dimensions = {'time' : 0}
+    
+    def __finalize__(self, res_sig, arr_window):
+        return(res_sig)
+    
     def algorithm(self, signal):
         params = self._params
         method = params['method']
+        signal_values = signal.values.ravel()
+        
         if method == 'complete':
             refractory = params['refractory']
             if refractory == 0:
                 refractory = 1
             else:
-                refractory = refractory * signal.get_sampling_freq()
+                refractory = refractory * signal.p.get_sampling_freq()
             idx_maxs = []
-            prev = signal[0]
+            prev = signal_values[0]
             k = 1
-            while k < len(signal) - 1 - refractory:
-                curr = signal[k]
-                nxt = signal[k + 1]
+            while k < len(signal_values) - 1 - refractory:
+                curr = signal_values[k]
+                nxt = signal_values[k + 1]
                 if (curr >= prev) and (curr >= nxt):
                     idx_maxs.append(k)
-                    prev = signal[k + 1 + refractory]
+                    prev = signal_values[k + 1 + refractory]
                     k = k + 2 + refractory
                 else:  # continue
-                    prev = signal[k]
+                    prev = signal_values[k]
                     k += 1
             idx_maxs = _np.array(idx_maxs).astype(int)
-            maxs = signal[idx_maxs]
-            return idx_maxs, maxs
         elif method == 'windowing':
-            fsamp = signal.get_sampling_freq()
+            fsamp = signal.p.get_sampling_freq()
             
             winlen = int(params['win_len'] * fsamp)
             winstep = int(params['win_step'] * fsamp)
@@ -554,7 +582,6 @@ class Maxima(_Algorithm):
             # TODO (Andrea): check that winstep >= 1
 
             idx_maxs = [_np.nan]
-            maxs = [_np.nan]
             if winlen < len(signal):
                 idx_start = _np.arange(0, len(signal) - winlen + 1, winstep)
             else:
@@ -562,21 +589,23 @@ class Maxima(_Algorithm):
 
             for idx_st in idx_start:
                 idx_sp = idx_st + winlen
-                if idx_sp > len(signal):
-                    idx_sp = len(signal)
-                curr_win = signal[idx_st: idx_sp]
+                if idx_sp > len(signal_values):
+                    idx_sp = len(signal_values)
+                curr_win = signal_values[idx_st: idx_sp]
                 curr_idx_max = _np.argmax(curr_win) + idx_st
                 curr_max = _np.max(curr_win)
 
                 # peak not already detected & peak not at the beginnig/end of the window:
                 if curr_idx_max != idx_maxs[-1] and curr_idx_max != idx_st and curr_idx_max != idx_sp - 1:
                     idx_maxs.append(curr_idx_max)
-                    maxs.append(curr_max)
             idx_maxs = idx_maxs[1:]
-            maxs = maxs[1:]
-            return _np.array(idx_maxs), _np.array(maxs)
-
-class Minima(_Algorithm):
+            
+        out = _np.ones_like(signal.values)*_np.nan
+        out[idx_maxs] = signal.values[idx_maxs]
+        out_xarray = signal.copy(data = out)
+        return out_xarray
+        
+class Minima(_Algorithm): #xarray done
     """
     Find all local minima in the signal
 
@@ -610,16 +639,20 @@ class Minima(_Algorithm):
         if method == 'windowing':
             assert win_len > 0, "Window length should be positive"
             assert win_step > 0, "Window step should be positive"
-            _Algorithm.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
-        elif method == 'complete':
-            _Algorithm.__init__(self, method=method, refractory=refractory)
-
+        _Algorithm.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
+        
+        
+    def __finalize__(self, res_sig, arr_window):
+        return(res_sig)
     
     def algorithm(self, signal):
         params = self._params
-        idx_mins, mins = Maxima(**params)(signal.clone_properties(-signal))
-        return idx_mins, -1 * mins
+        max_alg = Maxima(**params) 
+        #TODO: check
+        result = max_alg.algorithm(-signal)
+        return(result)
 
+#TODO from here
 class BootstrapEstimation(_Algorithm):
     """
     Perform a bootstrapped estimation of given statistical indicator
@@ -860,3 +893,82 @@ class FixIBI(_Algorithm):
                        start_time = signal.get_start_time(),
                        info = signal.get_info(), 
                        x_values=idx_ibi, x_type='indices')
+
+class PeakSelection(_Algorithm):
+    """
+    Identify the start and the end indexes of each peak in the signal, using derivatives.
+
+    Parameters
+    ----------
+    indices : array, >=0
+        Array containing indexes (first column) and values (second column) of the maxima
+    win_pre : float, >0
+        Duration (in seconds) of interval before the peak that is considered to find the start of the peak
+    win_post : float, >0
+        Duration (in seconds) of interval after the peak that is considered to find the end of the peak
+    
+    Returns
+    -------
+    starts : array
+        Array containing start indexes
+    ends : array
+        Array containing end indexes
+    """
+
+    def __init__(self, indices, win_pre, win_post):
+        indices = _np.array(indices)
+        assert indices.ndim < 2, "Parameter indices has to be 1 or 0-dimensional"
+        assert indices.all() >= 0, "Parameter indices contains negative values"
+        assert win_pre > 0, "Window pre peak value should be positive"
+        assert win_post > 0, "Window post peak value should be positive"
+        _Algorithm.__init__(self, indices=indices, win_pre=win_pre, win_post=win_post)
+
+    
+    def algorithm(self, signal):
+        params = self._params
+        i_peaks = params['indices']
+        i_pre_max = int(params['win_pre'] * signal.get_sampling_freq())
+        i_post_max = int(params['win_post'] * signal.get_sampling_freq())
+
+        ZERO = 0.01
+
+        i_start = _np.empty(len(i_peaks), int)
+        i_stop = _np.empty(len(i_peaks), int)
+
+        signal_dt = Diff()(signal)
+        for i in range(len(i_peaks)):
+            i_pk = int(i_peaks[i])
+
+            if i_pk < i_pre_max:
+                i_st = 0
+                i_sp = i_pk + i_post_max
+            elif i_pk >= len(signal_dt) - i_post_max:
+                i_st = i_pk - i_pre_max
+                i_sp = len(signal_dt) - 1
+            else:
+                i_st = i_pk - i_pre_max
+                i_sp = i_pk + i_post_max
+
+            # find START
+            signal_dt_pre = signal_dt[i_st:i_pk]
+            i_pre = len(signal_dt_pre) - 1
+
+            # OR below is to allow small fluctuations (?)
+
+            while i_pre > 0 and (signal_dt_pre[i_pre] > 0 or abs(signal_dt_pre[i_pre]) <= ZERO):
+                i_pre -= 1
+
+            i_start[i] = i_st + i_pre + 1
+
+            # find STOP
+            signal_dt_post = signal_dt[i_pk: i_sp]
+            i_post = 1
+
+            # OR below is to allow small fluctuations (?)
+            while i_post < len(signal_dt_post) - 1 and (
+                            signal_dt_post[i_post] < 0 or abs(signal_dt_post[i_post]) <= ZERO):
+                i_post += 1
+
+            i_stop[i] = i_pk + i_post
+
+        return i_start, i_stop

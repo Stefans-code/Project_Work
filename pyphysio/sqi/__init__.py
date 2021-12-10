@@ -1,9 +1,8 @@
 import numpy as _np
+import xarray as _xr
 from ..processing import Algorithm as _Algorithm
-from ..segmenters import _Segmenter,\
-    FixedSegments as _FixedSegments
 
-from ..segmenters import fmap as _fmap
+_xr.set_options(keep_attrs = True)
 
 class SignalQualityIndicator(_Algorithm):
     """ 
@@ -23,8 +22,9 @@ class SignalQualityIndicator(_Algorithm):
         '''
         assert len(threshold)==2
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
-        
+    
     def is_good(self, sqi_values):
+        # print('-----> is_good')
         params = self._params
         threshold = params['threshold']
         if sqi_values.ndim == 0:
@@ -34,24 +34,39 @@ class SignalQualityIndicator(_Algorithm):
             output = _np.zeros_like(sqi_values)
             idx_good = _np.where((sqi_values >= threshold[0]) & (sqi_values <= threshold[1]))
             output[idx_good] = 1
-            
+        
+        # print('<----- is_good')
         return(output)
         
-    def __call__(self, data):
-        #when applying non numpy methods (is it true?)
-        #apply_along_axis generates arrays with shape (1,:,n_samples)
-        #where the number of dimensions is the number of samples of the original signal
-        #this would fuck up everithing and we need to manage this
-        # if _np.max(data.shape) == data.ravel().shape[0]:
-        #     data = data.clone_properties(data.get_values().ravel())
-        #     values_out = _np.array(self.algorithm(data))
-        # else:
-        #     values_out = _np.apply_along_axis(self.algorithm, 0, data)
+    def __call__(self, signal, add_signal=True, dimensions=None):
+        # print('-----> SQI.__call__()')
+        values_out = super().__call__(signal, add_signal=add_signal, 
+                                      dimensions=dimensions)
         
-        values_out = super().__call__(data)
-        isgood = self.is_good(values_out)
+        signal_name = signal.p.main_signal.name
+        if add_signal:
+            indicator_name = signal_name+'_'+self.name
+        else:
+            indicator_name = signal_name
         
-        return(values_out, isgood)
+        #for SQI that are called from within other algorithms
+        if isinstance(values_out, _xr.Dataset):
+            isgood = self.is_good(values_out[indicator_name])
+            #convert isgood to dataarray
+            isgood_out = values_out[indicator_name].copy(data = isgood)
+        else:
+            values_out.name = indicator_name
+            isgood = self.is_good(values_out)
+            #convert isgood to dataarray
+            isgood_out = values_out.copy(data = isgood)
+        
+        
+        isgood_name = indicator_name +'_isgood'
+        isgood_out.name = isgood_name
+        
+        out = _xr.merge([values_out, isgood_out])
+        # print('<----- SQI.__call__()')
+        return(out)
 
 def compute_good_global(is_good, ratio):
     #at leat ratio% timepoints should be good
@@ -59,6 +74,7 @@ def compute_good_global(is_good, ratio):
     is_good_ = _np.sum(is_good_, axis=0, keepdims=True) >= ratio*is_good_.shape[0]
     return(is_good_)
 
+"""
 class ComputeQuality(_Algorithm):
     '''
     Automitize the computation of SQI and the decision about the overall signal quality of a signal.
@@ -152,3 +168,4 @@ class ComputeQuality(_Algorithm):
     
     def __repr__(self):
         return super(ComputeQuality, self).__repr__()
+"""    

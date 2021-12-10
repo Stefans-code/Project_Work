@@ -2,7 +2,7 @@
 # from __future__ import division
 import numpy as _np
 from . import Algorithm as _Algorithm
-from ..signal import Signal as _Signal
+from ..signal import create_signal
 from .filters import IIRFilter as _IIRFilter, DeConvolutionalFilter as _DeConvolutionalFilter, \
     ConvolutionalFilter as _ConvolutionalFilter
 from .tools import SignalRange as _SignalRange, PeakDetection as _PeakDetection, Minima as _Minima, \
@@ -48,7 +48,7 @@ class BeatFromBP(_Algorithm):
 
     def algorithm(self, signal):
         params = self._params
-        fsamp = signal.get_sampling_freq()
+        fsamp = signal.p.get_sampling_freq()
         bpm_max = params["bpm_max"]
         win_pre = params["win_pre"] * fsamp
         win_post = params["win_post"] * fsamp
@@ -56,6 +56,7 @@ class BeatFromBP(_Algorithm):
         fmax = bpm_max / 60
         refractory = 1 / fmax
 
+        times = signal.p.get_times()
         # STAGE 1 - EXTRACT BEAT POSITION SIGNAL
         # filtering
         signal_f = _IIRFilter(fp=1.2 * fmax, fs=3 * fmax, ftype='ellip')(signal)
@@ -63,7 +64,7 @@ class BeatFromBP(_Algorithm):
         # find range for the adaptive peak detection
         delta = 0.5 * _SignalRange(win_len=1.5 / fmax, win_step=1 / fmax)(signal_f)
         
-        delta = _np.array(delta)
+        delta = delta.values.ravel()
         
         #adjust for delta values equal to 0
         idx_delta_zeros = _np.where(delta==0)[0]
@@ -71,15 +72,16 @@ class BeatFromBP(_Algorithm):
         delta[idx_delta_zeros] = _np.min(delta[idx_delta_nozeros])
         
         # detection of candidate peaks
-        maxp, _, _, _ = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal_f)
-        maxp = _np.array(maxp).ravel()
+        maxima = _PeakDetection(delta=delta, refractory=refractory, start_max=True, return_peaks=True)(signal_f)
+        
+        maxp = _np.where(~_np.isnan(maxima.values))[0].ravel()
         
         if maxp[0] == 0:
             maxp = maxp[1:]
 
         # STAGE 2 - IDENTIFY PEAKS using the signal derivative
         # compute the signal derivative
-        dxdt = _np.array(_Diff()(signal))
+        dxdt = _Diff()(signal).values
 
         true_peaks = []
         # for each candidate peak find the correct peak
@@ -97,11 +99,13 @@ class BeatFromBP(_Algorithm):
             peak_obs = _np.argmax(obs)
             true_obs = dxdt[start_ + peak_obs: stop_]
             
-            true_obs = signal.clone_properties(abs(true_obs))
+            true_obs = create_signal(abs(true_obs), times = times[start_ + peak_obs: stop_])
             
             # find the 'first minimum' (zero) the derivative (peak)
-            idx_mins, _ = _Minima(win_len=0.1, win_step=0.025, method='windowing')(true_obs)
-            idx_mins = _np.array(idx_mins).ravel()
+            minima = _Minima(win_len=0.1, win_step=0.025, method='windowing')(true_obs)
+            
+            
+            idx_mins = _np.where(_np.isnan(minima.values))[0].ravel()
 
             if len(idx_mins) >= 1:
                 peak = idx_mins[0]

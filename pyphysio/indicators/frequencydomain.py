@@ -6,9 +6,6 @@ from ..processing.tools import PSD as PSD
 
 # __author__ = 'AleB'
 
-
-
-
 class PowerInBand(_Algorithm):
     """
     Estimate the power in given frequency band
@@ -37,15 +34,19 @@ class PowerInBand(_Algorithm):
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
         _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
+        # print('-----> PowerInBand')
         params = self._params
-        freq, powers = PSD(**params)(signal)
-        i_min = _np.searchsorted(freq.data, params["freq_min"])
-        i_max = _np.searchsorted(freq.data, params["freq_max"])
-        return _np.sum(powers[i_min:i_max] )
-    
-
+        psd = PSD(**params)(signal, dimensions='none')
+        freq = psd.coords['freq'].values
+        power = psd.values.ravel()
+        i_min = _np.searchsorted(freq, params["freq_min"])
+        i_max = _np.searchsorted(freq, params["freq_max"])
+        result = _np.sum(power[i_min:i_max], keepdims=True)
+        # print('<----- PowerInBand')
+        return result
 
 class PeakInBand(_Algorithm):
     """
@@ -75,17 +76,23 @@ class PeakInBand(_Algorithm):
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
         _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
+        self.dimensions = {'time' : 1}
     
     def algorithm(self, signal):
+        
         params = self._params
-        freq, powers = PSD(**params)(signal)
         
-        i_min = _np.searchsorted(freq.data, params["freq_min"])
-        i_max = _np.searchsorted(freq.data, params["freq_max"])
+        psd = PSD(**params)(signal)
         
-        f_band = freq.data[i_min:i_max]
-        p_band = powers.data[i_min:i_max]
+        freq = psd.coords['freq'].values
+        power = psd.values.ravel()
+        
+        i_min = _np.searchsorted(freq, params["freq_min"])
+        i_max = _np.searchsorted(freq, params["freq_max"])
+        
+        f_band = freq[i_min:i_max]
+        p_band = power[i_min:i_max]
         f_peak = f_band[_np.argmax(p_band)]
         
-        return float(f_peak)
+        return _np.array([f_peak])
 

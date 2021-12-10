@@ -5,8 +5,6 @@ import numpy as _np
 from ..processing import Algorithm as _Algorithm
 
 from ..processing.tools import Diff as _Diff
-from ..signal import Signal as _Signal
-
 
 # __author__ = 'AleB'
 
@@ -17,9 +15,10 @@ class Mean(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-
+        self.dimensions = {'time' : 1}
+        
     def algorithm(self, signal):
-        return _np.nanmean(signal.get_values())
+        return _np.mean(signal.values, keepdims=True)
 
 
 class Min(_Algorithm):
@@ -28,10 +27,11 @@ class Min(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     @classmethod
-    def algorithm(cls, data, params):
-        return _np.nanmin(data.get_values())
+    def algorithm(cls, signal):
+        return _np.min(signal.values, keepdims=True)
 
 
 class Max(_Algorithm):
@@ -40,9 +40,10 @@ class Max(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.nanmax(signal.get_values())
+        return _np.max(signal.values, keepdims=True)
 
 
 class Range(_Algorithm):
@@ -51,9 +52,10 @@ class Range(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return Max()(signal) - Min()(signal)
+        return Max()(signal).values - Min()(signal).values
 
 
 class Median(_Algorithm):
@@ -62,9 +64,10 @@ class Median(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.median(signal.get_values())
+        return _np.median(signal.values, keepdims=True)
 
 
 class StDev(_Algorithm):
@@ -73,9 +76,10 @@ class StDev(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.nanstd(signal.get_values())
+        return _np.std(signal.values, keepdims=True)
 
 
 class Sum(_Algorithm):
@@ -84,9 +88,10 @@ class Sum(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.nansum(signal.get_values())
+        return _np.sum(signal.values, keepdims=True)
 
 
 class AUC(_Algorithm):
@@ -95,10 +100,11 @@ class AUC(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        fsamp = signal.get_sampling_freq()
-        return (1. / fsamp) * Sum()(signal)
+        fsamp = signal.p.get_sampling_freq()
+        return Sum()(signal).values*(1./fsamp)
     
 class DetrendedAUC(_Algorithm):
     """
@@ -106,18 +112,21 @@ class DetrendedAUC(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        fsamp = signal.get_sampling_freq()
+        fsamp = signal.p.get_sampling_freq()
         
         #detrend
-        t_signal = signal.get_times()
-        intercept = signal[0]
-        coeff = (signal[-1] - signal[0]) / signal.get_duration()
+        signal_values = signal.values
+        t_signal = signal.p.get_times()
+        intercept = signal_values[0]
+        coeff = (signal_values[-1] - signal_values[0]) / signal.p.get_duration()
         baseline = coeff*(t_signal - t_signal[0]) + intercept
         
         signal_ = signal - baseline
-        return (1. / fsamp) * Sum()(signal_)
+        auc = (1. / fsamp) * Sum()(signal_).values
+        return auc
 
 
 class RMSSD(_Algorithm):
@@ -126,6 +135,7 @@ class RMSSD(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         diff = _Diff()(signal)
@@ -138,10 +148,14 @@ class SDSD(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         diff = _Diff()(signal)
         return StDev()(diff)
+
+'''
+# I never really used these...
 
 # TODO: FIX Histogram missing
 class Triang(_Algorithm):
@@ -213,3 +227,4 @@ class TINN(_Algorithm):
 
             m = b[_np.argmax(h) + pos + 1]
             return m - n
+'''

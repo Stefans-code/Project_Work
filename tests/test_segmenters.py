@@ -31,5 +31,5 @@ segmenter = segm.FixedSegments(0.5, 2, timeline=stim, drop_mixed=False, drop_cut
 result = segm.fmap(segmenter, [td.Mean(), td.StDev()], signal)
 
 #%%
-segmenter = segm.RandomFixedSegments(10, 2, timeline=stim, drop_mixed=False, drop_cut=False)
+segmenter = segm.RandomFixedSegments(10, 2, timeline=stim, drop_mixed=False, drop_cut=False)result
 result = segm.fmap(segmenter, [td.Mean(), td.StDev()], signal)

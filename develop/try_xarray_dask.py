@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _subplots,\
      tight_layout as _tight_layout, subplots_adjust as _subplots_adjust,\
          xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
+from copy import copy
 
 import numpy as _np
 import pandas as _pd
@@ -343,10 +344,43 @@ class Algorithm(object):
         if dimensions is None: 
             dimensions = self.dimensions
         
+        print(dimensions)
         if dimensions == 'none': 
             #process all information at once
             #used to avoid chunks in internal calls
             signal_out = self.__mapper_func__(signal)
+            
+        elif dimensions == 'noparallel':
+            print('here')
+            signal_stacked = signal.stack(new=['channel', 'component']).transpose('new', ...)
+        
+            #create a roller over new dimension
+            #(so to process one channel x component at a time)
+            rr = signal_stacked.rolling(new=1)
+    
+            results = []
+            for label, block in rr:
+                result = self.algorithm(block)
+                
+                result = _np.expand_dims(_np.array(result), 1)
+                result_xr = _xr.DataArray(result, dims=('time', 'new'))
+                result_xr = result_xr.assign_coords({'new':block.coords['new']})
+                
+                if result_xr.sizes['time'] == block.sizes['time']:
+                    result_xr = result_xr.assign_coords({'time':block.coords['time']})
+                elif result_xr.sizes['time'] == 1:
+                    
+                    t_start = block.coords['time'].values[0]
+                
+                    result_xr = result_xr.assign_coords(time=[t_start])
+                
+                results.append(result_xr)
+                
+            
+            signal_out = _xr.concat(results, 'new')
+            signal_out = signal_out.transpose('time', ...)
+            signal_out = signal_out.unstack()
+            return(signal_out)
             
         else: #use mapper
             if dimensions == 'special':
@@ -525,7 +559,7 @@ class Normalize(Algorithm):
         # print(signal_values.shape)
         # print(signal)
         
-        mean = Mean(add_signal=True)(signal, dimensions='none')
+        mean = Mean(add_signal=True)(signal, dimensions='noparallel')
         # print(type(mean))
         # print(mean.shape)
         
@@ -615,12 +649,9 @@ class PSD(Algorithm): #xarray done
 
 #%%
 result = PSD('welch')(signal)
+
 #%% NIRS
 from pynirs.loaders import load_nirx
-import pyphysio.sqi.sqi as sqi
-import xarray as xr
-from pynirs.quality_control.sqi import ScalpCoupling, ScalpCouplingPower, CVWavelengths, \
-    CardiacPowerRatio, compute_cardiac_freq
 
 nirs = load_nirx('/home/bizzego/UniTn/data/fnirs_sexism/original/F01_1', False)
 
@@ -630,3 +661,34 @@ nirs_ = Normalize()(nirs)
 
 #%%
 nirs_ = Mean()(nirs, dimensions = {'time':1, 'component':1})
+
+#%%
+# from pyphysio.processing import Algorithm as SignalQualityIndicator
+class ScalpCoupling(Algorithm):
+    def __init__(self, threshold, **kwargs):
+        Algorithm.__init__(self, threshold=threshold, **kwargs)
+        self.dimensions = {'time':1, 'component': 1}
+        
+    def algorithm(self, signal): 
+        print('-----> ', self.name)
+        print(type(signal))
+        print(signal.shape)
+        
+        # signal_proc = filt.IIRFilter(fp=[0.5, 2.5], fs=[0.1, 3], ftype='ellip')(signal, dimensions='noparallel')
+        
+        # print(signal_proc)
+        #2 NORMALIZE
+        signal_proc = Normalize()(signal, dimensions='noparallel').values
+        
+        print(signal_proc)
+        data1 = signal_proc[:,0, 0]
+        data2 = signal_proc[:,0, 1]
+        corr = float(_np.correlate(data1, data2, 
+                                   mode='valid')/len(data1))
+
+        result = _np.array([1])
+        print('<----- ', self.name)
+        return result
+
+#%%
+result = ScalpCoupling([0.5, 1])(nirs)

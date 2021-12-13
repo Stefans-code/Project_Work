@@ -72,36 +72,48 @@ class Algorithm(object):
                 #will include all dimensions except for those
                 #along which the algorithm is applied
                 
+                # print(signal)
+                # print(dimensions)
+                # # 
                 chunk_dict = {}
                 template_shape = []
+                template_coords = {}
+                
                 for dim in ('time', 'channel', 'component'):
-                    out_dim = signal.sizes[dim]
+                    size_in_dim = signal.sizes[dim]
                     
                     if dim not in dimensions.keys():
                         #the dimension is not used
                         chunk_dict[dim] = 1
+                        size_out_dim = size_in_dim
+                        coords = signal.coords[dim].values
                     else:
-                        if dimensions[dim] != 0:
-                            out_dim = dimensions[dim]
-                   
-                    template_shape.append(out_dim)
+                        if dimensions[dim] == 0:
+                            size_out_dim = size_in_dim
+                            coords = signal.coords[dim].values
+                        else:
+                            size_out_dim = dimensions[dim]
+                            if size_out_dim <= size_in_dim:
+                                coords = signal.coords[dim].values[:size_out_dim]
+                    template_coords[dim] = coords
+                    template_shape.append(size_out_dim)
                 
                 #create template
                 output = _np.zeros(template_shape)
-                template = create_signal(output, 
-                                         times=signal.coords['time'].values[:output.shape[0]],
-                                         name='random')
-                template = template.p.main_signal
-                template.name = signal_name
+                template = _xr.DataArray(output, dims = ('time', 'channel', 'component'),
+                                         coords=template_coords,
+                                         name=signal.name)
                 
+                template.name = signal_name
+            
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
     
             mapper =  _xr.map_blocks(self.__mapper_func__, 
-                                      signal_dask, 
+                                      signal_dask.copy(deep=True), 
                                       template = template_dask)
             #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
-            signal_out = mapper.load(scheduler='distributed') #distributed, single-threaded
+            signal_out = mapper.load(scheduler='sync') #distributed, single-threaded
 
         
         #The user will mainly call Algorithms on a Dataset
@@ -166,8 +178,8 @@ class Algorithm(object):
         #                 expected_shape.append(dimensions[dim]) #typically 1
             
         #     result_shape = numpy_out.shape
-        print(result.shape)
-        print(type(signal_in))
+        # print(result.shape)
+        # print(type(signal_in))
         if result.ndim == 1:
             result = _np.expand_dims(result, [1,2])
 

@@ -7,6 +7,7 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
      tight_layout as _tight_layout, subplots_adjust as _subplots_adjust,\
          xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
 
+from copy import copy
 import numpy as _np
 import pandas as _pd
 
@@ -312,18 +313,6 @@ class Algorithm(object):
         self.set_params(**kwargs)
         self.dimensions = {}
     
-    @property
-    def name(self):
-        return(self.__class__.__name__)
-    
-    def __mapper_func__(self, signal_in):
-        # print('-----> Algorithm.__mapper_func__')
-        result_numpy = self.algorithm(signal_in)
-        result_out = self.__finalize__(result_numpy, signal_in)
-        # print('<----- Algorithm.__mapper_func__')
-        
-        return(result_out)
-
     def __call__(self, signal_in, add_signal=True, dimensions=None):
         #This function iteratively calls the self.algorithm on each signal
         #(i.e. channel+component)
@@ -338,120 +327,52 @@ class Algorithm(object):
         
         signal_name = signal.name
         #from here, signal is a DataArray
-        
-        #rely on algorithm self.dimensions to know how to proceed
-        if dimensions is None: 
-            dimensions = self.dimensions
-        
-        if dimensions == 'none': 
-            #process all information at once
-            #used to avoid chunks in internal calls
-            signal_out = self.__mapper_func__(signal)
-            
-        else: #use mapper
-            if dimensions == 'special':
-                #special algorithms that return DataArrays with non conventional
-                #dimensions (e.g. frequencies)
-                
-                #get chunk_dict and template from the algorithm's class
-                chunk_dict, template = self.__get_template__(signal)
-                
-            else: #typical usage
-                #will include all dimensions except for those
-                #along which the algorithm is applied
-                chunk_dict = {} 
-                
-                #create a template of the output
-                template_shape = []
-                for dim in ('time', 'channel', 'component'):
-                    out_dim = signal.sizes[dim]
                     
-                    if dim not in dimensions.keys():
-                        #the dimension is not used
-                        chunk_dict[dim] = 1
-                    else:
-                        if dimensions[dim] != 0:
-                            out_dim = dimensions[dim]
-                   
-                    template_shape.append(out_dim)
-                
-                output = _np.zeros(template_shape)
-                template = create_signal(output, 
-                                         times=signal.coords['time'].values[:output.shape[0]],
-                                         name='random')
-                
-                #template should be a DataArray
-                template = template.p.main_signal
-                #assign name
-                #TODO: needed?
-                template.name = signal_name
-                
-            #chunks of signal and template
-            signal_dask = signal.chunk(chunk_dict)
-            template_dask = template.chunk(chunk_dict)
-    
-            #apply the algorithm in parallel
-            #on each dimension of chunk_dict
-            mapper =  _xr.map_blocks(self.__mapper_func__, 
-                                      signal_dask, 
-                                      template = template_dask)
-            signal_out = mapper.load(scheduler='single-threaded')
+        #typical usage
+        #will include all dimensions except for those
+        #along which the algorithm is applied
+        # collapse_dims = [] 
         
-        # #assign associated coordinates
-        # for dim in ('time', 'channel', 'component'):
-        #     print(dim)
-        #     assoc_coords = list(signal_in.coords[dim].coords.keys())
-        #     print(assoc_coords)
-        #     for coord in assoc_coords:
-        #         if coord != dim:  #we already added the main coordinates
-        #             print(coord)
-        #             print(signal_in)
-        #             print(signal_out)
-        #             if signal_out.sizes[dim] == signal_in.sizes[dim]:
-        #                 signal_out = signal_out.assign_coords({coord: (dim, signal_in.coords[coord].values)})
-                    
-        #             elif signal_out.sizes[dim] == 1 and signal_in.sizes[dim] != 1:
-                        
-        #                 #there has been a windowing operation
-        #                 coord_start = signal_in.coords[coord].values[0]
-        #                 coord_stop = signal_in.coords[coord].values[-1]
-                            
-        #                 signal_out = signal_out.assign_coords({f'{coord}_start': (dim, [coord_start])})
-        #                 signal_out = signal_out.assign_coords({f'{coord}_stop': (dim, [coord_stop])})
-                                                                   
-        #signal_out is DataArray
+        signal_stacked = signal.stack(new=['channel', 'component']).transpose('new', ...)
         
-        #The user will mainly call Algorithms on a Dataset
-        #so it will expect a Dataset as result
-        if isinstance(signal_in, _xr.Dataset):
-            #add windowing info
-            for dim in signal_out.dims:    
-                if signal_out.sizes[dim] == 1 and signal_in.sizes[dim] != 1:
-                    #there has been a windowing operation
-                    coord_start = signal_in.coords[dim].values[0]
-                    coord_stop = signal_in.coords[dim].values[-1]
-                        
-                    signal_out = signal_out.assign_coords({f'{dim}_start': (dim, [coord_start])})
-                    signal_out = signal_out.assign_coords({f'{dim}_stop': (dim, [coord_stop])})
-            #transform to Dataset
-            signal_ds_out = signal_in.copy(deep=True)
+        #create a roller over new dimension
+        #(so to process one component at a time)
+        rr = signal_stacked.rolling(new=1)
+
+        results = []
+        for label, block in rr:
+            # print(block)
+            # print(label)
+            result = self.algorithm(block)
             
-            signal_name = signal.name
-            output_name = f'{signal_name}_{self.name}'
-            signal_ds_out = signal_ds_out.assign({output_name:signal_out})
-            signal_ds_out.attrs['MAIN'] = output_name
+            result = _np.expand_dims(_np.array(result), 1)
+            result_xr = _xr.DataArray(result, dims=('time', 'new'))
+            result_xr = result_xr.assign_coords({'new':block.coords['new']})
             
-            if add_signal:
-                signal_ds_out.attrs['history'].append(self.name)
-            else:
-                signal_ds_out = signal_ds_out.drop(signal_name)
-                signal_ds_out.attrs['history'] = [output_name]
+            if result_xr.sizes['time'] == block.sizes['time']:
+                result_xr = result_xr.assign_coords({'time':block.coords['time']})
+            elif result_xr.sizes['time'] == 1:
+                
+                t_start = block.coords['time'].values[0]
             
-            return(signal_ds_out)
+                result_xr = result_xr.assign_coords(time=[t_start])
+            
+            results.append(result_xr)
+            
+            
+            # result_xr = arr_window.copy(deep=True)
+            
+        # #recompose
+        signal_out = _xr.concat(results, 'new')
+        # return(signal_out)
         
+        signal_out = signal_out.transpose('time', ...)
+
+        # if len(dimensions)>1:
+        signal_out = signal_out.unstack()
         return(signal_out)
     
-    def __finalize__(self, result, signal_in, dimensions=None):
+    def __finalize__(self, result, signal_in):
         '''
         General function to obtain a coherent output 
         from the calls to self.algorithm.
@@ -464,7 +385,7 @@ class Algorithm(object):
         if result.ndim == 1:
             result = _np.expand_dims(result, [1,2])
         
-        signal_out = _xr.DataArray(result, 
+        signal_out = _xr.DataArray(result,
                                    dims=('time', 'channel', 'component'), 
                                    name=signal_in.name)
         
@@ -484,7 +405,7 @@ class Algorithm(object):
         # print('<----- Algorithm.__finalize__')
 
         return(signal_out)
-        
+        # 
     def set_params(self, **kwargs):
         self._params.update(kwargs)
 
@@ -503,14 +424,14 @@ class Mean(Algorithm):
         self.dimensions = {'time':1}
 
     def algorithm(self, signal):
-        print('-----> Mean.algorithm')
+        # print('-----> Mean.algorithm')
         # print(type(signal))
         # print(signal.shape)
         result = _np.mean(signal.values.ravel())
         # print(type(result))
         result = _np.array([float(result)])
-        print(result.shape)
-        print('<----- Mean.algorithm')
+        # print(result.shape)
+        # print('<----- Mean.algorithm')
         return result
 
 class Normalize(Algorithm):
@@ -536,9 +457,11 @@ class Normalize(Algorithm):
         return result
             
 #%%
+results = Mean()(signal, dimensions={'channel':1})
+
+#%%
 result = Normalize()(signal)
 
-result_mean = Mean()(signal)#, add_signal=False, dimensions={'time':1, 'component':1})
 
 #%% PSD
 from scipy.signal import welch as _welch

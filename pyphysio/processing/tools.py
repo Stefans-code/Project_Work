@@ -13,6 +13,20 @@ from ..signal import create_signal
 
 _xr.set_options(keep_attrs = True)
 
+
+def __finalize_special__(res_sig):
+    # print('----->', self.name, 'finalize')
+    original_coords = list(res_sig.coords)
+    res_sig = res_sig.reset_coords()
+    dimensions = list(res_sig.dims)
+    for c in original_coords:
+        if c not in dimensions:
+            res_sig = res_sig.drop(c)
+    res_sig = res_sig.to_array()
+    res_sig = res_sig.squeeze(dim='variable').drop('variable')
+    # print('<-----', self.name, 'finalize')
+    return res_sig
+
 class Diff(_Algorithm): #xarray done
     """
     Computes the differences between adjacent samples.
@@ -90,7 +104,8 @@ class PeakDetection(_Algorithm): #xarray done
         self.dimensions = {'time' : 0}
 
     def __finalize__(self, res_sig, arr_windows):
-        return(res_sig)
+        return __finalize_special__(res_sig)
+        
     
     def algorithm(self, signal):
         params = self._params
@@ -287,9 +302,10 @@ class PSD(_Algorithm): #xarray done
     # spectra on the other hand depend on the chosen frequency resolution.
 
     def __finalize__(self, res_sig, arr_window):
-        return res_sig
+        return __finalize_special__(res_sig)
     
     def algorithm(self, signal):
+        # print('----->', self.name)
         params = self._params
         method = params['method']
         nfft = params['nfft'] if "nfft" in params else None
@@ -389,7 +405,6 @@ class PSD(_Algorithm): #xarray done
             
             psd = 2*_np.abs(P)/fsamp
             '''
-            
 
         freqs = _np.linspace(start=0, stop=fsamp / 2, num=len(psd))
 
@@ -411,6 +426,7 @@ class PSD(_Algorithm): #xarray done
         # print(out)
         
         out.values = psd
+        # print('<-----', self.name)
         return out
 
     def __get_template__(self, signal):
@@ -449,7 +465,7 @@ class Wavelet(_Algorithm): #xarray dones
         self.dimensions = 'special'
         
     def __finalize__(self, res_sig, arr_window):
-        return res_sig
+        return __finalize_special__(res_sig)
     
     def algorithm(self, signal):
         params = self._params
@@ -545,7 +561,7 @@ class Maxima(_Algorithm): #xarray done
         self.dimensions = {'time' : 0}
     
     def __finalize__(self, res_sig, arr_window):
-        return(res_sig)
+        return __finalize_special__(res_sig)
     
     def algorithm(self, signal):
         params = self._params
@@ -643,7 +659,7 @@ class Minima(_Algorithm): #xarray done
         
         
     def __finalize__(self, res_sig, arr_window):
-        return(res_sig)
+        return __finalize_special__(res_sig)
     
     def algorithm(self, signal):
         params = self._params

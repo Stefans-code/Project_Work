@@ -111,7 +111,7 @@ class IIRFilter(_Algorithm):
         self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
-        print('----->', self.name)
+        # print('----->', self.name)
         # print(signal.shape)
         params = self._params
         fsamp = signal.p.get_sampling_freq()
@@ -134,7 +134,7 @@ class IIRFilter(_Algorithm):
                 print('Filter parameters allow no solution. Returning original signal.')
                 return signal.values
 
-        print('<-----', self.name)
+        # print('<-----', self.name)
         return sig_filtered
 
 class NotchFilter(_Algorithm):

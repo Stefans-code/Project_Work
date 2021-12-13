@@ -324,7 +324,7 @@ def fmap(segmenter, algorithms, signal):
     
     result = []
     
-    # signal_name = signal.p.main_signal.name
+    signal_name = signal.p.main_signal.name
     #for all algorithms
     for alg in algorithms:
         # print(alg.name)
@@ -332,10 +332,11 @@ def fmap(segmenter, algorithms, signal):
         for i_seg, seg in enumerate(segmenter): #this generates segments from the segmenter
             # print(seg.get_begin_time())    
             signal_segment = seg(signal)
-            
-            res = alg(signal_segment, add_signal=False)
-            # res = res.drop(signal_name)
-            res = res.dropna(dim='time', how='all')
+            res = alg(signal_segment, add_signal=True)
+            res = res.drop(signal_name)
+            res = res.dropna(dim='time', 
+                             how='all', 
+                             subset=[f'{signal_name}_{alg.name}'])
             res = res.assign_coords(label=('time', [seg.get_label()]))
             
             result_algorithm.append(res)

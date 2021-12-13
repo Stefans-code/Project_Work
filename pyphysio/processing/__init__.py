@@ -10,7 +10,9 @@ try:
     # #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
 except:
     scheduler = 'single-thread'
-    
+
+print(scheduler)
+
 class Algorithm(object):
     def __init__(self, **kwargs):
         self._params = {}
@@ -28,6 +30,7 @@ class Algorithm(object):
         # print('-----> Algorithm.__mapper_func__')
         result_numpy = self.algorithm(signal_in)
         result_out = self.__finalize__(result_numpy, signal_in)
+        # print(result_out.coords)
         # print('<----- Algorithm.__mapper_func__')
         return(result_out)
 
@@ -108,12 +111,12 @@ class Algorithm(object):
             
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
-    
+
             mapper =  _xr.map_blocks(self.__mapper_func__, 
                                       signal_dask.copy(deep=True), 
                                       template = template_dask)
             #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
-            signal_out = mapper.load(scheduler='sync') #distributed, single-threaded
+            signal_out = mapper.load(scheduler=scheduler) #distributed, single-threaded
 
         
         #The user will mainly call Algorithms on a Dataset
@@ -128,6 +131,7 @@ class Algorithm(object):
                         
                     signal_out = signal_out.assign_coords({f'{dim}_start': (dim, [coord_start])})
                     signal_out = signal_out.assign_coords({f'{dim}_stop': (dim, [coord_stop])})
+            
             #transform to Dataset
             signal_ds_out = signal_in.copy(deep=True)
             
@@ -154,30 +158,8 @@ class Algorithm(object):
         from the calls to self.algorithm.
         The output should be a dataaarry or dataset
         '''
-        
-        #dimensions should be either 'none'
-        #or the dimensions dict used to call the algorithm
-        
-        # print('-----> Algorithm.__finalize__')
-        # if dimensions != 'none':
-
-        #     expected_shape = []
-        #     for dim in ('time', 'channel', 'component'):
-        #         in_dim = signal_in.sizes[dim]
                 
-        #         if dim not in dimensions.keys():
-        #             #the algorithm is not applies along the dimension
-        #             # so expect the same shape in output
-        #             expected_shape.append(in_dim)
-        #         else:
-        #             #the shape can be changed
-        #             if dimensions[dim] == 0:
-        #                 #shape is not altered
-        #                 expected_shape.append(in_dim)
-        #             else:
-        #                 expected_shape.append(dimensions[dim]) #typically 1
-            
-        #     result_shape = numpy_out.shape
+        # print('-----> Algorithm.__finalize__')
         # print(result.shape)
         # print(type(signal_in))
         if result.ndim == 1:

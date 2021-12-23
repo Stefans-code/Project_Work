@@ -159,9 +159,16 @@ class PyphysioDataArray(object):
         t_ = self.get_times()
         v_ = self.get_values()
         linestyle='solid'
+        
+        n_ch = self.get_nchannels()
+        n_comp = self.get_ncomponents()
+        
         #if single signal, then plot
-        if len(self.da.dims) == 1:
-            
+        print(n_ch)
+        if n_ch == 1:
+            print(v_.shape)
+            v_ = v_[:,0,:]
+            print(v_.shape)
             #TODO if existing figure has many axes, 
             #replicate the plot on each axis
             

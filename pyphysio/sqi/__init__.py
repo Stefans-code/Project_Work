@@ -23,10 +23,12 @@ class SignalQualityIndicator(_Algorithm):
         assert len(threshold)==2
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
     
-    def is_good(self, sqi_values):
+    def is_good(self, sqi_dataarray):
         # print('-----> is_good')
+        sqi_values = sqi_dataarray.values
         params = self._params
         threshold = params['threshold']
+        
         if sqi_values.ndim == 0:
             output = (sqi_values >= threshold[0]) & (sqi_values <= threshold[1])
             output = _np.array(output)
@@ -34,6 +36,9 @@ class SignalQualityIndicator(_Algorithm):
             output = _np.zeros_like(sqi_values)
             idx_good = _np.where((sqi_values >= threshold[0]) & (sqi_values <= threshold[1]))
             output[idx_good] = 1
+            #propagate nans
+            idx_nan = _np.where(_np.isnan(sqi_values))
+            output[idx_nan] = _np.nan
         
         # print('<----- is_good')
         return(output)

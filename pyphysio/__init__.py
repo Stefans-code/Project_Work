@@ -7,22 +7,24 @@ import numpy as _np
 import os as _os
 import xarray as _xr
 import pandas as _pd
-# from .processing.tools import *
-# from .processing.filters import *
-# from .processing.estimators import *
+from .signal import *
 
-# from .indicators.timedomain import *
-# from .indicators.frequencydomain import *
-# from .indicators.peaks import *
-# from .indicators.nonlinear import *
+from .processing.tools import *
+from .processing.filters import *
+from .processing.estimators import *
 
-# from .segmenters import *
-# from .signal import *
-# from .interactive import Annotate
+from .indicators.timedomain import *
+from .indicators.frequencydomain import *
+from .indicators.peaks import *
+from .indicators.nonlinear import *
+
+from .segmenters import *
+
+#from .interactive import Annotate
 
 # from .sqi import *
-# from .sqi.sqi import *
-#from .tests import TestData
+from .sqi.sqi import *
+# from .tests import TestData
 
 print("Please cite:")
 print("Bizzego et al. (2019) 'pyphysio: A physiological signal processing library for data science approaches in physiology', SoftwareX")

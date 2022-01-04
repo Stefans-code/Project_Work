@@ -1,10 +1,9 @@
 # coding=utf-8
 import numpy as _np
-import numpy.ma as _ma
 from . import SignalQualityIndicator as _SignalQualityIndicator
 from ..indicators.frequencydomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
-from ..processing.filters import ImputeNAN as _ImputeNAN
+# from ..processing.filters import ImputeNAN as _ImputeNAN
 from ..processing.tools import Diff as _Diff
 
 class Kurtosis(_SignalQualityIndicator):
@@ -47,7 +46,7 @@ class DerivativeEnergy(_SignalQualityIndicator):
         self.dimensions = {'time':1}
     
     def algorithm(self, signal):
-        signal_values = signal.values.ravel()
+        # signal_values = signal.values.ravel()
         degree = int(signal.p.get_sampling_freq()*self.params['dt'])
         de = _np.sqrt(_np.mean(_np.power(_Diff(degree=degree)(signal).values, 2)))
         de_out = _np.array([[de]])

@@ -1,7 +1,5 @@
 # coding=utf-8
 import numpy as _np
-import pandas as _pd
-import numpy.ma as _ma
 import xarray as _xr
 from copy import copy
 
@@ -40,9 +38,9 @@ def create_signal(data, times=None, sampling_freq=None,
     else: #defined by sampling freq
         assert sampling_freq > 0
         
-        decimals = _np.max([5, int(_np.ceil(_np.log10(sampling_freq)))])
-        times = _np.round(_np.arange(0, data.shape[0])/sampling_freq + start_time, 
-                          decimals = decimals)
+        # decimals = _np.max([5, int(_np.ceil(_np.log10(sampling_freq)))])
+        times = _np.arange(0, data.shape[0])/sampling_freq + start_time#, 
+                          # decimals = decimals)
         
     #start_time is times[0]
     start_time = times[0]
@@ -67,6 +65,9 @@ def create_signal(data, times=None, sampling_freq=None,
     signal.attrs['history'] = [name]
     
     return signal
+
+
+#TODO: add resampling and interpolate
 
 @_xr.register_dataarray_accessor('p')
 class PyphysioDataArray(object):
@@ -134,22 +135,16 @@ class PyphysioDataArray(object):
         return self.get_end_time() - self.get_start_time()
 
     def has_multi_channels(self):
-        return(len(self.da.dims)>1)
+        return(self.get_nchannels()>1)
     
     def get_nchannels(self):
-        if self.has_multi_channels():
-            return(int(_np.max(self.da.coords['channel'])+1))
-        else:
-            return(1)
-    
+        return(len(self.da.coords['channel']))
+        
     def has_multi_components(self):
-        return(len(self.da.dims)>2)
+        return(self.get_ncomponents()>1)
     
     def get_ncomponents(self):
-        if self.has_multi_components():
-            return(int(_np.max(self.da.coords['component'])+1))
-        else:
-            return(1)
+        return(len(self.da.coords['component']))
     
     def get_info(self):
         return self.da.attrs
@@ -164,15 +159,13 @@ class PyphysioDataArray(object):
         n_comp = self.get_ncomponents()
         
         #if single signal, then plot
-        print(n_ch)
         if n_ch == 1:
-            print(v_.shape)
             v_ = v_[:,0,:]
-            print(v_.shape)
+
             #TODO if existing figure has many axes, 
             #replicate the plot on each axis
             
-            #if good then use asolid line
+            #if good then use a solid line
             #else use a dotted line
             # linestyle='solid'
             # if self.has_good():

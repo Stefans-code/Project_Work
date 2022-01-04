@@ -1,17 +1,16 @@
 import xarray as _xr
 import numpy as _np
-from ..signal import create_signal
+# from ..signal import create_signal
 
 #enable dask?
 try:
-    import dask
+    from dask import __name__ as _
     scheduler = 'threads'
     # available schedulers:
     # #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
+    print('Using dask. Scheduler: threads')
 except:
     scheduler = 'single-thread'
-
-print(scheduler)
 
 class Algorithm(object):
     def __init__(self, **kwargs):

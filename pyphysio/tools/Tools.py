@@ -1223,11 +1223,10 @@ class OptimizeBateman(_Tool):
             return None
 
         if complete:
-            x0_min, loss_min, niter,\
-            nfuncalls, warnflag, allvec = _opt.fmin(loss_function, x0,
+            opt_result = _opt.fmin(loss_function, x0,
                                                     args=(signal, delta),
                                                     full_output=True)
-            return x0, x0_min, loss, loss_min, exit_code, warnflag
+            return x0, loss, opt_result
         else:
             return x0, loss, exit_code
 
@@ -1406,7 +1405,7 @@ class OptimizeBateman(_Tool):
             if idx_grid[-1] != len(driver) - 1:
                 idx_grid = _np.r_[idx_grid, len(driver) - 1]
 
-            driver_grid = _UnevenlySignal(driver[idx_grid], fsamp, "dEDA", driver.get_start_time(), x_values=idx_grid,
+            driver_grid = _UnevenlySignal(driver[idx_grid], fsamp, driver.get_start_time(), x_values=idx_grid,
                                           x_type='indices', duration=signal.get_duration())
             if len(idx_grid) >= 4:
                 tonic = driver_grid.to_evenly(kind='cubic')

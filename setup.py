@@ -13,7 +13,7 @@ setup(
               'pyphysio.sqi',
               ],
     package_data={'pyphysio.tests': ['data/*']},
-    version='2.4.2',
+    version='2.4.3',
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP...)',
     author='MPBA FBK',
     author_email='andrea.bizzego@unitn.it',

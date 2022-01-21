@@ -31,7 +31,9 @@ setup(
         'numpy',
         'scipy',
         'matplotlib',
-        'pycwt'
+        'pycwt',
+        'dask',
+        'netcdf4'
     ],
     requires=[
         'pytest',

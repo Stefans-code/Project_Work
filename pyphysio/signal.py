@@ -67,8 +67,6 @@ def create_signal(data, times=None, sampling_freq=None,
     return signal
 
 
-#TODO: add resampling and interpolate
-
 @_xr.register_dataarray_accessor('p')
 class PyphysioDataArray(object):
     def __init__(self, xdataarray):
@@ -149,6 +147,14 @@ class PyphysioDataArray(object):
     def get_info(self):
         return self.da.attrs
 
+    def resample(self, f_out):
+        t_start = self.get_start_time()
+        t_end = self.get_end_time()
+        
+        t_out = _np.arange(t_start, t_end, 1/f_out)
+        resampled_dataarray = self.da.interp(time=t_out, method='cubic')
+        return(resampled_dataarray)
+    
     def plot(self, marker=None, ncols=4, sharey=True):
         fig = _gcf()
         t_ = self.get_times()
@@ -291,6 +297,16 @@ class PyPhysioDataset(object):
     def get_info(self):
         return self.ds.attrs
 
+    #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
+    def resample(self, f_out):
+        t_start = self.main_signal.p.get_start_time()
+        t_end = self.main_signal.p.get_end_time()
+        
+        t_out = _np.arange(t_start, t_end, 1/f_out)
+        resampled_dataset = self.ds.interp(time=t_out, method='cubic')
+        return(resampled_dataset)
+    
+        
     def plot(self, marker=None, ncols=4, sharey=True):
         self.main_signal.p.plot(marker=marker,
                                 ncols=ncols,

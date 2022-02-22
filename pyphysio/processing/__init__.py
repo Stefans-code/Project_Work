@@ -69,6 +69,7 @@ class Algorithm(object):
                 
                 #get chunk_dict and template from the algorithm's class
                 chunk_dict, template = self.__get_template__(signal)
+
                 
             else:#typical usage
                 #will include all dimensions except for those
@@ -107,7 +108,7 @@ class Algorithm(object):
                                          name=signal.name)
                 
                 template.name = signal_name
-            
+
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
 
@@ -116,26 +117,44 @@ class Algorithm(object):
                                       template = template_dask)
             #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
             signal_out = mapper.load(scheduler=scheduler) #distributed, single-threaded
-
         
         #The user will mainly call Algorithms on a Dataset
         #so it will expect a Dataset as result
         if isinstance(signal_in, _xr.Dataset):
             #add windowing info
+            strange_result = False
             for dim in signal_out.dims:
-                if signal_out.sizes[dim] == 1 and signal_in.sizes[dim] != 1:
-                    #there has been a windowing operation
-                    coord_start = signal_in.coords[dim].values[0]
-                    coord_stop = signal_in.coords[dim].values[-1]
-                        
-                    signal_out = signal_out.assign_coords({f'{dim}_start': (dim, [coord_start])})
-                    signal_out = signal_out.assign_coords({f'{dim}_stop': (dim, [coord_stop])})
+                if dim in list(signal_in.coords):
+                    if signal_out.sizes[dim] == 1 and signal_in.sizes[dim] != 1:
+                        #there has been a windowing operation
+                        coord_start = signal_in.coords[dim].values[0]
+                        coord_stop = signal_in.coords[dim].values[-1]
+                            
+                        signal_out = signal_out.assign_coords({f'{dim}_start': (dim, [coord_start])})
+                        signal_out = signal_out.assign_coords({f'{dim}_stop': (dim, [coord_stop])})
+                    
+                    elif signal_out.sizes[dim] != signal_in.sizes[dim]:
+                        #there has been a different type of change in the shape
+                        # we should just convert the result to a dataset and return it
+                        # so we flag this as strange_result
+                        strange_result = True
             
             #transform to Dataset
-            signal_ds_out = signal_in.copy(deep=True)
-            
+            #ISSUE: if "expanding" a coordinate (e.g. see pyphysio.FunctionalSeparationFilter)
+            #these steps reset the original shape (e.g. from 4 to 2)
+                
             signal_name = signal.name
             output_name = f'{signal_name}_{self.name}'
+            
+            if strange_result:
+                signal_ds_out = signal_out.to_dataset(name = output_name)
+                signal_ds_out.attrs['MAIN'] = output_name
+                signal_ds_out.attrs['history'] = [output_name]
+                signal_ds_out.p.main_signal.attrs = signal_in.p.main_signal.attrs
+                return(signal_ds_out)
+            
+            signal_ds_out = signal_in.copy(deep=True)
+            
             signal_ds_out = signal_ds_out.assign({output_name:signal_out})
             signal_ds_out.attrs['MAIN'] = output_name
             
@@ -145,9 +164,12 @@ class Algorithm(object):
                 signal_ds_out = signal_ds_out.drop(signal_name)
                 signal_ds_out.attrs['history'] = [output_name]
             
+            signal_ds_out.p.main_signal.attrs = signal_in.p.main_signal.attrs
+            
             # print('<-----', self.name, '__call__ [Dataset]')
             return(signal_ds_out)
         
+        signal_out.attrs = signal_in.attrs
         # print('<-----', self.name, '__call__')
         return(signal_out)        
         

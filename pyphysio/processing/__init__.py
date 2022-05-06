@@ -17,8 +17,6 @@ class Algorithm(object):
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
         
-        #if not specified algorithms operate on 1d signals
-        #and return a signal with the same size
         self.dimensions = {}#'time': 0}
     
     @property
@@ -27,13 +25,20 @@ class Algorithm(object):
         
     def __mapper_func__(self, signal_in):
         # print('-----> Algorithm.__mapper_func__')
+        
+        #TODO: WHY IS IT NEEDED?
+        #? to allow personalizing the creation of the output xarray
+        # from the outpur of the algorithm?
+        
         result_numpy = self.algorithm(signal_in)
         result_out = self.__finalize__(result_numpy, signal_in)
         # print(result_out.coords)
         # print('<----- Algorithm.__mapper_func__')
         return(result_out)
 
-    def __call__(self, signal_in, add_signal=True, dimensions=None):
+    def __call__(self, signal_in, add_signal=True, dimensions=None, scheduler=scheduler):
+        #TODO: EXPLAIN HOW IT WORKS
+        
         # print('----->', self.name, '__call__')
         #This function iteratively calls the self.algorithm on each signal
         #(i.e. channel+component)

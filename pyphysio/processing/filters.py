@@ -183,7 +183,6 @@ class NotchFilter(_Algorithm):
         
         return sig_filtered
         
-
 class FIRFilter(_Algorithm):
     """
     Filter the input signal using a Finite Impulse Response filter.
@@ -306,7 +305,6 @@ class KalmanFilter(_Algorithm):
 
         return(x_out)
 
-
 class ImputeNAN(_Algorithm):
     def __init__(self, win_len=5, allnan='nan'):
         assert win_len>0, "win_len should be >0"
@@ -373,7 +371,6 @@ class ImputeNAN(_Algorithm):
                 s[SEG] = s_nan
         
         return(s)
-
 
 class RemoveSpikes(_Algorithm):
     def __init__(self, K=2, N=1, dilate=0, D=0.95, method='step'):
@@ -515,7 +512,6 @@ class ConvolutionalFilter(_Algorithm):
         signal_out = signal_f[n:-n]
         return signal_out
 
-
 class DeConvolutionalFilter(_Algorithm):
     """
     Filter a signal by deconvolution with a given impulse response function (IRF).
@@ -571,8 +567,6 @@ class DeConvolutionalFilter(_Algorithm):
         else:
             print('Deconvolution method not implemented. Returning original signal.')
             out = s
-        print(len(out))
-        print(len(signal))
         return out
 
 

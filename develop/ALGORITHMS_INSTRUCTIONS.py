@@ -16,7 +16,9 @@ class NewAlgorithm(_Algorithm):
                             **kwargs)
         
         
-        #operating dimensions
+        #operating dimensions to regulate the "rolling" mechanism
+        #all dimensions not specified are "rolled" (executed in parallel)
+        
         self.dimensions= {}
         
         # dictionary where:
@@ -24,9 +26,11 @@ class NewAlgorithm(_Algorithm):
         #     item is an int that defines the new size of the dimension;
         #         0 means that the size is the same as the input
         #         1 means that the output is a scalar (e.g indicator, mean)
-         
+        # OR 'none' to avoid the "rolling" mechanism
+        
         # Examples:
-        #     {'time': 0}: operate along each individual 1d signal
+        #     {'time': 0}: operate along each individual 1d signal 
+        #                  (rolls on channels x components)
         #     {'time': 1}: indicator: computes a scalar from 1d signal.
         #     {'time': X}: some special cases may occurr when the output has 
         #                   some other fixed or known size
@@ -34,6 +38,8 @@ class NewAlgorithm(_Algorithm):
         #     {'time': X, 'components': Y}: uses information across components
         #     #TODO: other examples!!!
         
+    
+    def __get_template(self, signal_in):
         
     def algorithm(cls, signal_in):
         
@@ -88,7 +94,7 @@ class VerboseAlgorithm(_Algorithm):
         print('>>> __call__')
         print(type(signal_in))
         print(signal_in.dims)
-        result = _Algorithm.__call__(self, signal_in, add_signal, dimensions, scheduler='synchronous')
+        result = _Algorithm.__call__(self, signal_in, add_signal, dimensions=dimensions, scheduler='synchronous')
         print(type(result))
         print(result.dims)
         print('<<< __call__')
@@ -250,7 +256,6 @@ class AverageComponentsChannels(_Algorithm):
 
 signal_ = AverageComponentsChannels()(signal)
 
-
 #%%
 class MeanComponents(_Algorithm):
     """
@@ -261,7 +266,7 @@ class MeanComponents(_Algorithm):
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
         self.dimensions = {'time' : 1,
-                           'component': 1} #average across components reduces the number of components to 1
+                           'component': 1} 
 
     def algorithm(self, signal):
         signal_values = signal.values

@@ -161,18 +161,19 @@ class BeatFromECG(_Algorithm):
         assert delta >= 0, "Delta value should be positive (or equal to 0 if automatically computed)"
         assert 0 < k < 1, "K coefficient must be in the range (0,1)"
         _Algorithm.__init__(self, bpm_max=bpm_max, delta=delta, k=k)
+        self.dimensions = {'time':0}
 
     def algorithm(self, signal):
-        # print('ibi', signal.shape)
         params = self._params
         bpm_max, delta, k = params["bpm_max"], params["delta"], params["k"]
         fmax = bpm_max / 60
-
+        
+        fsamp = signal.p.get_sampling_freq()
+        
         if delta == 0:
             delta = k * _SignalRange(win_len=2 / fmax, win_step=0.5 / fmax, smooth=False)(signal)
-            delta = _np.array(delta)
+            delta = _np.array(delta).ravel()
         
-        # print('delta')
         #adjust for delta values equal to 0
         idx_delta_zeros = _np.where(delta==0)[0]
         idx_delta_nozeros = _np.where(delta>0)[0]
@@ -180,29 +181,26 @@ class BeatFromECG(_Algorithm):
         
         refractory = 1 / fmax
         
-        # print(signal.shape)
-        maxp, _, _, _ = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal)
+        #find beats
+        maxp = _PeakDetection(delta=delta, refractory=refractory, start_max=True)(signal)
         maxp = _np.array(maxp).ravel()
         
         if maxp[0] == 0:
             maxp = maxp[1:]
 
-        fsamp = signal.get_sampling_freq()
-
-        ibi_values = _np.diff(maxp) / fsamp
-        ibi_values = _np.r_[ibi_values[0], ibi_values]
-        idx_ibi = _np.array(maxp).astype(int)
+        idx_beats = _np.where(~_np.isnan(maxp))[0]
         
-        new_start_time = signal.get_start_time() + idx_ibi[0]/signal.get_sampling_freq()
-        idx_ibi = idx_ibi - idx_ibi[0]
-
-        ibi = _Signal(values=ibi_values,
-                      sampling_freq=fsamp,
-                      start_time=new_start_time,
-                      x_values=idx_ibi,
-                      x_type='indices')
+        times_beats = idx_beats / fsamp
         
-        return ibi
+        ibi_values = _np.diff(times_beats)
+
+        ibi_values = _np.insert(ibi_values, 0, ibi_values[0])
+        
+        ibi_scaffold = _np.nan* _np.zeros(len(signal.values))
+        
+        ibi_scaffold[idx_beats] = ibi_values
+        
+        return ibi_scaffold
 
 
 # PHASIC ESTIMATION

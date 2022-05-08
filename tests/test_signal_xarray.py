@@ -39,7 +39,6 @@ print(s.p.get_info())
 #%% test segment_time
 result = Normalize()(s)
 
-
 #%%
 data = np.random.uniform(size = (1000, 1,1))
 sampling_freq = 7.81

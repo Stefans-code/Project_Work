@@ -10,8 +10,18 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
          xlim as _xlim, gcf as _gcf, sca as _sca, gca as _gca
 
 
+#TODO:
+#    tonumpy: return t and values
 def create_signal(data, times=None, sampling_freq=None,
                   start_time=0, name='signal', info={}):
+    
+    
+    #TODO: manage special cases for unevenly signals
+    # > unevenly if nan in the data? what if imputation?
+    # - set attribute type (or function) to check if they are unevenly
+    # - get_values should ignore nans if they are the same across channels and components
+    # - plot using '.'
+    # resample: first dropna
     
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
     

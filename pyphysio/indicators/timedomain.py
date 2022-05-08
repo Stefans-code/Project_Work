@@ -117,15 +117,18 @@ class DetrendedAUC(_Algorithm):
     def algorithm(self, signal):
         fsamp = signal.p.get_sampling_freq()
         
-        #detrend
         signal_values = signal.values
-        t_signal = signal.p.get_times()
-        intercept = signal_values[0]
-        coeff = (signal_values[-1] - signal_values[0]) / signal.p.get_duration()
-        baseline = coeff*(t_signal - t_signal[0]) + intercept
         
-        signal_ = signal - baseline
-        auc = (1. / fsamp) * Sum()(signal_).values
+        #detrend
+        idx = _np.arange(len(signal_values))[:, _np.newaxis, _np.newaxis]
+        intercept = signal_values[[0]]
+        coeff = (signal_values[[-1]] - signal_values[[0]]) / len(signal_values)
+        
+        baseline = intercept + coeff*idx
+        
+        signal_ = signal_values - baseline
+        
+        auc = (1. / fsamp) * _np.sum(signal_, keepdims=True)
         return auc
 
 
@@ -138,8 +141,10 @@ class RMSSD(_Algorithm):
         self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        diff = _Diff()(signal)
-        return _np.sqrt(_np.nanmean(_np.power(diff.get_values(), 2)))
+        
+        signal_values = signal.p.get_values()
+        diff = _np.diff(signal_values, axis=0)
+        return _np.sqrt(_np.mean(_np.power(diff, 2), keepdims=True))
 
 
 class SDSD(_Algorithm):

@@ -51,19 +51,18 @@ class Normalize(_Algorithm):
         method = params['norm_method']
         signal_values = signal.values
         if method == "mean":
-            return signal_values - _Mean()(signal, dimensions='none').values
+            return signal_values - _Mean()(signal).values
         elif method == "standard":
-            mean = _Mean()(signal, dimensions='none').values
-            std = _StDev()(signal, dimensions='none').values
-            
+            mean = _Mean()(signal).values
+            std = _StDev()(signal).values
             result = (signal_values - mean) / std
             return(result)
             
         elif method == "min":
-            return signal_values - _Min()(signal, dimensions='none').values
+            return signal_values - _Min()(signal).values
         elif method == "maxmin":
-            return (signal_values - _Min()(signal, dimensions='none').values) / \
-                (_Max()(signal, dimensions='none').values - _Min()(signal, dimensions='none').values)
+            return (signal_values - _Min()(signal).values) / \
+                (_Max()(signal).values - _Min()(signal).values)
         elif method == "custom":
             result = (signal_values - params['norm_bias']) / params['norm_range']
             return result
@@ -175,7 +174,7 @@ class NotchFilter(_Algorithm):
         b, a = _iirnotch(f, Q, fsamp)
         
         sig_filtered = _filtfilt(b, a, signal.values.ravel(), axis=0)
-        print(sig_filtered.shape)
+
         if safe:
             if _np.isnan(sig_filtered[0]):
                 print('Filter parameters allow no solution. Returning original signal.')
@@ -258,7 +257,6 @@ class FIRFilter(_Algorithm):
         if N%2 ==0:
             N+=1
             
-        print(N)
         b = _firwin(N, wp, width=Dsamp, window=wtype, pass_zero=pass_zero)
         sig_filtered = _convolve(signal.values.ravel(), b, mode='same')
 
@@ -288,7 +286,7 @@ class KalmanFilter(_Algorithm):
         
         sz = len(signal)
         
-        rr = _SignalRange(win_len, win_step)(signal, dimensions='none').values
+        rr = _SignalRange(win_len, win_step)(signal).values
         Q = _np.nanmedian(rr)/ratio
             
         P = 1
@@ -568,7 +566,6 @@ class DeConvolutionalFilter(_Algorithm):
             print('Deconvolution method not implemented. Returning original signal.')
             out = s
         return out
-
 
 '''
 # TODO: check and convert to xarray

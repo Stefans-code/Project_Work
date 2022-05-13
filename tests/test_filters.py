@@ -14,7 +14,7 @@ filters = [filt.Normalize(),
            filt.ImputeNAN(),
            filt.RemoveSpikes()]
 
-def test_filters(signal):
+def _test_filters(signal):
     assert isinstance(signal, xr.Dataset)
     assert isinstance(signal.p.main_signal, xr.DataArray)
     
@@ -25,13 +25,14 @@ def test_filters(signal):
         assert result.p.main_signal.values.ndim == signal.p.get_values().ndim
         
 
-sizes = [1000, (1000), (1000,1), (1000,1,1),
-         (1000, 5), (1000, 5, 2)]
-
-sampling_freqs = [100]
-
-for size in sizes:
-    for sampling_freq in sampling_freqs:
-        data = np.random.uniform(size = size)
-        signal = create_signal(data, sampling_freq=sampling_freq, name = 'random')
-        test_filters(signal)
+def test_filter():
+    sizes = [1000, (1000), (1000,1), (1000,1,1),
+             (1000, 5), (1000, 5, 2)]
+    
+    sampling_freqs = [100]
+    
+    for size in sizes:
+        for sampling_freq in sampling_freqs:
+            data = np.random.uniform(size = size)
+            signal = create_signal(data, sampling_freq=sampling_freq, name = 'random')
+            _test_filters(signal)

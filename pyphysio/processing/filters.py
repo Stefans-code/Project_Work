@@ -8,8 +8,6 @@ from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_de
 from . import Algorithm as _Algorithm
 # from ..Utility import abstractmethod as _abstract
 from .tools import SignalRange as _SignalRange
-from collections import Sequence
-# __author__ = 'AleB'
 
 class Normalize(_Algorithm):
     """

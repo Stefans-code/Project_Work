@@ -12,59 +12,70 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 
 #TODO:
 #    tonumpy: return t and values
+
+#TODO: manage special cases for unevenly signals
+# > unevenly if nan in the data? what if imputation?
+# - set attribute type (or function) to check if they are unevenly
+# - get_values should ignore nans if they are the same across channels and components
+# - plot using '.'
+# resample: first dropna
+
 def create_signal(data, times=None, sampling_freq=None,
                   start_time=0, name='signal', info={}):
+    '''
+    Create an xarray object where the coordinates are (time, channel, component)
+    representing a signal.
+
+    Parameters
+    ----------
+    data : numpy.array (or list)
+        Values of the signal
+    times : TYPE, optional
+        DESCRIPTION. The default is None.
+    sampling_freq : TYPE, optional
+        DESCRIPTION. The default is None.
+    start_time : TYPE, optional
+        Ignored if times are provided. The default is 0.
+    name : 'str', optional
+        Name of the signal. The default is 'signal'.
+    info : dict, optional
+        Dictionary where to store custom information. The default is {}.
+
+    Returns
+    -------
+    signal : TYPE
+        DESCRIPTION.
+
+    '''    
     
-    
-    #TODO: manage special cases for unevenly signals
-    # > unevenly if nan in the data? what if imputation?
-    # - set attribute type (or function) to check if they are unevenly
-    # - get_values should ignore nans if they are the same across channels and components
-    # - plot using '.'
-    # resample: first dropna
-    
+    #TODO: names for channels/components?
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
+    assert data.ndim <= 3, "data should have maximum 3 dimensions"
     
     if data.ndim == 1:
         data = _np.expand_dims(data, [1,2])
     elif data.ndim == 2:
         data = _np.expand_dims(data, 2)
-    elif data.ndim > 3:
-        raise ValueError
-    
-    
+   
     if sampling_freq is None: #defined by times
-        assert len(times) == data.shape[0]
+        assert len(times) == data.shape[0], "Length of provided times is different from the number of datapoints"
         
-        # #check if there is a fsamp, else fsamp is None (unevenly)
-        # dt = _np.unique(_np.diff(times))
-        
-        # if len(dt)==1:
-        #     sampling_freq = 1/dt[0]
-        
-        #create pandas TimedeltaIndex times
-        # times = _pd.to_timedelta(times, unit='s') #NOT OK FOR SAVING
-        
-    else: #defined by sampling freq
+    else: 
         assert sampling_freq > 0
-        
-        # decimals = _np.max([5, int(_np.ceil(_np.log10(sampling_freq)))])
-        times = _np.arange(0, data.shape[0])/sampling_freq + start_time#, 
-                          # decimals = decimals)
+        times = _np.arange(0, data.shape[0])/sampling_freq + start_time
         
     #start_time is times[0]
     start_time = times[0]
         
     #check dims and set coordinates
     dims = ('time', 'channel', 'component')
-    
     coords = {'time':times}
     
     for i_dim in _np.arange(1,3): #assign coords to other dimensions
         coords[dims[i_dim]] = _np.arange(data.shape[i_dim])
         
-    # info['sampling_freq'] = sampling_freq
-    # info['start_time'] = start_time
+    info['sampling_freq'] = sampling_freq
+    info['start_time'] = start_time
         
     signal = _xr.DataArray(data, dims = dims,
                            coords = coords, 

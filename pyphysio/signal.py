@@ -59,7 +59,7 @@ def create_signal(data, times=None, sampling_freq=None,
    
     if sampling_freq is None: #defined by times
         assert len(times) == data.shape[0], "Length of provided times is different from the number of datapoints"
-        
+        sampling_freq = 'unevenly'
     else: 
         assert sampling_freq > 0
         times = _np.arange(0, data.shape[0])/sampling_freq + start_time

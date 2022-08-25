@@ -45,11 +45,13 @@ class BeatFromBP(_Algorithm):
         assert 0 < win_pre <= 1, "Window pre peak value should be in (0 and 1]"
         assert 0 < win_post <= 1, "Window post peak value should be in (0 and 1]"
         _Algorithm.__init__(self, bpm_max=bpm_max, win_pre=win_pre, win_post=win_post)
+        self.dimensions = {'time':0}
 
     def algorithm(self, signal):
         params = self._params
         fsamp = signal.p.get_sampling_freq()
         bpm_max = params["bpm_max"]
+        #TODO account for bpm_max when assigning win_pre / win_post
         win_pre = params["win_pre"] * fsamp
         win_post = params["win_post"] * fsamp
 
@@ -103,9 +105,8 @@ class BeatFromBP(_Algorithm):
             
             # find the 'first minimum' (zero) the derivative (peak)
             minima = _Minima(win_len=0.1, win_step=0.025, method='windowing')(true_obs)
-            
-            
-            idx_mins = _np.where(_np.isnan(minima.values))[0].ravel()
+                        
+            idx_mins = _np.where(~_np.isnan(minima.p.main_signal.values))[0].ravel()
 
             if len(idx_mins) >= 1:
                 peak = idx_mins[0]
@@ -115,19 +116,14 @@ class BeatFromBP(_Algorithm):
                 pass
 
         # STAGE 3 - FINALIZE computing IBI
-        ibi_values = _np.diff(true_peaks) / fsamp
-        ibi_values = _np.r_[ibi_values[0], ibi_values]
-        idx_ibi = _np.array(true_peaks).astype(int)
-        t0 = signal.get_times()[idx_ibi[0]]
-        idx_ibi = idx_ibi - idx_ibi[0]
+        t_ibi = true_peaks / fsamp
+        v_ibi = _np.diff(t_ibi)
+        v_ibi = _np.insert(v_ibi, 0, v_ibi[0])
 
-        ibi = _Signal(values=ibi_values,
-                      sampling_freq=fsamp,
-                      start_time=t0,
-                      info=signal.get_info(),
-                      x_values=idx_ibi,
-                      x_type='indices')
-        return ibi
+        ibi_scaffold = _np.nan* _np.zeros(len(signal.values))
+        ibi_scaffold[true_peaks] = v_ibi
+        
+        return ibi_scaffold
 
 
 class BeatFromECG(_Algorithm):
@@ -199,7 +195,7 @@ class BeatFromECG(_Algorithm):
         ibi_scaffold = _np.nan* _np.zeros(len(signal.values))
         
         ibi_scaffold[idx_beats] = ibi_values
-        
+
         return ibi_scaffold
 
 

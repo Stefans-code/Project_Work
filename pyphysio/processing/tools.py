@@ -656,7 +656,7 @@ class Minima(_Algorithm): #xarray done
             assert win_len > 0, "Window length should be positive"
             assert win_step > 0, "Window step should be positive"
         _Algorithm.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
-        
+        self.dimensions = {'time' : 0}
         
     def __finalize__(self, res_sig, arr_window):
         return __finalize_special__(res_sig)
@@ -664,8 +664,7 @@ class Minima(_Algorithm): #xarray done
     def algorithm(self, signal):
         params = self._params
         max_alg = Maxima(**params) 
-        #TODO: check
-        result = max_alg.algorithm(-signal)
+        result = -1*max_alg.algorithm(-signal)
         return(result)
 
 #TODO from here

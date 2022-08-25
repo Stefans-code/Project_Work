@@ -12,6 +12,10 @@ try:
 except:
     scheduler = 'single-thread'
 
+def set_scheduler(new_scheduler):
+    global scheduler
+    scheduler = new_scheduler
+
 class Algorithm(object):
     def __init__(self, **kwargs):
         self._params = {}
@@ -77,7 +81,7 @@ class Algorithm(object):
                                  coords=template_coords,
                                  name=signal.name)
         
-        template.name = signal
+        # template.name = signal
         return(chunk_dict, template)
     
     def __call__(self, signal_in, add_signal=True, dimensions=None, scheduler=scheduler):
@@ -148,7 +152,6 @@ class Algorithm(object):
             signal = signal_in.copy(deep=True)
         
         signal_name = signal.name
-        
         
         if dimensions is None: 
             dimensions = self.dimensions
@@ -252,7 +255,6 @@ class Algorithm(object):
             formatted as a xarray.DataArray, which is then composed by __call__ 
             to create the general outcome (returned to the user).
         '''
-        
         
         result_numpy = self.algorithm(signal_in)
         result_out = self.__finalize__(result_numpy, signal_in)

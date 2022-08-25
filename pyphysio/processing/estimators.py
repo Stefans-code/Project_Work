@@ -48,26 +48,27 @@ class BeatFromBP(_Algorithm):
         self.dimensions = {'time':0}
 
     def algorithm(self, signal):
+        
         params = self._params
         fsamp = signal.p.get_sampling_freq()
         bpm_max = params["bpm_max"]
         #TODO account for bpm_max when assigning win_pre / win_post
         win_pre = params["win_pre"] * fsamp
         win_post = params["win_post"] * fsamp
-
+        
         fmax = bpm_max / 60
         refractory = 1 / fmax
 
         times = signal.p.get_times()
+
         # STAGE 1 - EXTRACT BEAT POSITION SIGNAL
         # filtering
         signal_f = _IIRFilter(fp=1.2 * fmax, fs=3 * fmax, ftype='ellip')(signal)
-        
         # find range for the adaptive peak detection
         delta = 0.5 * _SignalRange(win_len=1.5 / fmax, win_step=1 / fmax)(signal_f)
         
         delta = delta.values.ravel()
-        
+
         #adjust for delta values equal to 0
         idx_delta_zeros = _np.where(delta==0)[0]
         idx_delta_nozeros = _np.where(delta>0)[0]
@@ -99,6 +100,11 @@ class BeatFromBP(_Algorithm):
             # select portion of derivative where to search
             obs = dxdt[start_:stop_]
             peak_obs = _np.argmax(obs)
+            i_end = 1
+            while peak_obs == (len(obs) - i_end):
+                peak_obs = _np.argmax(obs[:-i_end])
+                i_end +=1
+                
             true_obs = dxdt[start_ + peak_obs: stop_]
             
             true_obs = create_signal(abs(true_obs), times = times[start_ + peak_obs: stop_])

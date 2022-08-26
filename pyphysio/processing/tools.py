@@ -797,76 +797,7 @@ class Slopes(_Algorithm):
                 slopes.append(_np.nan)
         return slopes
 
-class BeatOutliers(_Algorithm):
-    """
-    Detects outliers in the IBI signal. 
-    
-    Optional parameters
-    -------------------
-    
-    cache : int, >0,  default=3
-        Number of IBI to be stored in the cache for adaptive computation of the interval of accepted values
-    sensitivity : float, >0, default = 0.25
-        Relative variation from the current IBI median value of the cache that is accepted
-    ibi_median : float, >=0, default = 0
-        IBI value use to initialize the cache. By default (ibi_median=0) it is computed as median of the input IBI
-    
-    Returns
-    -------
-    id_bad_ibi : numpy.array
-        Identifiers of wrong beats
-    
-    Notes
-    -----
-    It only detects outliers. You should manually remove outliers using FixIBI
-    
-    """
 
-    def __init__(self, ibi_median=0, cache=3, sensitivity=0.25):
-        assert ibi_median >= 0, "IBI median value should be positive (or equal to 0 for automatic computation"
-        assert cache >= 1, "Cache size should be greater than 1"
-        assert sensitivity > 0, "Sensitivity value shlud be positive"
-
-        _Algorithm.__init__(self, ibi_median=ibi_median, cache=cache, sensitivity=sensitivity)
-
-   
-    def algorithm(self, signal):
-        params = self._params
-        cache, sensitivity, ibi_median = params["cache"], params["sensitivity"], params["ibi_median"]
-
-        if ibi_median == 0:
-            ibi_expected = float(_ma.median(signal))
-        else:
-            ibi_expected = float(ibi_median)
-
-        id_bad_ibi = []
-        ibi_cache = _np.repeat(ibi_expected, cache)
-        counter_bad = 0
-
-        # missings = []
-        idx_ibi = signal.get_indices()
-        ibi = signal.get_values()
-        for i in range(1, len(idx_ibi)):
-            curr_median = _np.median(ibi_cache)
-
-            curr_ibi = ibi[i]
-
-            if curr_ibi > curr_median * (1 + sensitivity):  # abnormal peak:
-                id_bad_ibi.append(i)  # append ibi id to the list of bad ibi
-                counter_bad += 1
-            # missings.append([idx_ibi[i-1],idx_ibi[i]])
-
-            elif curr_ibi < curr_median * (1 - sensitivity):  # abnormal peak:
-                id_bad_ibi.append(i)  # append ibi id to the list of bad ibi
-                counter_bad += 1
-            else:
-                ibi_cache = _np.r_[ibi_cache[1:], curr_ibi]
-                counter_bad = 0
-            if counter_bad == cache:  # ibi cache probably corrupted, reinitialize
-                ibi_cache = _np.repeat(ibi_expected, cache)
-                counter_bad = 0
-
-        return id_bad_ibi
 
 class FixIBI(_Algorithm):
     """

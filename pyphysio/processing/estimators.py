@@ -8,8 +8,6 @@ from .filters import IIRFilter as _IIRFilter, DeConvolutionalFilter as _DeConvol
 from .tools import SignalRange as _SignalRange, PeakDetection as _PeakDetection, Minima as _Minima, \
     PeakSelection as _PeakSelection, Diff as _Diff
 
-# __author__ = 'AleB'
-
 
 # IBI ESTIMATION
 class BeatFromBP(_Algorithm):
@@ -131,7 +129,6 @@ class BeatFromBP(_Algorithm):
         
         return ibi_scaffold
 
-
 class BeatFromECG(_Algorithm):
     """
     Identify the beats in an ECG signal and compute the IBIs.
@@ -204,7 +201,84 @@ class BeatFromECG(_Algorithm):
 
         return ibi_scaffold
 
+class RemoveBeatOutliers(_Algorithm):
+    """
+    Detects outliers in the IBI signal. 
+    
+    Optional parameters
+    -------------------
+    
+    cache : int, >0,  default=3
+        Number of IBI to be stored in the cache for adaptive computation of the interval of accepted values
+    sensitivity : float, >0, default = 0.25
+        Relative variation from the current IBI median value of the cache that is accepted
+    ibi_median : float, >=0, default = 0
+        IBI value use to initialize the cache. By default (ibi_median=0) it is computed as median of the input IBI
+    
+    Returns
+    -------
+    id_bad_ibi : numpy.array
+        Identifiers of wrong beats
+    
+    Notes
+    -----
+    It only detects outliers. You should manually remove outliers using FixIBI
+    
+    """
 
+    def __init__(self, ibi_median=0, cache=3, sensitivity=0.25):
+        assert ibi_median >= 0, "IBI median value should be positive (or equal to 0 for automatic computation"
+        assert cache >= 1, "Cache size should be greater than 1"
+        assert sensitivity > 0, "Sensitivity value shlud be positive"
+
+        _Algorithm.__init__(self, ibi_median=ibi_median, cache=cache, sensitivity=sensitivity)
+        self.dimensions = {'time': 0 }
+   
+    def algorithm(self, signal):
+        params = self._params
+        cache, sensitivity, ibi_median = params["cache"], params["sensitivity"], params["ibi_median"]
+
+        ibi_values = signal.p.get_values()
+        idx_values = _np.where(~_np.isnan(ibi_values))
+        
+        ibi_values = ibi_values[idx_values]
+        
+        if ibi_median == 0:
+            ibi_expected = float(_np.median(ibi_values))
+        else:
+            ibi_expected = float(ibi_median)
+
+        id_good = []
+        ibi_cache = _np.repeat(ibi_expected, cache)
+        counter_bad = 0
+
+        # missings = []
+        for i in range(len(ibi_values)):
+
+            curr_median = _np.median(ibi_cache)
+            curr_ibi = ibi_values[i]
+
+            if (curr_ibi < curr_median * (1 + sensitivity)) & \
+                (curr_ibi > curr_median * (1 - sensitivity)):  # good peak
+                id_good.append(i)  # append ibi id to the list of bad ibi
+                ibi_cache = _np.r_[ibi_cache[1:], curr_ibi]
+                counter_bad = 0
+            else:
+                counter_bad += 1
+
+            if counter_bad == cache:  # ibi cache probably corrupted, reinitialize
+                ibi_cache = _np.repeat(ibi_expected, cache)
+                counter_bad = 0
+        
+        ibi_scaffold = _np.nan * _np.zeros(len(signal.values))
+        
+        idx_values_correct = idx_values[0][id_good]
+        ibi_values_correct = ibi_values[id_good]
+        
+        ibi_scaffold[idx_values_correct] = ibi_values_correct
+        
+        return ibi_scaffold
+    
 # PHASIC ESTIMATION
 class DriverEstim(_Algorithm):
     """

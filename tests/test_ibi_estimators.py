@@ -19,3 +19,10 @@ bvp_data = TestData().bvp()
 signal = create_signal(bvp_data, sampling_freq=2048)
 
 ibi = est.BeatFromBP()(signal)
+
+ibi_corr = est.RemoveBeatOutliers()(ibi)
+
+#%%
+params = {'cache': 3,
+          'ibi_median': 0,
+          'sensitivity': 0.25}

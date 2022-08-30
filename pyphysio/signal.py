@@ -1,5 +1,6 @@
 # coding=utf-8
 import numpy as _np
+import scipy as _sp
 import xarray as _xr
 from copy import copy
 
@@ -18,10 +19,10 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 # - set attribute type (or function) to check if they are unevenly
 # - get_values should ignore nans if they are the same across channels and components
 # - plot using '.'
-# resample: first dropna
+# resample, first run: signal.dropna('time')
 
 def create_signal(data, times=None, sampling_freq=None,
-                  start_time=0, name='signal', info={}):
+                  start_time=0, name='signal', na_action = 'keep', info={}):
     '''
     Create an xarray object where the coordinates are (time, channel, component)
     representing a signal.
@@ -51,19 +52,64 @@ def create_signal(data, times=None, sampling_freq=None,
     #TODO: names for channels/components?
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
     assert data.ndim <= 3, "data should have maximum 3 dimensions"
+    assert na_action in ['impute', 'keep', 'remove']
     
     if data.ndim == 1:
         data = _np.expand_dims(data, [1,2])
     elif data.ndim == 2:
         data = _np.expand_dims(data, 2)
-   
+    
+    #--> check validity of the temporal information
     if sampling_freq is None: #defined by times
         assert len(times) == data.shape[0], "Length of provided times is different from the number of datapoints"
+        #we assume that users that do not provide a sampling_freq
+        #want an unevenly signal, 
+        #so a signal that does not come from a sampling, 
+        #i.e. for which there is not a valid sampling frequency
         sampling_freq = 'unevenly'
     else: 
         assert sampling_freq > 0
-        times = _np.arange(0, data.shape[0])/sampling_freq + start_time
+        if times is None: #create times
+            times = _np.arange(0, data.shape[0])/sampling_freq + start_time
+        else: #check that provided times are valid, given the sampling freq
+            
+            #why should a user provide both times and fsamp????
+            #I cannot find a meaningful use case...
+            # this 'else' is never executed, given the first assert in __init__
+            # but I leave it here in case it is useful in the future.
+            # Float precision issues...
+            decimals = int(_np.ceil(_np.log10(sampling_freq)+2))
+            times = times.astype(_np.float128)
+            dt = _np.unique(_np.diff(times).round(decimals=decimals))
+            assert len(dt)==1, "Provided times have multiple different dts"
+            dt = dt[0]
+            assert (1/dt - sampling_freq) < 10**(-decimals), "Sampling frequency derived from times is different from the one provided. Check times, or try to only provide sampling_freq"
+            
+            #times should be correct, but, just in case,
+            #lets overwrite times, to be sure that everything works as expected
+            #(it never does)
+            start_time = times[0]
+            times = _np.arange(0, data.shape[0])/sampling_freq + start_time
+            
+    #--> check the nans situation
+    nans_in_dataset = False
+    if _np.sum(_np.isnan(data)) > 0:
+        nans_in_dataset = True
         
+        #try to understand if nans across channels and components 
+        #share the same timepoints
+        n_nans_foreach_timepoint = _np.sum(_np.sum(_np.isnan(data), axis = 1), axis=1)
+        tp_with_nans = _np.where(n_nans_foreach_timepoint > 0)[0]
+        n_ch = data.shape[1]
+        n_cp = data.shape[2]
+        
+        #if they do not:
+        if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp:
+            #we cannot remove timepoints with nans, as not all ch / cp have nans
+            #at the same timepoints
+            if na_action == 'remove':
+                raise ValueError('Nans in the signal, but impossible to perform the desired na_action ("remove") as nan values do not share the same timepoints')
+    
     #start_time is times[0]
     start_time = times[0]
         
@@ -80,14 +126,33 @@ def create_signal(data, times=None, sampling_freq=None,
     signal = _xr.DataArray(data, dims = dims,
                            coords = coords, 
                            attrs = info,
-                           name = name).to_dataset()
+                           name = name)
     
+    #now we can manage the nans 
+    #using the xarray.DataArray.interpolate_na or dropna
+    if nans_in_dataset:
+        if na_action == 'keep':
+            print('Nans in the output signal, please check the results')            
+        elif na_action == 'impute':
+            signal = signal.interpolate_na('time', method='cubic')
+        elif na_action == 'remove':
+            #!ATTENTION!
+            #if we remove timepoints, then the signal should be considered
+            #with an 'unevely' sampling_freq, independently from the fact that 
+            #the user provided information about a sampled signal 
+            #(e.g. providing a valid sampling_freq value)
+            #after all, the default na_action is 'keep' 
+            #so we can assume the user knows what is going on here
+            signal = signal.dropna(dim = 'time')
+            signal.attrs['sampling_freq'] = 'unevenly'
+    
+    signal = signal.to_dataset()
     signal.attrs['MAIN'] = name
     signal.attrs['history'] = [name]
     
     return signal
 
-
+#%%
 @_xr.register_dataarray_accessor('p')
 class PyphysioDataArray(object):
     def __init__(self, xdataarray):
@@ -144,11 +209,11 @@ class PyphysioDataArray(object):
         return(times[-1])
 
     def get_sampling_freq(self):
-        dt = _np.unique(_np.diff(self.get_times()).round(10))
-        if len(dt)==1:
-            return 1/dt[0]
+        # dt = _np.unique(_np.diff(self.get_times()).round(10))
+        # if len(dt)==1:
+        #     return 1/dt[0]
         
-        return None
+        return self.da.attrs['sampling_freq']
     
     def get_duration(self):
         return self.get_end_time() - self.get_start_time()

@@ -1,4 +1,4 @@
-import numpy as np
+import numpy as _np
 from pyphysio.signal import create_signal
 import xarray as xr
 

@@ -121,8 +121,12 @@ class IIRFilter(_Algorithm):
 
         wp = fp / nyq
         ws = fs / nyq
-
+        
+        assert wp<1, f"invalid fp for given sampling frequency {fsamp}"
+        assert ws<1, f"invalid fs for given sampling frequency {fsamp}"
+        
         b, a = _filter_design.iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
+        
 
         sig_filtered = _filtfilt(b, a, signal.values.ravel(), axis=0)
 

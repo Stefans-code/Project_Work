@@ -22,7 +22,7 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 # resample, first run: signal.dropna('time')
 
 def create_signal(data, times=None, sampling_freq=None,
-                  start_time=0, name='signal', na_action = 'keep', info={}):
+                  start_time=0, name='signal', info={}):
     '''
     Create an xarray object where the coordinates are (time, channel, component)
     representing a signal.
@@ -46,13 +46,17 @@ def create_signal(data, times=None, sampling_freq=None,
     -------
     signal : TYPE
         DESCRIPTION.
-
+        
+    If 'sampling_freq' is provided, a signal with evenly (temporally) spaced samples is created;
+    times are created accordingly (also considering the 'start_time')
+    If 'times' is provided (meaning the sampling frequency is unknown and/or not the same across the signal),
+    a signal with unevenly (temporally) spaced samples is created, 
+    and the 'sampling_freq' is set to 'unevenly'; 'start_time' is ignored.
     '''    
     
     #TODO: names for channels/components?
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
     assert data.ndim <= 3, "data should have maximum 3 dimensions"
-    assert na_action in ['impute', 'keep', 'remove']
     
     if data.ndim == 1:
         data = _np.expand_dims(data, [1,2])
@@ -91,24 +95,6 @@ def create_signal(data, times=None, sampling_freq=None,
             start_time = times[0]
             times = _np.arange(0, data.shape[0])/sampling_freq + start_time
             
-    #--> check the nans situation
-    nans_in_dataset = False
-    if _np.sum(_np.isnan(data)) > 0:
-        nans_in_dataset = True
-        
-        #try to understand if nans across channels and components 
-        #share the same timepoints
-        n_nans_foreach_timepoint = _np.sum(_np.sum(_np.isnan(data), axis = 1), axis=1)
-        tp_with_nans = _np.where(n_nans_foreach_timepoint > 0)[0]
-        n_ch = data.shape[1]
-        n_cp = data.shape[2]
-        
-        #if they do not:
-        if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp:
-            #we cannot remove timepoints with nans, as not all ch / cp have nans
-            #at the same timepoints
-            if na_action == 'remove':
-                raise ValueError('Nans in the signal, but impossible to perform the desired na_action ("remove") as nan values do not share the same timepoints')
     
     #start_time is times[0]
     start_time = times[0]
@@ -128,24 +114,6 @@ def create_signal(data, times=None, sampling_freq=None,
                            attrs = info,
                            name = name)
     
-    #now we can manage the nans 
-    #using the xarray.DataArray.interpolate_na or dropna
-    if nans_in_dataset:
-        if na_action == 'keep':
-            print('Nans in the output signal, please check the results')            
-        elif na_action == 'impute':
-            signal = signal.interpolate_na('time', method='cubic')
-        elif na_action == 'remove':
-            #!ATTENTION!
-            #if we remove timepoints, then the signal should be considered
-            #with an 'unevely' sampling_freq, independently from the fact that 
-            #the user provided information about a sampled signal 
-            #(e.g. providing a valid sampling_freq value)
-            #after all, the default na_action is 'keep' 
-            #so we can assume the user knows what is going on here
-            signal = signal.dropna(dim = 'time')
-            signal.attrs['sampling_freq'] = 'unevenly'
-    
     signal = signal.to_dataset()
     signal.attrs['MAIN'] = name
     signal.attrs['history'] = [name]
@@ -162,7 +130,14 @@ class PyphysioDataArray(object):
     def main_signal(self):
         return self.da
     
+    #++++++++++++++++++++++++++++++++++++
+    #!!!
+    #The methods that modify the signal (self.da) should always return the new
+    #signal. In other words: self.da = new_signal  will not be effective
+    #++++++++++++++++++++++++++++++++++++
+    
     def clone(self, values, name='signal'):
+        #TODO: this is probably very rough. Do we need something more efficient?
         assert values.shape[0] == self.da.values.shape[0]
         signal_clone = create_signal(values, times = self.da.coords['time'].values,
                                      name = name, info=copy(self.da.attrs))
@@ -192,10 +167,8 @@ class PyphysioDataArray(object):
         portion : UnvenlySignal
             The selected portion
         """
-        # t_start_timedelta = _pd.to_timedelta(t_start, 's')
-        # t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
         
-        #TODO t_stop - 1/fsamp
+        #TODO? t_stop - 1/fsamp
         sub_dataset = self.da.sel(time = slice(t_start,
                                                t_stop))
         return sub_dataset
@@ -239,7 +212,76 @@ class PyphysioDataArray(object):
         
         t_out = _np.arange(t_start, t_end, 1/f_out)
         resampled_dataarray = self.da.interp(time=t_out, method='cubic')
+        resampled_dataarray.attrs['sampling_freq'] = f_out
         return(resampled_dataarray)
+    
+    def process_na(self, na_action = 'keep'):
+        '''
+        Impute nans in the signal.
+        
+        Parameters
+        ----------
+        na_action : str, optional
+            DESCRIPTION. The default is 'keep'.
+
+        Raises
+        ------
+        ValueError
+            DESCRIPTION.
+
+        Returns
+        -------
+        None.
+
+        '''
+        assert na_action in ['impute', 'keep', 'remove']
+        data = self.da.values
+        
+        #--> check the nans situation
+        nans_in_dataset = False
+        if _np.sum(_np.isnan(data)) > 0:
+            nans_in_dataset = True
+            
+            #try to understand if nans across channels and components 
+            #share the same timepoints
+            n_nans_foreach_timepoint = _np.sum(_np.sum(_np.isnan(data), axis = 1), axis=1)
+            tp_with_nans = _np.where(n_nans_foreach_timepoint > 0)[0]
+            n_ch = data.shape[1]
+            n_cp = data.shape[2]
+            
+            #if they do not:
+            if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp:
+                #we cannot remove timepoints with nans, as not all ch / cp have nans
+                #at the same timepoints
+                if na_action == 'remove':
+                    raise ValueError('Nans in the signal, but impossible to remove timepoints as nan values do not share the same timepoints')
+            
+        #now we can manage the nans 
+        #using the xarray.DataArray.interpolate_na or dropna
+        if nans_in_dataset:
+            if na_action == 'keep':
+                print('Nans in the output signal, please check the results')
+                return(self.da)
+            elif na_action == 'impute':
+                signal = self.da.interpolate_na('time', method='cubic')
+                #TODO check initial and final nans
+                #now we drop them, should we alert the user?
+                signal = signal.dropna(dim='time')
+                return(signal)
+            elif na_action == 'remove':
+                #!ATTENTION!
+                #if we remove timepoints, then the signal should be considered
+                #with an 'unevely' sampling_freq, independently from the fact that 
+                #the user provided information about a sampled signal 
+                #(e.g. providing a valid sampling_freq value)
+                #after all, the default na_action is 'keep' 
+                #so we can assume the user knows what is going on here
+                signal = self.da.dropna(dim = 'time')
+                signal.attrs['sampling_freq'] = 'unevenly'
+                return(signal)
+        else:
+            print('No nans in the signal, no action performed')
+            return(self.da)
     
     def plot(self, marker=None, ncols=4, sharey=True):
         fig = _gcf()
@@ -268,8 +310,15 @@ class PyphysioDataArray(object):
             #plot the signal
             ax = _gca()
             
-            if marker is None:                
+            if marker is None and self.get_sampling_freq() == 'unevenly':
+                marker = '.'
+
+            if marker is None:
                 ax.plot(t_, _np.squeeze(v_), linestyle = linestyle)
+            elif marker == '|':
+                ymin = ax.get_ylim()[0]
+                ymax = ax.get_ylim()[1]
+                ax.vlines(t_, ymin, ymax, linestyle = linestyle)
             else:
                 ax.plot(t_, _np.squeeze(v_), marker, linestyle = linestyle)
             _grid(True)
@@ -384,14 +433,29 @@ class PyPhysioDataset(object):
         return self.ds.attrs
 
     #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
+    #should we remove all the other signals ('variables')
+    #before computing?
     def resample(self, f_out):
         t_start = self.main_signal.p.get_start_time()
         t_end = self.main_signal.p.get_end_time()
         
         t_out = _np.arange(t_start, t_end, 1/f_out)
         resampled_dataset = self.ds.interp(time=t_out, method='cubic')
+        resampled_dataset.p.main_signal.attrs['sampling_freq'] = f_out
         return(resampled_dataset)
     
+    #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
+    #should we remove all the other signals ('variables')
+    #before computing?
+    def process_na(self, na_action = 'keep'):
+        main_signal = self.ds.attrs['MAIN']
+        da = self.ds[main_signal]
+        processed_da = da.p.process_na(na_action)
+        processed_dataset = self.ds
+        processed_dataset[main_signal] = processed_da
+        if na_action != 'keep':
+            processed_dataset = processed_dataset.dropna('time')
+        return(processed_dataset)
         
     def plot(self, marker=None, ncols=4, sharey=True):
         self.main_signal.p.plot(marker=marker,

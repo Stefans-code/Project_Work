@@ -207,7 +207,7 @@ class AverageComponents(VerboseAlgorithm):
 signal_ = AverageComponents()(signal)
 
 #%%
-class AverageComponentsClone(_Algorithm):
+class AverageComponentsClone(VerboseAlgorithm):
     """
     Compute the average across components, and
     replicate/clone the result to obtain 
@@ -235,7 +235,7 @@ class AverageComponentsClone(_Algorithm):
 signal_ = AverageComponentsClone()(signal)
 
 #%%
-class AverageComponentsChannels(_Algorithm):
+class AverageComponentsChannels(VerboseAlgorithm):
     """
     Compute the timepoint-by-timepoint average across channelsXcomponents
     

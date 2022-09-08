@@ -14,7 +14,7 @@ signal = create_signal(ecg_data, sampling_freq=2048)
 ibi = est.BeatFromECG()(signal)
 
 #%%
-bvp_data = TestData().bvp()
+bvp_data = TestData().bvp() 
 
 signal = create_signal(bvp_data, sampling_freq=2048)
 

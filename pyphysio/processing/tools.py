@@ -3,7 +3,6 @@
 import numpy as _np
 import xarray as _xr
 
-
 from scipy.signal import welch as _welch, periodogram as _periodogram, freqz as _freqz
 import pycwt.wavelet as wave
 from scipy import linalg as _linalg
@@ -590,12 +589,12 @@ class Maxima(_Algorithm): #xarray done
             idx_maxs = _np.array(idx_maxs).astype(int)
         elif method == 'windowing':
             fsamp = signal.p.get_sampling_freq()
-            
+
             winlen = int(params['win_len'] * fsamp)
             winstep = int(params['win_step'] * fsamp)
 
-            # TODO (Andrea): check that winlen > 2
-            # TODO (Andrea): check that winstep >= 1
+            # TODO: check that winlen > 2
+            # TODO: check that winstep >= 1
 
             idx_maxs = [_np.nan]
             if winlen < len(signal):

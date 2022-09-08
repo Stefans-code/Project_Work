@@ -7,6 +7,9 @@ setup(
               'pyphysio.processing',
               'pyphysio.indicators',
               'pyphysio.sqi',
+              'pyphysio.heart',
+              'pyphysio.eda',
+              'pyphysio.fnirs'
               ],
     package_data={'tests': ['data/*']},
     version='3.0',
@@ -36,6 +39,7 @@ setup(
         'netcdf4'
     ],
     requires=[
+        'csaps',
         'pytest',
     ],
 )

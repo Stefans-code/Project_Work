@@ -1,6 +1,7 @@
 # coding=utf-8
 # from __future__ import division
 import numpy as _np
+from scipy.signal import detrend as _detrend
 from ..._base_algorithm import _Algorithm
 from ...signal import create_signal
 from ...filters import IIRFilter as _IIRFilter
@@ -8,6 +9,153 @@ from ...utils import SignalRange as _SignalRange, Minima as _Minima, Diff as _Di
 import itertools as _itertools
 
 # IBI ESTIMATION
+class BeatMSPTD(_Algorithm):
+    """
+    Identify the beats in a Blood Pulse (BP) signal and compute the IBIs.
+    Optimized to identify the percussion peak.
+    #code from: https://github.com/peterhcharlton/ppg-beats/blob/main/source/msptd_beat_detector.m
+    #paper: Multi-Scale Peak & Trough Detection (Bishop and Ercole 2018)
+    #found in paper: Detecting beats in the photoplethysmogram: benchmarking open-source algorithms
+    
+    Parameters
+    ----------
+    win_lem : default 6
+    
+    Returns
+    -------
+    ibi : UnevenlySignal
+        Inter beat interval values at percussion peaks
+
+    Notes
+    -----
+    Please cite:
+        Bizzego, Andrea, and Cesare Furlanello. "DBD-RCO: Derivative Based Detection And Reverse Combinatorial Optimization To Improve Heart Beat Detection For Wearable Devices." bioRxiv (2017): 118943.
+    """
+    
+    def __init__(self, win_len=6, overlap=0.2, tol=0.05):
+        #TODO: tol depending on bpm_max?
+        _Algorithm.__init__(self, win_len=win_len, overlap=overlap, tol=tol)
+        self.dimensions = {'time':0}
+
+    def algorithm(self, signal):
+        params = self._params
+        win_len = params["win_len"]
+        overlap = params["overlap"]
+        tol = params["tol"]
+        
+        fsamp = signal.p.get_sampling_freq()
+        tol = int(_np.ceil(fsamp*tol))
+        
+        no_samps_in_win = win_len * fsamp
+
+        signal_values = signal.values.ravel()
+        
+        if len(signal_values) <= no_samps_in_win:
+            win_starts = _np.array([0])
+        else:
+            win_offset = round( no_samps_in_win * (1-overlap));
+            win_starts = _np.arange(0, len(signal_values)-no_samps_in_win, win_offset)
+            
+            if win_starts[-1] +  no_samps_in_win < len(signal_values):
+                win_starts = _np.insert(win_starts, len(win_starts), len(signal_values) - no_samps_in_win)
+        
+        #TODO: downsampling here?
+        
+        
+        peaks = []
+        onsets = []
+
+        for i_win, idx_st in enumerate(win_starts):
+
+            #% - extract this window's data
+            win_sig = signal_values[idx_st:idx_st+no_samps_in_win+1]
+            
+            #TODO: downsampling here?
+            
+            #% detect peaks and onsets =========================
+            N = len(win_sig) #% length of signal
+            L = int(_np.ceil(N/2)-1)#; % max window length
+
+            # Step 1: calculate local maxima and local minima scalograms
+
+            # - detrend
+            win_sig_det = _detrend(win_sig) #% this removes the best-fit straight line
+
+            # - initialise LMS matrices
+            m_max = _np.zeros((L,N))
+            m_min = _np.zeros((L,N))
+
+            
+            # - populate LMS matrices
+            for k in _np.arange(1, L+1):# % scalogram scales
+            
+                for i in _np.arange(k, N-k):
+                    if win_sig_det[i] > win_sig_det[i-k] and win_sig_det[i] > win_sig_det[i+k]:
+                        m_max[k-1,i] = 1
+                    if win_sig_det[i] < win_sig_det[i-k] and win_sig_det[i] < win_sig_det[i+k]:
+                        m_min[k-1,i] = 1
+
+            # Step 2: find the scale with the most local maxima (or local minima)
+            # - row-wise summation
+            gamma_max = _np.sum(m_max,1)
+            gamma_min = _np.sum(m_min,1)
+            
+            # - find scale with the most local maxima (or local minima)
+            idx_lambda_max = _np.argmax(gamma_max)
+            idx_lambda_min = _np.argmax(gamma_min)
+
+            #% Step 3: Use lambda to remove all elements of m for which k>lambda
+            m_max = m_max[:idx_lambda_max+1,:]
+            m_min = m_min[:idx_lambda_min+1,:]
+
+            # Step 4: Find peaks
+            # - column-wise summation
+            m_max_sum = _np.sum(abs(m_max-1), axis=0)
+            m_min_sum = _np.sum(abs(m_min-1), axis=0)
+            p = _np.where(m_max_sum==0)[0]
+            t = _np.where(m_min_sum==0)[0]
+            
+            #TODO: downsampling here?
+            
+            # % - correct peak indices by finding highest point within tolerance either side of detected peaks
+            
+            for i_p, curr_peak in enumerate(p):
+                tol_start = curr_peak - tol;
+                tol_end = curr_peak + tol;
+                idx_max = _np.argmax(win_sig[tol_start:tol_end+1])
+                p[i_p] = curr_peak - tol + idx_max;
+
+            
+            #% - correct onset indices by finding highest point within tolerance either side of detected onsets
+            for i_o, curr_onset in enumerate(t):
+                tol_start = curr_onset - tol;
+                tol_end = curr_onset + tol;
+                idx_min = _np.argmin(win_sig[tol_start:tol_end+1])
+                t[i_o] = curr_onset - tol + idx_min;
+                
+            
+            #% - store peaks and onsets
+            win_peaks = p + idx_st
+            peaks = peaks + list(win_peaks)
+            win_onsets = t + idx_st
+            onsets =  onsets + list(win_onsets)
+
+
+
+        #% tidy up detected peaks and onsets (by ordering them and only retaining unique ones)
+        peaks = _np.unique(peaks)
+        onsets = _np.unique(onsets)
+
+        # STAGE 3 - FINALIZE computing IBI
+        t_ibi = peaks / fsamp
+        v_ibi = _np.diff(t_ibi)
+        v_ibi = _np.insert(v_ibi, 0, v_ibi[0])
+
+        ibi_scaffold = _np.nan* _np.zeros(len(signal_values))
+        ibi_scaffold[peaks] = v_ibi
+        
+        return ibi_scaffold
+
 class BeatFromBP(_Algorithm):
     """
     Identify the beats in a Blood Pulse (BP) signal and compute the IBIs.
@@ -133,6 +281,8 @@ class BeatFromBP(_Algorithm):
         ibi_scaffold[true_peaks] = v_ibi
         
         return ibi_scaffold
+
+
 
 class BeatFromECG(_Algorithm):
     """

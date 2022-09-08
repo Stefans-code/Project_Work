@@ -1,13 +1,8 @@
-# coding=utf-8
 import numpy as _np
 from copy import copy as _cpy
-# from numpy import asarray as _asarray
-# from ..Utility import abstractmethod as _abstract
 import xarray as _xr
-# from numbers import Number as _Number
-# __author__ = 'AleB'
 
-class Segment(object):
+class _Segment(object):
     """
     Base Segment, a time begin-end pair with a reference to the base signal and a name.
     """
@@ -80,7 +75,7 @@ class _Segmenter(object):
                 continue
             break
 
-        s = Segment(b, e, label)
+        s = _Segment(b, e, label)
         return s
     
     def manage_drops(self, b, e):
@@ -346,6 +341,8 @@ def fmap(segmenter, algorithms, signal):
     result = _xr.merge(result)
     return result
 
+#TODO: needed? if yes, fix--->
+'''
 def indicators2df(fmap_results):
     import pandas as _pd
 
@@ -390,3 +387,4 @@ def indicators2df(fmap_results):
     
     df_all = _pd.concat(df_all, axis = 0)
     return(df_all)
+'''

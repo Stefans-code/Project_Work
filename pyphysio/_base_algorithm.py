@@ -1,22 +1,11 @@
-import xarray as _xr
 import numpy as _np
-# from ..signal import create_signal
+import xarray as _xr
+_xr.set_options(keep_attrs=True)
 
-#enable dask?
-try:
-    from dask import __name__ as _
-    scheduler = 'threads'
-    # available schedulers:
-    # #distributed, multiprocessing, processes, single-threaded, sync, synchronous, threading, threads
-    print('Using dask. Scheduler: threads')
-except:
-    scheduler = 'single-thread'
-
-def set_scheduler(new_scheduler):
-    global scheduler
-    scheduler = new_scheduler
-
-class Algorithm(object):
+from . import scheduler
+    
+#TODO: correct to place _Algorithm here?
+class _Algorithm(object):
     def __init__(self, **kwargs):
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
@@ -320,24 +309,3 @@ class Algorithm(object):
         :param data:
         """
         pass
-
-def algo(function, **kwargs):
-    """
-    Builds on the fly a new algorithm class using the passed function and params if passed.
-    :param function: function(data, params) to be called
-    :param kwargs: parameters to pass to the function.
-    :return: An algorithm class if params is None else a parametrized algorithm instance.
-    """
-
-    class Custom(Algorithm):
-        def __init__(self, **kwargs):
-            Algorithm.__init__(self, **kwargs)
-
-        def algorithm(self, signal):
-            params = self._params
-            return function(signal, params)
-
-    if len(kwargs) == 0:
-        return Custom
-    else:
-        return Custom(**kwargs)

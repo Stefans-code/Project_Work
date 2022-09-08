@@ -1,8 +1,7 @@
 # coding=utf-8
 import numpy as _np
-import scipy as _sp
 import xarray as _xr
-from copy import copy
+from copy import copy as _copy
 
 _xr.set_options(keep_attrs=True)
 
@@ -120,7 +119,6 @@ def create_signal(data, times=None, sampling_freq=None,
     
     return signal
 
-#%%
 @_xr.register_dataarray_accessor('p')
 class PyphysioDataArray(object):
     def __init__(self, xdataarray):
@@ -140,7 +138,7 @@ class PyphysioDataArray(object):
         #TODO: this is probably very rough. Do we need something more efficient?
         assert values.shape[0] == self.da.values.shape[0]
         signal_clone = create_signal(values, times = self.da.coords['time'].values,
-                                     name = name, info=copy(self.da.attrs))
+                                     name = name, info=_copy(self.da.attrs))
         return(signal_clone)
     
     def get_values(self):

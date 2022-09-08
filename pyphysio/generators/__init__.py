@@ -1,8 +1,7 @@
 import numpy as _np
 #we use the create_signal function.
 #TODO: we should test it
-from pyphysio.signal import create_signal
-
+from ..signal import create_signal
 
 #%%
 def to3d(template, n_ch=None, n_cp=None):

@@ -1,22 +1,18 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 31 15:50:15 2022
-
-@author: bizzego
-"""
-
 import numpy as _np
-from scipy.stats import median_abs_deviation as _mad
-import scipy.linalg as _sal
-from ...processing import Algorithm as _Algorithm
+from ._base_algorithm import _Algorithm
 from csaps import csaps as _csaps
-from ...processing.filters import IIRFilter as _IIRFilter
-import matplotlib.pyplot as plt
+from .filters import IIRFilter as _IIRFilter
 import pywt
+from scipy.stats import median_abs_deviation as _mad
+
+#TODO: There could be three types of classes:
+# - DetectNAME (to detect artefacts), 
+# - CorrectNAME (to correct detected artefacts), and
+# - NAME (algorithm that do both)
+# see Di Lorenzo et al: https://www.sciencedirect.com/science/article/pii/S1053811919305531?via%3Dihub
+
 
 class MARA(_Algorithm):
-    #TODO: split into a detect MA and correct artifacts
     '''
     F Scholkmann et al 2010 Physiol. Meas. 31 649
     '''
@@ -234,189 +230,3 @@ class WaveletFilter(_Algorithm):
                 
         reconstructed = approx/norm_coeff + mean_padded
         return(reconstructed[:n])
-    
-class PCAFilter(_Algorithm):
-    """
-    See Molavi 2012
-
-    """    
-    def __init__(self, nSV=0.8, **kwargs):
-        _Algorithm.__init__(self, nSV=nSV, **kwargs)
-        self.dimensions = 'none'
-    
-    # def __call__(self, signal, manage_original):
-    #     return _Algorithm.__call__(self, signal,
-    #                                by='none', 
-    #                                manage_original=manage_original)
-    
-    def algorithm(self, signal): #TODO: correct syntax for **kwargs
-
-        nSV = self._params['nSV']
-        n_channels = signal.p.get_nchannels()
-        y = signal.p.get_values()
-        # idx_good_channels = signal.get_good_channels()
-        # y = y_[:, idx_good_channels]
-        
-        
-        y = _np.concatenate([y[:,:,0], y[:,:,1]], axis=1)
-        c = _np.dot(y.T, y)
-        V, St, _ = _sal.svd(c)
-        svs = St / _np.sum(St)
-        
-        ev = _np.zeros(len(svs))
-        if nSV>1:
-            ev[:nSV] = 1
-        else:
-            svsc = svs
-            for idx in _np.arange(1, len(svs)):
-                svsc[idx] = svsc[idx-1] + svs[idx]
-            ev[svsc<=nSV] = 1
-        #%
-        ev = _np.diag(ev)
-        
-        y = y - _np.linalg.multi_dot([y, V, ev, V.T])
-        
-        y = _np.stack([y[:, :n_channels], y[:, n_channels:]], axis=2)
-        return(y)
-    
-class NegativeCorrelationFilter(_Algorithm):
-    '''
-    Functional near infrared spectroscopy (NIRS) signal improvement based on negative correlation between oxygenated and deoxygenated hemoglobin dynamics
-    '''
-    def __init__(self, **kwargs):
-        _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time':0, 'component':0}
-        
-    # def __call__(self, signal, manage_original):
-    #     return _Algorithm.__call__(self, signal,
-    #                                by='channel', 
-    #                                manage_original=manage_original)
-    
-    def algorithm(self, signal):
-        oxy = signal.values[:,0,0]
-        oxy_true = _np.zeros_like(oxy)
-        
-        deoxy = signal.values[:,0,1]
-        deoxy_true = _np.zeros_like(oxy)
-        
-        
-        alpha = _np.std(oxy)/_np.std(deoxy)
-    
-        oxy_true = 0.5 * (oxy - alpha*deoxy)
-        deoxy_true = -oxy_true/alpha
-        
-        signal_out = _np.zeros_like(signal.values)
-        signal_out[:,0,0] = oxy_true
-        signal_out[:,0,1] = deoxy_true
-        
-        return(signal_out)
-
-
-"""
-
-def __finalize_special__(res_sig):
-    # print('----->', self.name, 'finalize')
-    original_coords = list(res_sig.coords)
-    res_sig = res_sig.reset_coords()
-    
-    dimensions = list(res_sig.dims)
-    for c in original_coords:
-        if c not in dimensions:
-            res_sig = res_sig.drop(c)
-    res_sig = res_sig.to_array()
-    res_sig = res_sig.squeeze(dim='variable').drop('variable')
-    # print('<-----', self.name, 'finalize')
-    return res_sig
-
-class FunctionalSeparationFilter(_Algorithm):
-    '''
-    Yamada, T., Umeyama, S., & Matsuda, K. (2012). 
-    Separation of fNIRS signals into functional and systemic components 
-    based on differences in hemodynamic modalities. 
-    PloS one, 7(11), e50271.
-    
-    From:
-        https://unit.aist.go.jp/hiiri/nrehrg/download/dl002_download.html
-    '''
-    
-    def __init__(self, kf=-0.6, nbins=8, **kwargs):
-        _Algorithm.__init__(self, kf=kf, nbins=nbins, **kwargs)
-        self.dimensions = 'special'
-    
-    def __finalize__(self, res_sig, arr_window):
-        return __finalize_special__(res_sig)
-    
-    def __get_template__(self, signal):
-        out = _np.zeros(shape=(signal.sizes['time'],
-                               signal.sizes['channel'],
-                               4))
-        
-        out = _xr.DataArray(out, dims=('time', 'channel', 'component'),
-                            coords = {'time': signal.coords['time'].values,
-                                      'channel': signal.coords['channel'],
-                                      'component': _np.arange(4)})
-        return {'channel': 1}, out
-    
-    def algorithm(self, signal):
-        def _mi(x1,x2, bins=8):
-            c_xy = _np.histogram2d(x1, x2, bins)[0]
-            mi = mutual_info_score(None, None, contingency=c_xy)
-            return mi
-        
-        kf = self._params['kf']
-        nbins = self._params['nbins']
-        
-        signal_values = signal.p.main_signal.values
-        signal_functional_out = _np.zeros_like(signal_values)
-        signal_systemic_out = _np.zeros_like(signal_values)
-        
-        ks_grid = _np.arange(0,5,0.01)
-        ks_ = []
-        
-        n_channels = signal.sizes['channel']
-        for i_ch in range(n_channels):
-            cmin = _np.inf
-            ks_min = ks_grid[0]
-            signal_ch = signal_values[:,i_ch,:]
-            
-            done=False
-            counter_up=0
-            i_grid=0
-            c_ = []
-            while not done:
-                ks = ks_grid[i_grid]
-                p = _np.dot(signal_ch, _np.linalg.inv(_np.array([[1,ks],[1,kf]])))
-                c = _mi(p[:,0],p[:,1], nbins)
-                c_.append(c)
-                if c < cmin:
-                    cmin = c
-                    ks_min = ks
-                else:
-                    counter_up +=1
-                i_grid +=1
-                
-                #I can stop after I found the first minimum
-                if counter_up == 10:
-                    done=True
-            
-            p = _np.dot(signal_ch, _np.linalg.inv(_np.array([[1,ks_min],[1,kf]])))
-            ks_.append(ks_min)
-            
-            signal_systemic_out[:,i_ch, 0] = p[:,0]
-            signal_systemic_out[:,i_ch, 1] = ks*p[:,0]
-            
-            signal_functional_out[:, i_ch, 0] = p[:,1]
-            signal_functional_out[:, i_ch, 1] = kf*p[:,1]
-        
-        signal_out = _np.concatenate([signal_functional_out, signal_systemic_out], axis=2)
-        # signal_out = signal.clone_properties(signal_out)
-        # signal_out.update_info('ks', ks_)
-        out = signal.copy(deep=True)
-        out = out.pad(component=(1,1), mode='edge')
-        out = out.assign_coords(component=_np.arange(4))
-        out.values = signal_out
-        
-        self._params['ks'] = ks_
-        
-        return out
-"""

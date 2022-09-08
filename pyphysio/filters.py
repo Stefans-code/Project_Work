@@ -5,9 +5,9 @@ import scipy.stats as _stats
 from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_design as _filter_design, \
     deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve, iirnotch as _iirnotch
 # from matplotlib.pyplot import plot as _plot
-from . import Algorithm as _Algorithm
+from ._base_algorithm import _Algorithm
 # from ..Utility import abstractmethod as _abstract
-from .tools import SignalRange as _SignalRange
+from .utils import SignalRange as _SignalRange
 
 class Normalize(_Algorithm):
     """

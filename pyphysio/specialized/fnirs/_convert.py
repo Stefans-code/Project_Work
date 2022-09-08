@@ -1,8 +1,9 @@
 import numpy as _np
 from scipy.interpolate import interp1d
-from pyphysio.processing import Algorithm as _Algorithm
+from ..._base_algorithm import _Algorithm
 import xarray as _xr
 
+# TODO: reset info
 def create_SD(nirs):
     if isinstance(nirs, _xr.Dataset):
         attributes = nirs.p.main_signal.attrs
@@ -24,7 +25,7 @@ def create_SD(nirs):
     
     return(SD)
 
-# TODO: reset info
+
 #%%
 def _get_dfp(wavelengths, AGE):
     # see: Scholkmann. F. et al: "General equation for the differential pathlength factor of the frontal human head depending on wavelength and age" (2013)
@@ -74,7 +75,7 @@ def _getExtinctions(L, spectrum=1):
         a = (2.303) e (x g/liter)/(66,500 g Hb/mole)
         where x is the number of grams per liter. A typical value of x for whole blood is x=150 g Hb/liter.
         '''
-        from .data import vLambdaHbOHb_1 as vLambdaHbOHb
+        from ._data import vLambdaHbOHb_1 as vLambdaHbOHb
         
     elif spectrum ==2:
         #print('J.M. Schmitt, "Optical Measurement of Blood Oxygenation by Implantable Telemetry," Technical Report G558-15, Stanford. \nM.K. Moaveni, "A Multiple Scattering Field Theory Applied to Whole Blood," Ph.D. dissertation, Dept. of Electrical Engineering, University of Washington, 1970')
@@ -90,7 +91,7 @@ def _getExtinctions(L, spectrum=1):
         To convert this data to absorption coefficient in (cm-1), multiply by the molar concentration and 2.303,
         a = (2.303) e (x g/liter)/(66,500 g Hb/mole)
         '''
-        from .data import vLambdaHbOHb_2 as vLambdaHbOHb
+        from ._data import vLambdaHbOHb_2 as vLambdaHbOHb
         
     elif spectrum ==3:
         #print('S. Takatani and M. D. Graham, "Theoretical analysis of diffuse reflectance from a two-layer tissue model," IEEE Trans. Biomed. Eng., BME-26, 656--664, (1987). ');
@@ -110,7 +111,7 @@ def _getExtinctions(L, spectrum=1):
         a = (2.303) e (x g/liter)/(66,500 g Hb/mole)
         where x is the number of grams per liter. A typical value of x for whole blood is x=150 g Hb/liter.
         '''
-        from .data import vLambdaHbOHb_3 as vLambdaHbOHb
+        from ._data import vLambdaHbOHb_3 as vLambdaHbOHb
         
     vLambdaHbOHb = vLambdaHbOHb.copy()
     vLambdaHbOHb[:,1] = vLambdaHbOHb[:,1] * 2.303
@@ -125,7 +126,7 @@ def _getExtinctions(L, spectrum=1):
     % http://omlc.ogi.edu/spectra/water/abs/index.html
     %
     '''
-    from .data import vLambdaH2O
+    from ._data import vLambdaH2O
     
     '''
     %
@@ -134,8 +135,8 @@ def _getExtinctions(L, spectrum=1):
     % In units of per mm and convert to per cm.
     %
     '''
-    from .data import vLambdaLipid
-    from .data import vLambdaAA3
+    from ._data import vLambdaLipid
+    from ._data import vLambdaAA3
 
     n_lambda = len(L)
     exs = _np.zeros((n_lambda, 5))

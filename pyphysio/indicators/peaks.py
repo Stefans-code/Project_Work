@@ -4,8 +4,8 @@
 # from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
 
 import numpy as _np
-from ..processing import Algorithm as _Algorithm
-from ..processing.tools import PeakDetection as _PeakDetection,\
+from .._base_algorithm import _Algorithm
+from ..utils import PeakDetection as _PeakDetection,\
     PeakSelection as _Algorithmelection, Durations as _Durations,\
     Slopes as _Slopes
 

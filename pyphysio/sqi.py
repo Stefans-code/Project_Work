@@ -1,10 +1,79 @@
 # coding=utf-8
 import numpy as _np
-from . import SignalQualityIndicator as _SignalQualityIndicator
-from ..indicators.frequencydomain import PowerInBand as _PowerInBand
+from .indicators.frequencydomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
-# from ..processing.filters import ImputeNAN as _ImputeNAN
-from ..processing.tools import Diff as _Diff
+from .utils import Diff as _Diff
+import xarray as _xr
+from ._base_algorithm import _Algorithm
+
+class _SignalQualityIndicator(_Algorithm):
+    """ 
+    A Signal Quality Indicator is a special class of indicators
+    that also returns if the value is within a range.
+    Used to check the quality of signals.
+
+    Args:
+        threshold (low, high): The range within which the sqi indicates good quality
+    
+    Returns:
+        result (sqi, isgood): Tuple containing the value of the sqi and if it corresponds to good quality
+    
+    """
+    def __init__(self, threshold, **kwargs):
+        '''
+        '''
+        assert len(threshold)==2
+        _Algorithm.__init__(self, threshold=threshold, **kwargs)
+    
+    def is_good(self, sqi_dataarray):
+        # print('-----> is_good')
+        sqi_values = sqi_dataarray.values
+        params = self._params
+        threshold = params['threshold']
+        
+        if sqi_values.ndim == 0:
+            output = (sqi_values >= threshold[0]) & (sqi_values <= threshold[1])
+            output = _np.array(output)
+        else:
+            output = _np.zeros_like(sqi_values)
+            idx_good = _np.where((sqi_values >= threshold[0]) & (sqi_values <= threshold[1]))
+            output[idx_good] = 1
+            #propagate nans
+            idx_nan = _np.where(_np.isnan(sqi_values))
+            output[idx_nan] = _np.nan
+        
+        # print('<----- is_good')
+        return(output)
+        
+    def __call__(self, signal, add_signal=True, dimensions=None):
+        # print('-----> SQI.__call__()')
+        values_out = super().__call__(signal, add_signal=add_signal, 
+                                      dimensions=dimensions)
+        
+        signal_name = signal.p.main_signal.name
+        if add_signal:
+            indicator_name = signal_name+'_'+self.name
+        else:
+            indicator_name = signal_name
+        
+        #for SQI that are called from within other algorithms
+        if isinstance(values_out, _xr.Dataset):
+            isgood = self.is_good(values_out[indicator_name])
+            #convert isgood to dataarray
+            isgood_out = values_out[indicator_name].copy(data = isgood)
+        else:
+            values_out.name = indicator_name
+            isgood = self.is_good(values_out)
+            #convert isgood to dataarray
+            isgood_out = values_out.copy(data = isgood)
+        
+        
+        isgood_name = indicator_name +'_isgood'
+        isgood_out.name = isgood_name
+        
+        out = _xr.merge([values_out, isgood_out])
+        # print('<----- SQI.__call__()')
+        return(out)
 
 class Kurtosis(_SignalQualityIndicator):
     """

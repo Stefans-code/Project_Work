@@ -1,14 +1,10 @@
 # coding=utf-8
 # from __future__ import division
 import numpy as _np
-from ..processing import Algorithm as _Algorithm
-from ..processing.tools import Diff as _Diff
+from .._base_algorithm import _Algorithm
+from ..utils import Diff as _Diff
 from .timedomain import Mean as _Mean, StDev as _StDev
 from scipy.spatial.distance import cdist as _cd
-
-
-# __author__ = 'AleB'
-
 
 class PoincareSD1(_Algorithm):
     """

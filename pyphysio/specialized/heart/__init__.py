@@ -1,10 +1,10 @@
 # coding=utf-8
 # from __future__ import division
 import numpy as _np
-from ..processing import Algorithm as _Algorithm
-from ..signal import create_signal
-from ..processing.filters import IIRFilter as _IIRFilter
-from ..processing.tools import SignalRange as _SignalRange, Minima as _Minima, Diff as _Diff, PeakDetection as _PeakDetection
+from ..._base_algorithm import _Algorithm
+from ...signal import create_signal
+from ...filters import IIRFilter as _IIRFilter
+from ...utils import SignalRange as _SignalRange, Minima as _Minima, Diff as _Diff, PeakDetection as _PeakDetection
 import itertools as _itertools
 
 # IBI ESTIMATION
@@ -284,6 +284,7 @@ class RemoveBeatOutliers(_Algorithm):
         
         return ibi_scaffold
 
+#TODO: fix or remove -->
 class BeatOptimizer(_Algorithm):
     """
     Optimize detection of errors in IBI estimation.

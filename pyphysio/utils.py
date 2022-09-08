@@ -2,15 +2,9 @@
 # from __future__ import division
 import numpy as _np
 import xarray as _xr
-
-from scipy.signal import welch as _welch, periodogram as _periodogram, freqz as _freqz
+from scipy.signal import welch as _welch, periodogram as _periodogram
 import pycwt.wavelet as wave
-from scipy import linalg as _linalg
-
-from . import Algorithm as _Algorithm
-from ..signal import create_signal
-
-_xr.set_options(keep_attrs = True)
+from ._base_algorithm import _Algorithm
 
 
 def __finalize_special__(res_sig):
@@ -795,49 +789,6 @@ class Slopes(_Algorithm):
             else:
                 slopes.append(_np.nan)
         return slopes
-
-
-
-class FixIBI(_Algorithm):
-    """
-    Corrects the IBI series removing abnormal IBI
-    
-    Parameters
-    ----------
-    idx_bad_ibi : array
-        Identifiers of abnormal beats
-   
-    Returns
-    -------
-    ibi : Unevenly Signal
-        Corrected IBI
-            
-    """
-
-    def __init__(self, idx_bad_ibi):
-        idx_bad_ibi = _np.array(idx_bad_ibi)
-        assert idx_bad_ibi.ndim == 1
-        _Algorithm.__init__(self, id_bad_ibi=idx_bad_ibi)
-
-    
-    def algorithm(self, signal):
-        params = self._params
-        
-        id_bad = params['id_bad_ibi']
-        if len(id_bad) == 0:
-            return(signal)
-        
-        idx_ibi = signal.get_indices()
-        ibi = signal.get_values()
-        idx_ibi_nobad = _np.delete(idx_ibi, id_bad)
-        ibi_nobad = _np.delete(ibi, id_bad)
-        idx_ibi = idx_ibi_nobad.astype(int)
-        ibi = ibi_nobad
-        return _Signal(values = ibi, 
-                       sampling_freq = signal.get_sampling_freq(), 
-                       start_time = signal.get_start_time(),
-                       info = signal.get_info(), 
-                       x_values=idx_ibi, x_type='indices')
 
 class PeakSelection(_Algorithm):
     """

@@ -1,13 +1,7 @@
-# coding=utf-8
-# from __future__ import division
-
 import numpy as _np
-from ..processing import Algorithm as _Algorithm
+from .._base_algorithm import _Algorithm
 
-from ..processing.tools import Diff as _Diff
-
-# __author__ = 'AleB'
-
+from ..utils import Diff as _Diff
 
 class Mean(_Algorithm):
     """
@@ -19,7 +13,6 @@ class Mean(_Algorithm):
         
     def algorithm(self, signal):
         return _np.mean(signal.values, keepdims=True)
-
 
 class Min(_Algorithm):
     """

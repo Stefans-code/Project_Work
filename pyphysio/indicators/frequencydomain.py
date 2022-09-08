@@ -1,8 +1,6 @@
-# coding=utf-8
-# from __future__ import division
 import numpy as _np
-from ..processing import Algorithm as _Algorithm
-from ..processing.tools import PSD as PSD
+from .._base_algorithm import _Algorithm
+from ..utils import PSD as PSD
 
 # __author__ = 'AleB'
 

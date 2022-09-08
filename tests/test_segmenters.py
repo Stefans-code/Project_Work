@@ -1,13 +1,8 @@
 from pyphysio.signal import create_signal
 import numpy as np
-from pyphysio.processing import Algorithm
-import matplotlib.pyplot as plt
-
-import pyphysio.processing.filters as filt
-import pyphysio.indicators.timedomain as td
-import pyphysio.indicators.frequencydomain as fd
-import pyphysio.processing.tools as tools
+from pyphysio.indicators import td
 import pyphysio.segmenters as segm
+
 n_ch = 3
 n_cp = 2
 data = np.random.uniform(size = (10000, n_ch, n_cp)) + np.random.uniform(0, 10, size = (1,n_ch,n_cp))

@@ -2,7 +2,7 @@ import numpy as np
 from pyphysio.signal import create_signal
 import xarray as xr
 
-import pyphysio.processing.filters as filt
+import pyphysio.filters as filt
 
 filters = [filt.Normalize(), 
            filt.ConvolutionalFilter('rect', 0.5),

@@ -87,10 +87,13 @@ def _parse_multiline(content, key):
     
 def _parseSD(SDMask, SDKey, n_wl):
     M, N = SDMask.shape
+    
     # third column is all ones by default... I have no idea what it is, just copying behavior from original script
-    idexes = _np.vstack(_np.array((int(i+1), int(j+1), 1)) for i,j in product(range(M), range(N)) if SDMask[i,j] == 1 )
+    idexes_to_stack = [_np.array((int(i+1), int(j+1), 1)) for i,j in product(range(M), range(N)) if SDMask[i,j] == 1 ]
+    idexes = _np.vstack(idexes_to_stack)
     nChannels = idexes.shape[0]
-    output = _np.vstack(_np.hstack( (idexes, (i+1)*_np.ones(nChannels).reshape(nChannels,1) ) ) for i in range(n_wl) )  
+    output_to_stack = [_np.hstack( (idexes, (i+1)*_np.ones(nChannels).reshape(nChannels,1) ) ) for i in range(n_wl)]
+    output = _np.vstack(output_to_stack)  
     return(output.astype(int))
 
 def _find_goodIDK(SDMask, SDKey):

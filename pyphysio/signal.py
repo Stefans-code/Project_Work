@@ -129,9 +129,10 @@ class PyphysioDataArray(object):
         return self.da
     
     #++++++++++++++++++++++++++++++++++++
-    #!!!
+    #!!! CHECK
     #The methods that modify the signal (self.da) should always return the new
-    #signal. In other words: self.da = new_signal  will not be effective
+    #signal. In other words: self.da = new_signal  will not be effective!
+    #CHECK process_na, which seems to behave differently
     #++++++++++++++++++++++++++++++++++++
     
     def clone(self, values, name='signal'):

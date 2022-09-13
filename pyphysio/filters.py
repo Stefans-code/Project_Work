@@ -43,7 +43,7 @@ class Normalize(_Algorithm):
         _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
         self.dimensions = {'time' : 0}
 
-    def algorithm(self, signal):
+    def algorithm(self, signal, **kwargs):
         from ..indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
         params = self._params
         method = params['norm_method']

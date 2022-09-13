@@ -73,7 +73,7 @@ class _Algorithm(object):
         # template.name = signal
         return(chunk_dict, template)
     
-    def __call__(self, signal_in, add_signal=True, dimensions=None, scheduler=scheduler):
+    def __call__(self, signal_in, add_signal=True, dimensions=None, scheduler=scheduler, **kwargs):
         '''
         This function iteratively calls the self.algorithm on signal's chunks.
         If dask is installed and properly configured, this allows to parallelize
@@ -148,7 +148,7 @@ class _Algorithm(object):
         if dimensions == 'none': 
             #This is to allow special implementations, where the "rolling"
             #mechanism is avoided
-            signal_out = self.__mapper_func__(signal)
+            signal_out = self.__mapper_func__(signal, kwargs)
         
         #Typical behaviour
         #All dimensions except those specified in dimensions are rolled
@@ -163,6 +163,7 @@ class _Algorithm(object):
             #which calls self.__mapper_func__ on all chunks
             mapper =  _xr.map_blocks(self.__mapper_func__, 
                                       signal_dask.copy(deep=True), 
+                                      kwargs = kwargs,
                                       template = template_dask)
             
             #apply the rollink mechanism and compose the results
@@ -219,7 +220,7 @@ class _Algorithm(object):
         signal_out.attrs = signal_in.attrs
         return(signal_out)        
         
-    def __mapper_func__(self, signal_in):
+    def __mapper_func__(self, signal_in, **kwargs):
         '''
         This function is called by __call__, which parallelizes the execution
         
@@ -245,7 +246,7 @@ class _Algorithm(object):
             to create the general outcome (returned to the user).
         '''
         
-        result_numpy = self.algorithm(signal_in)
+        result_numpy = self.algorithm(signal_in, **kwargs)
         result_out = self.__finalize__(result_numpy, signal_in)
         return(result_out)
 

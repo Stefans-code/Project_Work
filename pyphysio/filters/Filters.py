@@ -9,7 +9,10 @@ from ..BaseFilter import Filter as _Filter
 from ..Signal import EvenlySignal as _EvenlySignal, UnevenlySignal as _UnevenlySignal
 from ..Utility import abstractmethod as _abstract
 from ..tools.Tools import SignalRange
-from collections import Sequence
+try:
+    from collections.abc import Sequence
+except:
+    from collections import Sequence
 __author__ = 'AleB'
 
 

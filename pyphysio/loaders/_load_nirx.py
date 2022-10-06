@@ -5,6 +5,7 @@ import h5py as _h5py
 from ..signal import create_signal
 import scipy.optimize as _opt
 import scipy.io as _spio
+from itertools import product
 import math
 
 _xr.set_options(keep_attrs=True)
@@ -15,7 +16,7 @@ def load_nirx2(DATADIR, full=False, has_stim=True):
     idx_snirf = _np.where([x.endswith('snirf') for x in filelist])[0][0]
     FILE_SNIRF = filelist[idx_snirf]
 
-    #%% LOAD snirf
+    #% LOAD snirf
     f = _h5py.File(f'{DATADIR}/{FILE_SNIRF}', 'r')
 
     # formatVersion = f['formatVersion'][()][0]
@@ -138,28 +139,6 @@ def load_nirx2(DATADIR, full=False, has_stim=True):
 #=====================
 # supporting functions
 #=====================
-def _check_keys(dict):
-    '''
-    checks if entries in dictionary are mat-objects. If yes
-    todict is called to change them to nested dictionaries
-    '''
-    for key in dict:
-        if isinstance(dict[key], _spio.matlab.mio5_params.mat_struct):
-            dict[key] = _todict(dict[key])
-    return dict        
-
-def _todict(matobj):
-    '''
-    A recursive function which constructs from matobjects nested dictionaries
-    '''
-    dict = {}
-    for strg in matobj._fieldnames:
-        elem = matobj.__dict__[strg]
-        if isinstance(elem, _spio.matlab.mio5_params.mat_struct):
-            dict[strg] = _todict(elem)
-        else:
-            dict[strg] = elem
-    return dict
 
 def loadmat(filename):
     '''
@@ -168,6 +147,29 @@ def loadmat(filename):
     from mat files. It calls the function check keys to cure all entries
     which are still mat-objects
     '''
+    def _check_keys(dict):
+        '''
+        checks if entries in dictionary are mat-objects. If yes
+        todict is called to change them to nested dictionaries
+        '''
+        for key in dict:
+            if isinstance(dict[key], _spio.matlab.mio5_params.mat_struct):
+                dict[key] = _todict(dict[key])
+        return dict   
+
+    def _todict(matobj):
+        '''
+        A recursive function which constructs from matobjects nested dictionaries
+        '''
+        dict = {}
+        for strg in matobj._fieldnames:
+            elem = matobj.__dict__[strg]
+            if isinstance(elem, _spio.matlab.mio5_params.mat_struct):
+                dict[strg] = _todict(elem)
+            else:
+                dict[strg] = elem
+        return dict
+    
     data = _spio.loadmat(filename, struct_as_record=False, squeeze_me=True)
     return _check_keys(data)
 
@@ -188,30 +190,8 @@ def _remove_regexp(string):
     string = string.replace('"', '')
     string = string.replace("'", '')
     return(string)
-
-def _parse_line(content, key, equal='='):
-    idx_row = _np.where([x.startswith(key) for x in content])[0][0]
-    row = content[idx_row]
-    row = _remove_regexp(row)
-    split = row.split(equal)
-    return(split)
-
-from itertools import product
-
-def _parse_multiline(content, key):
-    idx_row_st = _np.where([x.startswith(key) for x in content])[0][0]
-    idx_row_sp = _np.where([x.startswith('#') for x in content])[0]
-
-    idx_row_sp_true = idx_row_sp[_np.where(idx_row_sp>idx_row_st)[0][0]]                       
-    
-    rows = content[idx_row_st+1:idx_row_sp_true]
-    rows_ = []
-    for R in rows:
-        rows_.append(_np.array(R.split('\t')).astype(float))
-    
-    return(_np.array(rows_))
-    
-def _parseSD(SDMask, SDKey, n_wl):
+   
+def _parseSD(SDMask, n_wl):
     M, N = SDMask.shape
     
     # third column is all ones by default... I have no idea what it is, just copying behavior from original script
@@ -221,11 +201,6 @@ def _parseSD(SDMask, SDKey, n_wl):
     output_to_stack = [_np.hstack( (idexes, (i+1)*_np.ones(nChannels).reshape(nChannels,1) ) ) for i in range(n_wl)]
     output = _np.vstack(output_to_stack)  
     return(output.astype(int))
-
-def _find_goodIDK(SDMask, SDKey):
-    M, N = SDMask.shape
-    goodIDX = [ SDKey["{0}-{1}".format(i+1, j+1)] - 1 for i,j in product(range(M), range(N)) if SDMask[i,j] == 1 ]
-    return(goodIDX)
 
 def _find_origin(pi):
     def fun(x):
@@ -384,15 +359,10 @@ def _rotate_clusters(probeInfo):
         newcoords[idx,:] = coords[:,0:3]
     return(newcoords)
 
-#%%
 def load_probeInfo(FILE):
     probeInfo = loadmat(FILE)['probeInfo']
     newcoords = _rotate_clusters(probeInfo)
     return(newcoords)
-
-def load_data(FILE, goodIDX):
-    data = _np.loadtxt(FILE)[:,goodIDX]
-    return(data)
     
 def load_events(FILE, has_stim=True):
     if not has_stim:
@@ -414,7 +384,6 @@ def load_events(FILE, has_stim=True):
     else:
         print('Error processing event file')
         
-
 #%%
 def load_nirx(DATADIR, has_stim=True):
     """Import NIRS data generated with NIRx devices.
@@ -433,66 +402,89 @@ def load_nirx(DATADIR, has_stim=True):
     nirs : pynirs.NIRS
             Object cointaining the nirs data and metadata
     """
-    def _load_hdr(HDR_FILE):
-        with open(HDR_FILE, 'r') as f:
-            content = f.readlines()
-            
-        Lambda = _np.array(_parse_line(content, 'Wavelengths')[1].split('\t')).astype(float)
-        SDMask = _parse_multiline(content, 'S-D-Mask')
-        SDKey = dict([(x.split(':')[0], int(x.split(':')[1])) for x in _parse_line(content, 'S-D-Key')[1].split(',')[:-1]])
-        # SDKey = [x.split(':')[0] for x in _parse_line(content, 'S-D-Key')[1].split(',')[:-1]]
-        ml = _parseSD(SDMask, SDKey, len(Lambda))
-        
-        fsamp = float(_parse_line(content, 'Sampling')[1])
-        
-        nSrcs = _np.max(ml[:,0])
-        nDets = _np.max(ml[:,1])
-        
-        SD = {
-            'Lambda': Lambda,
-            'nSrcs': nSrcs,
-            'nDets': nDets,
-            'MeasList': ml,
-            'SpatialUnit': 'cm', # probeInfo coordinates are in cm
-            'SDmask' : SDMask,
-            'SDkey': SDKey,
-            'fsamp': fsamp
-        }
-        return(SD)
-
+    
     filelist = os.listdir(DATADIR)
     idx_hdr = _np.where([x.endswith('hdr') for x in filelist])[0][0]
     FILE_HDR = filelist[idx_hdr]
     
-    SD = _load_hdr(f'{DATADIR}/{FILE_HDR}')
+    HDR_FILE = f'{DATADIR}/{FILE_HDR}'
+    
+    with open(HDR_FILE, 'r') as f:
+        content = f.readlines()
+    
+    content_dict = {}
+    for i in content:
+        if '=' in i:
+            k = i.split('=')[0]
+            v = _remove_regexp(i.split('=')[1])
+            if v !='#':
+                content_dict[k] = [v]
+            else:
+                content_dict[k] = []
+        elif '[' not in i:
+            if k == 'S-D-Mask':
+                i = _remove_regexp(i)
+                if i != '#' and i != '':
+                    row = [int(x) for x in i.split('\t')]
+                    content_dict[k].append(row)
+    
+    Lambda = [float(content_dict['Wavelengths'][0].split('\t')[0]),
+              float(content_dict['Wavelengths'][0].split('\t')[1])]
+    SDMask = _np.array(content_dict['S-D-Mask'])
+
+    ml = _parseSD(SDMask, len(Lambda))
+    n_channels = int(ml.shape[0] / len(Lambda))
+    
+    SDKey_support = {}
+    for k in content_dict['S-D-Key'][0].split(','):
+        if ':' in k:
+            sd = k.split(':')[0]
+            idx = k.split(':')[1]
+            SDKey_support[sd] = int(idx)
+            
+    SDKey = {}
+    goodIDX = []
+    for i in range(n_channels):
+        s = ml[i,0]-1
+        d = ml[i,1]-1
+        SDKey[i] = [s,d]
+        goodIDX.append(SDKey_support[f'{s+1}-{d+1}']-1)
+
+    fsamp = float(content_dict['SamplingRate'][0])
+    
+    nsrc = int(content_dict['Sources'][0])
+    ndet = int(content_dict['Detectors'][0])
+    
+    SD = {
+        'Lambda': Lambda,
+        'SDmask' : SDMask,
+        'SDkey': SDKey
+    }
+    
 
     idx_pi = _np.where([x.endswith('probeInfo.mat') for x in filelist])[0][0]
     FILE_PI = filelist[idx_pi]
     
     newcoords = load_probeInfo(f'{DATADIR}/{FILE_PI}')
-    nsrc = SD['nSrcs']
-    ndet = SD['nDets']
-    
+            
     srcPos = _np.zeros((nsrc, 3))
     srcPos[:,2] = newcoords[0:nsrc,2] #src coords
     srcPos[:,0:2] = -newcoords[0:nsrc,0:2]# %additional 180º rotation
     SD['SrcPos'] = srcPos
     
-    detPos = _np.zeros((ndet, 3))
+    detPos = _np.zeros((ndet-nsrc, 3))
     detPos[:,2] = newcoords[nsrc:,2] #det coords
     detPos[:,0:2] = -newcoords[nsrc:,0:2] #additional 180º rotation
     SD['DetPos'] = detPos
-    compute_channelsPos(SD)    
-
-    fsamp = SD['fsamp']
-    wavelengths = SD['Lambda']
-    goodIDX = _find_goodIDK(SD['SDmask'], SD['SDkey'])
+    OptPos = compute_channelsPos(SD['SDkey'], SD['SrcPos'], SD['DetPos'])    
+    SD['OptPos'] = OptPos
     
     data = []
-    for i_wl in range(len(wavelengths)):
+    for i_wl in range(len(Lambda)):
         idx_data = _np.where([x.endswith(f'wl{i_wl+1}') for x in filelist])[0][0]
         FILE_DATA  = filelist[idx_data]
-        data.append(load_data(f'{DATADIR}/{FILE_DATA}', goodIDX))
+        data_ = _np.loadtxt(f'{DATADIR}/{FILE_DATA}')
+        data.append(data_[:, goodIDX])
     
     data = _np.stack(data, axis=2)
     
@@ -518,12 +510,9 @@ def load_nirx(DATADIR, has_stim=True):
         info[k] = v
     
     #remove undesired attributes (that prevent saving to netcdf)
-    del info['fsamp']
-    del info['SDkey']
-    
-    for key in ['MeasList', 'SDmask', 'SrcPos', 'DetPos', 'ChPos']:
-        info[f'{key}_DIM'] = info[key].shape[0]
-        info[key] = info[key].ravel()
+    # for key in ['MeasList', 'SDmask', 'SrcPos', 'DetPos', 'ChPos']:
+    #     info[f'{key}_DIM'] = info[key].shape[0]
+    #     info[key] = info[key].ravel()
         
     nirs = create_signal(data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=info)
     

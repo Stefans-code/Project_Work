@@ -1,6 +1,6 @@
 import numpy as _np
 from ._base_algorithm import _Algorithm
-from csaps import csaps as _csaps
+
 from .filters import IIRFilter as _IIRFilter
 import pywt
 from scipy.stats import median_abs_deviation as _mad
@@ -17,6 +17,8 @@ class MARA(_Algorithm):
     F Scholkmann et al 2010 Physiol. Meas. 31 649
     '''
     def __init__(self, win_len = 5, threshold = None, fuse=False, **kwargs):
+        
+        
         _Algorithm.__init__(self, win_len=win_len, threshold=threshold, **kwargs)
         
         #IDEA for the MA detection, we can do that by channel or globally
@@ -30,6 +32,8 @@ class MARA(_Algorithm):
     
     
     def algorithm(self, signal):
+        from csaps import csaps as _csaps
+        
         params = self._params
         win_len = params['win_len']
         threshold = params['threshold']

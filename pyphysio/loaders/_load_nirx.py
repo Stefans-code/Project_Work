@@ -9,6 +9,130 @@ import math
 
 _xr.set_options(keep_attrs=True)
 
+def load_nirx2(DATADIR, full=False, has_stim=True):
+    filelist = os.listdir(DATADIR)
+    
+    idx_snirf = _np.where([x.endswith('snirf') for x in filelist])[0][0]
+    FILE_SNIRF = filelist[idx_snirf]
+
+    #%% LOAD snirf
+    f = _h5py.File(f'{DATADIR}/{FILE_SNIRF}', 'r')
+
+    # formatVersion = f['formatVersion'][()][0]
+    nirs_data = f['nirs']['data1']['dataTimeSeries'][()]
+    
+    n_channels = int(nirs_data.shape[1] / 2)
+    nirs_data_out = []
+    for i in range(n_channels):
+        ch_data = nirs_data[:, [i, i+n_channels]]
+        # ch_data = ch_data[:, _np.newaxis, :]
+        nirs_data_out.append(ch_data)
+    
+    nirs_data = _np.stack(nirs_data_out, 1)
+    time = f['nirs']['data1']['time'][()]
+    fsamp = 1/(time[1] - time[0])
+    
+    nirs_probe_metadata = {}
+    for k in f['nirs']['probe'].keys():
+        nirs_probe_metadata[k] = f['nirs']['probe'][k][()]
+
+    # SD['SpatialUnit': 'cm'] #TODO: TRUE?
+
+    # LOAD HDR
+    idx_hdr = _np.where([x.endswith('hdr') for x in filelist])[0][0]
+    FILE_HDR = filelist[idx_hdr]
+    with open(f'{DATADIR}/{FILE_HDR}', 'r') as f:
+        content = f.readlines()
+    
+    content_dict = {}
+    for i in content:
+        if '=' in i:
+            k = i.split('=')[0]
+            v = _remove_regexp(i.split('=')[1])
+            if v !='#':
+                content_dict[k] = [v]
+        elif '[' not in i:
+            if k == 'Channel Mask':
+                i = _remove_regexp(i)
+                if i != '#':
+                    row = [int(x) for x in i.split('     ')]
+                    content_dict[k].append(row)
+            if k == 'Channel indices':
+                row = _remove_regexp(i).split(', ')
+                row = [ [int(x.split('-')[0]), int(x.split('-')[1])] for x in row]
+                    
+                content_dict[k] = row
+    
+    content_dict['Channel Mask'] = _np.array(content_dict['Channel Mask'][1:])
+    content_dict['Channel indices'] = dict([(i, k) for i,k in enumerate(content_dict['Channel indices'])])
+
+    SD = {}
+    SD['Lambda'] = nirs_probe_metadata['wavelengths']
+    SD['SrcPos'] = nirs_probe_metadata['sourcePos3D']
+    SD['SrcPos2D'] = nirs_probe_metadata['sourcePos2D']
+    
+    SD['DetPos'] = nirs_probe_metadata['detectorPos3D']
+    SD['DetPos2D'] = nirs_probe_metadata['detectorPos2D']
+    
+    SD['SDmask'] = content_dict['Channel Mask']
+    SD['SDkey'] = content_dict['Channel indices']
+    
+    SD['ChPos'] = compute_channelsPos(SD['SDkey'],
+                                      SD['SrcPos'], 
+                                      SD['DetPos'])
+    
+    SD['ChPos2D'] = compute_channelsPos(SD['SDkey'],
+                                        SD['SrcPos2D'], 
+                                        SD['DetPos2D'])
+    
+    if full: #no urgent
+        ids =[]
+        for k in f['nirs']['data1'].keys():
+            if k.startswith('measurementList'):
+                ids.append(k.split('measurementList')[1])
+    
+        nirs_signal_metadata = {}
+        for m in ids:
+            d = {}
+            for k in f['nirs']['data1'][f'measurementList{m}'].keys():
+                d[k] = f['nirs']['data1'][f'measurementList{m}'][k][()]
+            nirs_signal_metadata[m] = d
+    
+        nirs_acquisition_metadata = {}
+    
+        for k in f['nirs']['metaDataTags'].keys():
+            nirs_acquisition_metadata[k] = f['nirs']['metaDataTags'][k][()][0]
+
+    info = {}
+    for k,v in SD.items():
+        info[k] = v
+        
+    nirs = create_signal(nirs_data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=info)
+
+    #TODO: implement load stim
+    '''
+    #detector dir:
+    if 'Conditions' in filelist:
+        filelist_cond = os.listdir(f'{DATADIR}/Conditions')
+        idx_evt = np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
+        FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
+    else:
+        idx_evt = np.where([x.endswith('.evt') for x in filelist])[0][0]
+        FILE_EVT = filelist[idx_evt]
+    
+    idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
+    
+    N = data.shape[0]
+    stim = np.zeros(N)
+    if len(idx)>0:
+        stim[idx] = codes
+        
+    stim = ph.EvenlySignal(stim, sampling_freq=fsamp, start_time = 0)
+    nirs = nirs.assign_coords(stim=('time', stim))
+    '''    
+
+    return(nirs)
+
 #TODO: find source and cite!
 #%%
 #=====================
@@ -47,16 +171,17 @@ def loadmat(filename):
     data = _spio.loadmat(filename, struct_as_record=False, squeeze_me=True)
     return _check_keys(data)
 
-def compute_channelsPos(SD):
-    measList = SD['MeasList']
-    srcPos = SD['SrcPos']
-    detPos = SD['DetPos']
+def compute_channelsPos(SDkey, srcPos, detPos):
+    # SDkey = SD['SDkey']
+    # srcPos = SD['SrcPos']
+    # detPos = SD['DetPos']
     chPos = []
-    for ch in measList:
-        source_xyz = srcPos[ch[0]-1]
-        detector_xyz = detPos[ch[1]-1]
+    for i_ch, keys in SDkey.items():
+        source_xyz = srcPos[keys[0]]
+        detector_xyz = detPos[keys[1]]
         chPos.append((source_xyz + detector_xyz)/2)
-    SD['ChPos'] = _np.array(chPos)
+    # SD['ChPos'] = _np.array(chPos)
+    return(chPos)
 
 def _remove_regexp(string):
     string = string.replace('\n', '')
@@ -197,8 +322,8 @@ def _rotmat(point, direction, theta):
 
     # rotational part    
     mat[0:3, 0:3] = [[(u*u + (v*v + w*w) * co), (u*v*(1-co) - w*si),     (u*w*(1-co) + v*si)],
-                     [(u*v*(1-co) + w*si),      (v*v + (u*u + w*w)*co),  (v*w*(1-co) - u*si)],
-                     [(u*w*(1-co) - v*si),      (v*w*(1-co) + u*si),     (w*w + (u*u + v*v)*co)]]
+                      [(u*v*(1-co) + w*si),      (v*v + (u*u + w*w)*co),  (v*w*(1-co) - u*si)],
+                      [(u*w*(1-co) - v*si),      (v*w*(1-co) + u*si),     (w*w + (u*u + v*v)*co)]]
 
     # translational part
     mat[0,3] = (a*(v*v+w*w)-u*(b*v+c*w)) * (1-co) + (b*w-c*v)*si
@@ -260,33 +385,6 @@ def _rotate_clusters(probeInfo):
     return(newcoords)
 
 #%%
-def load_hdr(HDR_FILE):
-    with open(HDR_FILE, 'r') as f:
-        content = f.readlines()
-        
-    Lambda = _np.array(_parse_line(content, 'Wavelengths')[1].split('\t')).astype(float)
-    SDMask = _parse_multiline(content, 'S-D-Mask')
-    SDKey = dict([(x.split(':')[0], int(x.split(':')[1])) for x in _parse_line(content, 'S-D-Key')[1].split(',')[:-1]])
-    # SDKey = [x.split(':')[0] for x in _parse_line(content, 'S-D-Key')[1].split(',')[:-1]]
-    ml = _parseSD(SDMask, SDKey, len(Lambda))
-    
-    fsamp = float(_parse_line(content, 'Sampling')[1])
-    
-    nSrcs = _np.max(ml[:,0])
-    nDets = _np.max(ml[:,1])
-    
-    SD = {
-        'Lambda': Lambda,
-        'nSrcs': nSrcs,
-        'nDets': nDets,
-        'MeasList': ml,
-        'SpatialUnit': 'cm', # probeInfo coordinates are in cm
-        'SDmask' : SDMask,
-        'SDkey': SDKey,
-        'fsamp': fsamp
-    }
-    return(SD)
-
 def load_probeInfo(FILE):
     probeInfo = loadmat(FILE)['probeInfo']
     newcoords = _rotate_clusters(probeInfo)
@@ -333,13 +431,40 @@ def load_nirx(DATADIR, has_stim=True):
     Returns
     -------
     nirs : pynirs.NIRS
-           Object cointaining the nirs data and metadata
+            Object cointaining the nirs data and metadata
     """
+    def _load_hdr(HDR_FILE):
+        with open(HDR_FILE, 'r') as f:
+            content = f.readlines()
+            
+        Lambda = _np.array(_parse_line(content, 'Wavelengths')[1].split('\t')).astype(float)
+        SDMask = _parse_multiline(content, 'S-D-Mask')
+        SDKey = dict([(x.split(':')[0], int(x.split(':')[1])) for x in _parse_line(content, 'S-D-Key')[1].split(',')[:-1]])
+        # SDKey = [x.split(':')[0] for x in _parse_line(content, 'S-D-Key')[1].split(',')[:-1]]
+        ml = _parseSD(SDMask, SDKey, len(Lambda))
+        
+        fsamp = float(_parse_line(content, 'Sampling')[1])
+        
+        nSrcs = _np.max(ml[:,0])
+        nDets = _np.max(ml[:,1])
+        
+        SD = {
+            'Lambda': Lambda,
+            'nSrcs': nSrcs,
+            'nDets': nDets,
+            'MeasList': ml,
+            'SpatialUnit': 'cm', # probeInfo coordinates are in cm
+            'SDmask' : SDMask,
+            'SDkey': SDKey,
+            'fsamp': fsamp
+        }
+        return(SD)
+
     filelist = os.listdir(DATADIR)
     idx_hdr = _np.where([x.endswith('hdr') for x in filelist])[0][0]
     FILE_HDR = filelist[idx_hdr]
     
-    SD = load_hdr(f'{DATADIR}/{FILE_HDR}')
+    SD = _load_hdr(f'{DATADIR}/{FILE_HDR}')
 
     idx_pi = _np.where([x.endswith('probeInfo.mat') for x in filelist])[0][0]
     FILE_PI = filelist[idx_pi]
@@ -403,187 +528,4 @@ def load_nirx(DATADIR, has_stim=True):
     nirs = create_signal(data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=info)
     
     nirs = nirs.assign_coords(stim=('time', stim))
-    return(nirs)
-
-def load_nirx2(DATADIR, full=False, has_stim=True):
-    filelist = os.listdir(DATADIR)
-    
-    idx_snirf = _np.where([x.endswith('snirf') for x in filelist])[0][0]
-    FILE_SNIRF = filelist[idx_snirf]
-
-    #%% LOAD snirf
-    f = _h5py.File(f'{DATADIR}/{FILE_SNIRF}', 'r')
-
-    # formatVersion = f['formatVersion'][()][0]
-    nirs_data = f['nirs']['data1']['dataTimeSeries'][()]
-    
-    n_channels = int(nirs_data.shape[1] / 2)
-    nirs_data_out = []
-    for i in range(n_channels):
-        ch_data = nirs_data[:, [i, i+n_channels]]
-        # ch_data = ch_data[:, _np.newaxis, :]
-        nirs_data_out.append(ch_data)
-    
-    nirs_data = _np.stack(nirs_data_out, 1)
-    time = f['nirs']['data1']['time'][()]
-    fsamp = 1/(time[1] - time[0])
-    
-    nirs_probe_metadata = {}
-    for k in f['nirs']['probe'].keys():
-        nirs_probe_metadata[k] = f['nirs']['probe'][k][()]
-
-    
-    SD = {}
-    SD['Lambda'] = nirs_probe_metadata['wavelengths']
-    SD['SrcPos'] = nirs_probe_metadata['sourcePos3D']
-    SD['SrcPos2D'] = nirs_probe_metadata['sourcePos2D']
-    
-    SD['DetPos'] = nirs_probe_metadata['detectorPos3D']
-    SD['DetPos2D'] = nirs_probe_metadata['detectorPos2D']
-    # SD['SpatialUnit': 'cm'] #TODO: TRUE?
-
-    if full: #no urgent
-        ids =[]
-        for k in f['nirs']['data1'].keys():
-            if k.startswith('measurementList'):
-                ids.append(k.split('measurementList')[1])
-    
-        nirs_signal_metadata = {}
-        for m in ids:
-            d = {}
-            for k in f['nirs']['data1'][f'measurementList{m}'].keys():
-                d[k] = f['nirs']['data1'][f'measurementList{m}'][k][()]
-            nirs_signal_metadata[m] = d
-    
-        nirs_acquisition_metadata = {}
-    
-        for k in f['nirs']['metaDataTags'].keys():
-            nirs_acquisition_metadata[k] = f['nirs']['metaDataTags'][k][()][0]
-
-        # LOAD HDR
-        idx_hdr = _np.where([x.endswith('hdr') for x in filelist])[0][0]
-        FILE_HDR = filelist[idx_hdr]
-        with open(FILE_HDR, 'r') as f:
-            content = f.readlines()
-        
-        #%
-        content_dict = {}
-        for i in content:
-            if '=' in i:
-                k = i.split('=')[0]
-                v = _remove_regexp(i.split('=')[1])
-                if v !='#':
-                    content_dict[k] = [v]
-            elif '[' not in i:
-                if k == 'Channel Mask':
-                    i = _remove_regexp(i)
-                    if i != '#':
-                        row = [int(x) for x in i.split('     ')]
-                        content_dict[k].append(row)
-                if k == 'Channel indices':
-                    content_dict[k] = _remove_regexp(i).split(', ')
-        
-        content_dict['Channel Mask'] = _np.array(content_dict['Channel Mask'][1:])
-        
-        SDkey = {}
-        for i, k in enumerate(content_dict['Channel indices']):
-            sd = k.split('-')
-            s = int(sd[0])+1
-            d = int(sd[1])+1
-            sd = f'{s}-{d}'
-            SDkey[sd] = i+1
-        content_dict['Channel indices'] = dict([(k, i) for i,k in enumerate(content_dict['Channel indices'])])
-
-        SD['MeasList'] = _np.nan
-        SD['SDmask'] = content_dict['Channel Mask']
-        # SD['SDkey'] = content_dict['Channel indices']
-    
-    '''
-    #detector dir:
-    if 'Conditions' in filelist:
-        filelist_cond = os.listdir(f'{DATADIR}/Conditions')
-        idx_evt = np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
-        FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
-    else:
-        idx_evt = np.where([x.endswith('.evt') for x in filelist])[0][0]
-        FILE_EVT = filelist[idx_evt]
-    
-    idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
-    
-    N = data.shape[0]
-    stim = np.zeros(N)
-    if len(idx)>0:
-        stim[idx] = codes
-        
-    stim = ph.EvenlySignal(stim, sampling_freq=fsamp, start_time = 0)
-    '''
-    
-    info = {}
-    for k,v in SD.items():
-        info[k] = v
-    
-    #remove undesired attributes (that prevent saving to netcdf)
-    # del info['SDkey']
-    
-    # for key in ['MeasList', 'SDmask', 'SrcPos', 'DetPos', 'ChPos']:
-        # info[f'{key}_DIM'] = info[key].shape[0]
-        # info[key] = info[key].ravel()
-        
-    nirs = create_signal(nirs_data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=info)
-    
-    # nirs = nirs.assign_coords(stim=('time', stim))
-    return(nirs)
-
-
-def load_nirx_old(DATADIR):
-    filelist = os.listdir(DATADIR)
-    idx_hdr = _np.where([x.endswith('hdr') for x in filelist])[0][0]
-    FILE_HDR = filelist[idx_hdr]
-    with open(f'{DATADIR}/{FILE_HDR}', 'r') as f:
-        content = f.readlines()
-    
-    #%
-    SD = {}
-    content_dict = {}
-    for i in content:
-        if '=' in i:
-            k = i.split('=')[0]
-            v = _remove_regexp(i.split('=')[1])
-            if v !='#':
-                content_dict[k] = [v]
-        elif '[' not in i:
-            if k == 'Channel Mask':
-                i = _remove_regexp(i)
-                if i != '#':
-                    row = [int(x) for x in i.split('     ')]
-                    content_dict[k].append(row)
-            if k == 'Channel indices':
-                content_dict[k] = _remove_regexp(i).split(', ')
-    
-    content_dict['Channel Mask'] = _np.array(content_dict['Channel Mask'][1:])
-    print(content_dict)
-    SDkey = {}
-    for i, k in enumerate(content_dict['Channel indices']):
-        sd = k.split('-')
-        s = int(sd[0])+1
-        d = int(sd[1])+1
-        sd = f'{s}-{d}'
-        SDkey[sd] = i+1
-    print(SDkey)
-    content_dict['Channel indices'] = dict([(k, i) for i,k in enumerate(content_dict['Channel indices'])])
-
-    SD['SDmask'] = content_dict['Channel Mask']
-    SD['SDkey'] = SDkey
-
-    goodIDX = _find_goodIDK(SD['SDmask'], SD['SDkey'])
-    print(goodIDX)
-    wavelengths = [760, 850]
-    data = []
-    for i_wl in range(len(wavelengths)):
-        idx_data = _np.where([x.endswith(f'wl{i_wl+1}') for x in filelist])[0][0]
-        FILE_DATA  = filelist[idx_data]
-        data.append(load_data(f'{DATADIR}/{FILE_DATA}', goodIDX))
-    
-    data = _np.stack(data, axis=2)
-    nirs = create_signal(data, sampling_freq=float(content_dict['Sampling rate'][0]), start_time=0, name = 'nirs', info={})
     return(nirs)

@@ -33,7 +33,7 @@ class MARA(_Algorithm):
     
     def algorithm(self, signal):
         from csaps import csaps as _csaps
-        
+
         params = self._params
         win_len = params['win_len']
         threshold = params['threshold']
@@ -55,7 +55,7 @@ class MARA(_Algorithm):
             MSD.append(_np.std(data_ch[i: i+idx_len]))
 
         # 2 detection moving artifacts (MA) start and end
-        #IDEA: use peakdetection to identify the MA
+        #IDEA: use peakdetection to identify the MA, with onset and offsets
         MSD = _np.array(MSD)
         MSD = MSD - _np.median(MSD)
         MSD = (MSD >= threshold).astype(int)
@@ -65,11 +65,22 @@ class MARA(_Algorithm):
         MSD = (MSD > 0).astype(int)
 
         MSD_ = _np.diff(MSD)
+        
         idx_st = _np.where(MSD_ > 0)[0]
         idx_sp = _np.where(MSD_ < 0)[0]
-
+        
+        #manage special cases with MA at beginning or end
+        #TODO: check
+        if len(idx_sp)>0:
+            if ((len(idx_st)==0) or (idx_sp[0] < idx_st[0])): #starting with a MA
+                idx_st = _np.insert(idx_st, 0, [0])
+        
+        if len(idx_st)>0:
+            if ((len(idx_sp)==0) or (idx_sp[-1] < idx_st[-1])): #ending with a MA
+                idx_sp = _np.insert(idx_sp, len(idx_sp), len(data_ch))
+        
+        
         # 3 create list of segments w/ MA x_bad and w/o MA x_good
-        #TODO manage special cases with MA at beginning or end
         x_good = []
         x_bad = []
         idx_start = 0
@@ -110,7 +121,7 @@ class MARA(_Algorithm):
                 x_prev_mean = _np.mean(x_segment_demean[-n_samples:])
                 
         x = _np.concatenate(x_reconstructed, axis=0)
-       
+
         return(x)
     
 class WaveletFilter(_Algorithm):

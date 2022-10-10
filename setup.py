@@ -4,13 +4,10 @@ from setuptools import setup
 setup(
     name='pyphysio',
     packages=['pyphysio',
-              'pyphysio.processing',
+              'pyphysio.loaders',
+              'pyphysio.specialized',
               'pyphysio.indicators',
-              'pyphysio.sqi',
-              'pyphysio.heart',
-              'pyphysio.eda',
-              'pyphysio.fnirs'
-              ],
+              'pyphysio.generators'],
     package_data={'tests': ['data/*']},
     version='3.0',
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP...)',
@@ -19,15 +16,13 @@ setup(
     url='https://github.com/MPBA/pyphysio',
     keywords=['eda', 'gsr', 'ecg', 'bvp', 'signal', 'analysis', 'physiological', 'pyhrv', 'hrv'],
     classifiers=[
-        'Development Status :: 5 - Production/Stable',
-        'Environment :: Console',
         'Intended Audience :: Healthcare Industry',
         'Intended Audience :: Information Technology',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: GNU General Public License (GPL)',
         'Natural Language :: English',
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.10',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
     install_requires=[
@@ -40,6 +35,8 @@ setup(
     ],
     requires=[
         'csaps',
+        'pywavelets',
+        'nilearn',
         'pytest',
     ],
 )

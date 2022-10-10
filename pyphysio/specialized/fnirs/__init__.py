@@ -1,10 +1,26 @@
 import numpy as _np
 import scipy.linalg as _sal
 from ..._base_algorithm import _Algorithm
-
 from ._convert import Raw2Oxy
 
-    
+def SDto1darray(nirs):
+    for k in nirs.keys():
+        SD = nirs[k].p.main_signal.attrs
+        for attribute in ['SDkey', 'SDmask', 
+                          'SrcPos', 'SrcPos2D', 
+                          'DetPos', 'DetPos2D', 
+                          'ChnPos', 'ChnPos2D']:
+            if attribute in SD.keys():
+                attr_np = _np.array(SD[attribute])
+                attr_shape = attr_np.shape
+                attr_np = attr_np.ravel()
+                SD[attribute] = attr_np
+                SD[f'{attribute}_shape'] = attr_shape
+        nirs[k].p.main_signal.attrs = SD
+        
+    return(nirs)
+
+
 class PCAFilter(_Algorithm):
     """
     See Molavi 2012

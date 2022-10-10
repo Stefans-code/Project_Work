@@ -4,6 +4,7 @@ import numpy as _np
 import xarray as _xr
 from scipy.signal import welch as _welch, periodogram as _periodogram
 import pycwt.wavelet as wave
+#TODO replace with pywavelets
 from ._base_algorithm import _Algorithm
 
 

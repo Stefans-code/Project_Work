@@ -20,6 +20,9 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 # - plot using '.'
 # resample, first run: signal.dropna('time')
 
+#TODO: add to_hdf method
+#See the _to1darray function in _load_nirx
+
 def create_signal(data, times=None, sampling_freq=None,
                   start_time=0, name='signal', info={}):
     '''

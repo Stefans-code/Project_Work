@@ -1,21 +1,30 @@
-from pyphysio.loaders import load_nirx
-import pyphysio.artefacts as artefacts
-from pyphysio.specialized.fnirs import Raw2Oxy
+from pyphysio.loaders import load_nirx, load_nirx2
+import numpy as _np
 #%
-nirs = load_nirx('/home/bizzego/UniTn/data/fnirs_sexism/original/F02_2', False)
+nirs = load_nirx('/home/bizzego/UniTn/data/fnirs_sexism/original/F02_2')
+nirs = nirs.p.process_na('impute')
+
+nirs2 = load_nirx2('/home/bizzego/UniTn/data/fnirs_technical_validation/2022-09-13_001')
 
 #%%
-# nirs_noMA = artefacts.MARA()(nirs, scheduler='single-threaded')
+import pyphysio.artefacts as artefacts
 
-nirs_wav = artefacts.WaveletFilter()(nirs)
+nirs_noMA = artefacts.MARA()(nirs2, scheduler='single-threaded')
+nirs_wav = artefacts.WaveletFilter()(nirs_noMA)
 
 #%%
+from pyphysio.specialized.fnirs import Raw2Oxy, NegativeCorrelationFilter, SDto1darray
+
 hb = Raw2Oxy()(nirs_wav)
+hb = NegativeCorrelationFilter()(hb)
+
 
 import pyphysio.filters as filters
 
-hb_ = filters.IIRFilter(0.2, 0.01)(hb)
+hb = filters.FIRFilter([0.01, 0.2], [0.001, 0.4])(hb)
 
 #%%
-from pyphysio.loaders import load_nirx2
-nirs = load_nirx2('/home/bizzego/UniTn/software/pynirs/data/nirx2_sample')
+hb = SDto1darray(hb)
+hb.to_netcdf('/home/bizzego/tmp/nirs')
+
+

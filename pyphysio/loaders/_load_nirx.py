@@ -10,7 +10,29 @@ import math
 
 _xr.set_options(keep_attrs=True)
 
-def load_nirx2(DATADIR, full=False, has_stim=True):
+#TODO get_stim(folder) to retrieve stimulus
+'''
+#detector dir:
+if 'Conditions' in filelist:
+    filelist_cond = os.listdir(f'{DATADIR}/Conditions')
+    idx_evt = np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
+    FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
+else:
+    idx_evt = np.where([x.endswith('.evt') for x in filelist])[0][0]
+    FILE_EVT = filelist[idx_evt]
+
+idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
+
+N = data.shape[0]
+stim = np.zeros(N)
+if len(idx)>0:
+    stim[idx] = codes
+    
+stim = ph.EvenlySignal(stim, sampling_freq=fsamp, start_time = 0)
+nirs = nirs.assign_coords(stim=('time', stim))
+'''    
+
+def load_nirx2(DATADIR):
     filelist = os.listdir(DATADIR)
     
     idx_snirf = _np.where([x.endswith('snirf') for x in filelist])[0][0]
@@ -65,9 +87,10 @@ def load_nirx2(DATADIR, full=False, has_stim=True):
                 content_dict[k] = row
     
     content_dict['Channel Mask'] = _np.array(content_dict['Channel Mask'][1:])
-    content_dict['Channel indices'] = dict([(i, k) for i,k in enumerate(content_dict['Channel indices'])])
+    # content_dict['Channel indices'] = dict([(i, k) for i,k in enumerate(content_dict['Channel indices'])])
 
     SD = {}
+    SD['SpatialUnit'] = 'cm'
     SD['Lambda'] = nirs_probe_metadata['wavelengths']
     SD['SrcPos'] = nirs_probe_metadata['sourcePos3D']
     SD['SrcPos2D'] = nirs_probe_metadata['sourcePos2D']
@@ -76,61 +99,35 @@ def load_nirx2(DATADIR, full=False, has_stim=True):
     SD['DetPos2D'] = nirs_probe_metadata['detectorPos2D']
     
     SD['SDmask'] = content_dict['Channel Mask']
-    SD['SDkey'] = content_dict['Channel indices']
+    SD['SDkey'] = _np.array(content_dict['Channel indices'])
     
-    SD['ChPos'] = compute_channelsPos(SD['SDkey'],
+    SD['ChnPos'] = compute_channelsPos(SD['SDkey'],
                                       SD['SrcPos'], 
                                       SD['DetPos'])
     
-    SD['ChPos2D'] = compute_channelsPos(SD['SDkey'],
+    SD['ChnPos2D'] = compute_channelsPos(SD['SDkey'],
                                         SD['SrcPos2D'], 
                                         SD['DetPos2D'])
     
-    if full: #no urgent
-        ids =[]
-        for k in f['nirs']['data1'].keys():
-            if k.startswith('measurementList'):
-                ids.append(k.split('measurementList')[1])
+    # if full: #no urgent
+    #     ids =[]
+    #     for k in f['nirs']['data1'].keys():
+    #         if k.startswith('measurementList'):
+    #             ids.append(k.split('measurementList')[1])
     
-        nirs_signal_metadata = {}
-        for m in ids:
-            d = {}
-            for k in f['nirs']['data1'][f'measurementList{m}'].keys():
-                d[k] = f['nirs']['data1'][f'measurementList{m}'][k][()]
-            nirs_signal_metadata[m] = d
+    #     nirs_signal_metadata = {}
+    #     for m in ids:
+    #         d = {}
+    #         for k in f['nirs']['data1'][f'measurementList{m}'].keys():
+    #             d[k] = f['nirs']['data1'][f'measurementList{m}'][k][()]
+    #         nirs_signal_metadata[m] = d
     
-        nirs_acquisition_metadata = {}
+    #     nirs_acquisition_metadata = {}
     
-        for k in f['nirs']['metaDataTags'].keys():
-            nirs_acquisition_metadata[k] = f['nirs']['metaDataTags'][k][()][0]
-
-    info = {}
-    for k,v in SD.items():
-        info[k] = v
+    #     for k in f['nirs']['metaDataTags'].keys():
+    #         nirs_acquisition_metadata[k] = f['nirs']['metaDataTags'][k][()][0]
         
-    nirs = create_signal(nirs_data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=info)
-
-    #TODO: implement load stim
-    '''
-    #detector dir:
-    if 'Conditions' in filelist:
-        filelist_cond = os.listdir(f'{DATADIR}/Conditions')
-        idx_evt = np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
-        FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
-    else:
-        idx_evt = np.where([x.endswith('.evt') for x in filelist])[0][0]
-        FILE_EVT = filelist[idx_evt]
-    
-    idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
-    
-    N = data.shape[0]
-    stim = np.zeros(N)
-    if len(idx)>0:
-        stim[idx] = codes
-        
-    stim = ph.EvenlySignal(stim, sampling_freq=fsamp, start_time = 0)
-    nirs = nirs.assign_coords(stim=('time', stim))
-    '''    
+    nirs = create_signal(nirs_data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
 
     return(nirs)
 
@@ -174,13 +171,10 @@ def loadmat(filename):
     return _check_keys(data)
 
 def compute_channelsPos(SDkey, srcPos, detPos):
-    # SDkey = SD['SDkey']
-    # srcPos = SD['SrcPos']
-    # detPos = SD['DetPos']
     chPos = []
-    for i_ch, keys in SDkey.items():
-        source_xyz = srcPos[keys[0]]
-        detector_xyz = detPos[keys[1]]
+    for i_ch, sd in enumerate(SDkey):
+        source_xyz = srcPos[sd[0]]
+        detector_xyz = detPos[sd[1]]
         chPos.append((source_xyz + detector_xyz)/2)
     # SD['ChPos'] = _np.array(chPos)
     return(chPos)
@@ -385,7 +379,7 @@ def load_events(FILE, has_stim=True):
         print('Error processing event file')
         
 #%%
-def load_nirx(DATADIR, has_stim=True):
+def load_nirx(DATADIR):
     """Import NIRS data generated with NIRx devices.
     
     Parameters
@@ -442,12 +436,12 @@ def load_nirx(DATADIR, has_stim=True):
             idx = k.split(':')[1]
             SDKey_support[sd] = int(idx)
             
-    SDKey = {}
+    SDKey = []
     goodIDX = []
     for i in range(n_channels):
         s = ml[i,0]-1
         d = ml[i,1]-1
-        SDKey[i] = [s,d]
+        SDKey.append([s,d])
         goodIDX.append(SDKey_support[f'{s+1}-{d+1}']-1)
 
     fsamp = float(content_dict['SamplingRate'][0])
@@ -456,9 +450,10 @@ def load_nirx(DATADIR, has_stim=True):
     ndet = int(content_dict['Detectors'][0])
     
     SD = {
+        'SpatialUnit': 'cm', #TODO: check
         'Lambda': Lambda,
         'SDmask' : SDMask,
-        'SDkey': SDKey
+        'SDkey': _np.array(SDKey)
     }
     
 
@@ -476,8 +471,8 @@ def load_nirx(DATADIR, has_stim=True):
     detPos[:,2] = newcoords[nsrc:,2] #det coords
     detPos[:,0:2] = -newcoords[nsrc:,0:2] #additional 180º rotation
     SD['DetPos'] = detPos
-    OptPos = compute_channelsPos(SD['SDkey'], SD['SrcPos'], SD['DetPos'])    
-    SD['OptPos'] = OptPos
+    ChnPos = _np.array(compute_channelsPos(SD['SDkey'], SD['SrcPos'], SD['DetPos']))
+    SD['ChnPos'] = ChnPos
     
     data = []
     for i_wl in range(len(Lambda)):
@@ -488,33 +483,23 @@ def load_nirx(DATADIR, has_stim=True):
     
     data = _np.stack(data, axis=2)
     
-    #detector dir:
-    if 'Conditions' in filelist:
-        filelist_cond = os.listdir(f'{DATADIR}/Conditions')
-        idx_evt = _np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
-        FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
-    else:
-        idx_evt = _np.where([x.endswith('.evt') for x in filelist])[0][0]
-        FILE_EVT = filelist[idx_evt]
+    # #detector dir:
+    # if 'Conditions' in filelist:
+    #     filelist_cond = os.listdir(f'{DATADIR}/Conditions')
+    #     idx_evt = _np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
+    #     FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
+    # else:
+    #     idx_evt = _np.where([x.endswith('.evt') for x in filelist])[0][0]
+    #     FILE_EVT = filelist[idx_evt]
     
-    N = data.shape[0]
-    stim = _np.zeros(N)
+    # N = data.shape[0]
+    # stim = _np.zeros(N)
     
-    if has_stim:
-        idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
-        if len(idx)>0:
-            stim[idx] = codes
+    # if has_stim:
+    #     idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
+    #     if len(idx)>0:
+    #         stim[idx] = codes
+    nirs = create_signal(data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
     
-    info = {}
-    for k,v in SD.items():
-        info[k] = v
-    
-    #remove undesired attributes (that prevent saving to netcdf)
-    # for key in ['MeasList', 'SDmask', 'SrcPos', 'DetPos', 'ChPos']:
-    #     info[f'{key}_DIM'] = info[key].shape[0]
-    #     info[key] = info[key].ravel()
-        
-    nirs = create_signal(data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=info)
-    
-    nirs = nirs.assign_coords(stim=('time', stim))
+    # nirs = nirs.assign_coords(stim=('time', stim))
     return(nirs)

@@ -193,11 +193,8 @@ def _OD2Conc(nirs, SD, channel, ppf=[6,6]):
     dc: the concentration data (#time points x 3 x #SD pairs
         3 concentrations are returned (HbO, HbR, HbT)
     '''
-    
     L = SD['Lambda']
     n_waves = len(L)
-    
-    ml = SD['MeasList']
     assert len(ppf)==n_waves, 'The length of PPF must match the number of wavelengths in SD.Lambda'
     
     n_samples = len(nirs)
@@ -213,8 +210,9 @@ def _OD2Conc(nirs, SD, channel, ppf=[6,6]):
     srcPos = SD['SrcPos']
     detPos = SD['DetPos']
     
-    src_idx = ml[channel,0] - 1 #first src is 1 not 0
-    det_idx = ml[channel,1] - 1 #first det is 1 not 0
+    SDkey = SD['SDkey']
+    src_idx = SDkey[:,0]
+    det_idx = SDkey[:,1]
         
     rho = _np.linalg.norm(srcPos[src_idx,:] - detPos[det_idx,:])
     current_dod = _np.stack([nirs[:,0, 0], nirs[:,0,1]], axis=1)
@@ -223,7 +221,7 @@ def _OD2Conc(nirs, SD, channel, ppf=[6,6]):
     return(concentration)
 
 class Raw2Oxy(_Algorithm):
-    def __init__(self, age=21, **kwargs):
+    def __init__(self, age=None, **kwargs):
         _Algorithm.__init__(self, age=age, **kwargs)
         self.dimensions = {'time':0, 'component':0}
     
@@ -233,7 +231,7 @@ class Raw2Oxy(_Algorithm):
     #                                manage_original=manage_original)
     
     def algorithm(self, signal):
-        SD = create_SD(signal)
+        SD = signal.attrs
         
         Lambda = SD['Lambda']
         age = self._params['age']
@@ -243,9 +241,7 @@ class Raw2Oxy(_Algorithm):
         
         signal_values = signal.values
         
-        
         OD = _intensity2OD(signal_values)
-        
         
         channel = int(signal.coords['channel'])
         oxy = _OD2Conc(OD, SD, channel, ppf)

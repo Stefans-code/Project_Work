@@ -2,7 +2,7 @@ import numpy as np
 from pyphysio.signal import create_signal
 import xarray as xr
 
-import pyphysio.processing.tools as tool
+import pyphysio.utils as utils
 
 #%%
 # tools = [tool.PSD('welch'),
@@ -46,11 +46,11 @@ sampling_freq = 100
 data = np.ones((1000, 3, 2))
 signal = create_signal(data, sampling_freq=sampling_freq, name = 'random')
 
-result = tool.Diff()(signal)
+result = utils.Diff()(signal)
 check_shape(signal, result)
 assert result.p.get_values().sum() == 0
 
-result = tool.Diff(degree = 3)(signal)
+result = utils.Diff(degree = 3)(signal)
 check_shape(signal, result)
 assert result.p.get_values().sum() == 0
 
@@ -61,7 +61,7 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
-res = tool.PeakDetection(0.1)(signal)
+res = utils.PeakDetection(0.1)(signal)
 
 for i in np.arange(1, len(freqs)):
     res_ch = res.sel(channel=i).dropna(dim = 'time')
@@ -76,7 +76,7 @@ data = np.array([A*np.sin(2*np.pi*t) for A in ampl]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
-res = tool.SignalRange(1, 0.5)(signal)
+res = utils.SignalRange(1, 0.5)(signal)
 
 for i in np.arange(1, len(ampl)):
     res_ch = res.sel(channel=i).dropna(dim = 'time')
@@ -89,13 +89,13 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
-pwd = tool.PSD('fft')(signal)
+pwd = utils.PSD('fft')(signal)
 
 for i in np.arange(1, len(freqs)):
     idx_max = np.argmax(pwd.p.get_values()[:,i])
     assert abs((pwd.coords['freq'].values[idx_max] - i)) < 0.01
 
-pwd = tool.PSD('welch')(signal)
+pwd = utils.PSD('welch')(signal)
 
 for i in np.arange(1, len(freqs)):
     idx_max = np.argmax(pwd.p.get_values()[:,i])
@@ -114,7 +114,7 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
-wavelet = tool.Wavelet()(signal, add_signal=True)
+wavelet = utils.Wavelet()(signal, add_signal=True)
 
     
 #%% test maxima
@@ -124,7 +124,7 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
-res = tool.Maxima()(signal)
+res = utils.Maxima()(signal)
 
 for i in np.arange(1, len(freqs)):
     res_ch = res.sel(channel=i).dropna(dim = 'time')
@@ -139,7 +139,7 @@ data = -1*np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
-res = tool.Minima()(signal)
+res = utils.Minima()(signal)
 
 for i in np.arange(1, len(freqs)):
     res_ch = res.sel(channel=i).dropna(dim = 'time')

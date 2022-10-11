@@ -6,6 +6,9 @@ from .utils import Diff as _Diff
 import xarray as _xr
 from ._base_algorithm import _Algorithm
 
+
+
+
 class _SignalQualityIndicator(_Algorithm):
     """ 
     A Signal Quality Indicator is a special class of indicators
@@ -87,7 +90,7 @@ class Kurtosis(_SignalQualityIndicator):
     def algorithm(self, signal):
         signal_values = signal.values.ravel()
         k = _sps.kurtosis(signal_values)
-        k_out = _np.array([[k]])
+        k_out = _np.array([k])
         return(k_out)
 
 class Entropy(_SignalQualityIndicator):

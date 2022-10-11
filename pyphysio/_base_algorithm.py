@@ -4,7 +4,6 @@ _xr.set_options(keep_attrs=True)
 
 from . import scheduler
     
-#TODO: correct to place _Algorithm here?
 class _Algorithm(object):
     def __init__(self, **kwargs):
         self._params = {}
@@ -158,7 +157,6 @@ class _Algorithm(object):
 
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
-
             #create the rolling mechanism
             #which calls self.__mapper_func__ on all chunks
             mapper =  _xr.map_blocks(self.__mapper_func__, 
@@ -168,13 +166,17 @@ class _Algorithm(object):
             
             #apply the rollink mechanism and compose the results
             signal_out = mapper.load(scheduler=scheduler) #distributed, single-threaded
-        
+
         #The user will mainly call Algorithms on a Dataset
         #so it will expect a Dataset as result
         if isinstance(signal_in, _xr.Dataset):
 
             output_name = f'{signal_name}_{self.name}'
 
+            #TODO: why are we repeating these? they are also in __mapper_func__?
+            # we should decide what happens to a dataset when an algorithm is applied!!!
+            # we could just transform to _xr.Dataset?
+            
             #add windowing info
             strange_result = False
             for dim in signal_out.dims:
@@ -201,7 +203,12 @@ class _Algorithm(object):
                 signal_ds_out.attrs['history'] = [output_name]
                 signal_ds_out.p.main_signal.attrs = signal_in.p.main_signal.attrs
                 return(signal_ds_out)
-            
+
+
+            #TODO: if we are changing the size 
+            #(e.g. reducing components/channels, timepoints)            
+            #the next steps will recover the original dataset "shape"
+            #which might be an unwanted result
             #create the output Dataset
             signal_ds_out = signal_in.copy(deep=True)
             signal_ds_out = signal_ds_out.assign({output_name:signal_out})

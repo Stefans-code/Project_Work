@@ -2,6 +2,7 @@ import numpy as _np
 import scipy.linalg as _sal
 from ..._base_algorithm import _Algorithm
 from ._convert import Raw2Oxy
+from ._dl_sqi import SignalQualityDeepLearning
 
 def SDto1darray(nirs):
     for k in nirs.keys():

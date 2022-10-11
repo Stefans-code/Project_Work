@@ -43,7 +43,7 @@ class MARA(_Algorithm):
 
         #compute threshold
         if threshold is None:
-            signal_f = _IIRFilter(fp=0.05, fs=0.01)(signal)
+            signal_f = _IIRFilter(fp=[0.05], btype='highpass')(signal)
             data_ch_filt = signal_f.values.ravel()
             threshold = _np.std(data_ch_filt)
             

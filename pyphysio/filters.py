@@ -2,8 +2,10 @@
 # from __future__ import division
 import numpy as _np
 import scipy.stats as _stats
-from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, filter_design as _filter_design, \
-    deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve, iirnotch as _iirnotch
+from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, \
+    filter_design as _filter_design, iirfilter as _iirfilter, \
+        deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve, \
+            iirnotch as _iirnotch
 # from matplotlib.pyplot import plot as _plot
 from ._base_algorithm import _Algorithm
 # from ..Utility import abstractmethod as _abstract
@@ -98,13 +100,14 @@ class IIRFilter(_Algorithm):
     for additional information
     """
 
-    def __init__(self, fp, fs, loss=.1, att=40, ftype='butter', safe=True):
+    def __init__(self, fp, fs=None, btype='bandpass', order=3, loss=.1, att=40, ftype='cheby1', safe=True):
         assert loss > 0, "Loss value should be positive"
         assert att > 0, "Attenuation value should be positive"
         assert att > loss, "Attenuation value should be greater than loss value"
         assert ftype in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel'],\
             "Filter type must be in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel']"
-        _Algorithm.__init__(self, fp=fp, fs=fs, loss=loss, att=att, ftype=ftype, safe=safe)
+        _Algorithm.__init__(self, fp=fp, fs=fs, btype=btype, order=order, 
+                            loss=loss, att=att, ftype=ftype, safe=safe)
         self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
@@ -112,20 +115,23 @@ class IIRFilter(_Algorithm):
         # print(signal.shape)
         params = self._params
         fsamp = signal.p.get_sampling_freq()
-        fp, fs, loss, att, ftype = params["fp"], params["fs"], params["loss"], params["att"], params["ftype"]
+        fp, fs, btype, order = params["fp"], params["fs"], params["btype"], params["order"]
+        loss, att, ftype = params["loss"], params["att"], params["ftype"]
         safe = params["safe"]
         
         nyq = 0.5 * fsamp
         fp = _np.array(fp)
-        fs = _np.array(fs)
-
         wp = fp / nyq
-        ws = fs / nyq
-        
         assert (wp<1).all(), f"invalid fp for given sampling frequency {fsamp}"
-        assert (ws<1).all(), f"invalid fs for given sampling frequency {fsamp}"
         
-        b, a = _filter_design.iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
+        if fs is None:
+            b, a = _iirfilter(order, wp, btype=btype, rp=loss, rs=att, analog=False, ftype=ftype)
+        else:
+            fs = _np.array(fs)
+            ws = fs / nyq
+            assert (ws<1).all(), f"invalid fs for given sampling frequency {fsamp}"
+        
+            b, a = _filter_design.iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
         
 
         sig_filtered = _filtfilt(b, a, signal.values.ravel(), axis=0)

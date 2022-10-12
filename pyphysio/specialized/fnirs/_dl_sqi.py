@@ -2,6 +2,7 @@
 import torch as _torch
 import torch.nn as _nn
 import numpy as _np
+import os as _os
 
 from ...sqi import _SignalQualityIndicator
 # from torch.utils.data import Dataset as _Dataset
@@ -12,7 +13,9 @@ NSAMP = 200
 DN = 50
 
 device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
-WEIGHTSFILE = './pyphysio/specialized/fnirs/_dlweights/weights.pth'
+_path = _os.path.join(_os.path.dirname(__file__))
+# print(_path)
+WEIGHTSFILE = f'{_path}/_dlweights/weights.pth'
 
 def _normalize(x):
     if _np.std(x) != 0:

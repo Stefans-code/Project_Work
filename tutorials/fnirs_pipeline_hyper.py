@@ -13,23 +13,20 @@ segmenter = FixedSegments(10, 20)
 
 indicators = [SignalQualityDeepLearning()]
 
-#%%
-nirsA = load_nirx2('/home/bizzego/UniTn/data/fnirs_technical_validation/hyper/pilot/TN001/TN001_base/tn001fa_001') 
-nirsB = load_nirx2('/home/bizzego/UniTn/data/fnirs_technical_validation/hyper/pilot/TN001/TN001_base/tn001fb_001') 
-
-#%%
-plt.figure()
-nirsA.p.plot(sharey=False)
-plt.figure()
-nirsB.p.plot(sharey=False)
-
-#%%
-assert np.sum(np.isnan(nirsA.p.main_signal.values)) == 0, "nans in nirsA"
-assert np.sum(np.isnan(nirsB.p.main_signal.values)) == 0, "nans in nirsB"
+DATA_FOLDER = '/home/bizzego/UniTn/data/fnirs_technical_validation/hyper/pilot'
+OUT_FOLDER = '/home/bizzego/tmp'
 
 #%%
 hb_ = []
-for nirs, subject in zip([nirsA, nirsB], ['A', 'B']):
+for subject in ['a', 'b']:
+    nirs = load_nirx2(f'{DATA_FOLDER}/TN001/TN001_base/tn001f{subject}_001') 
+
+    plt.figure()
+    nirs.p.plot(sharey=False)
+
+    if np.sum(np.isnan(nirs.p.main_signal.values)) > 0:
+        nirs = nirs.process_na('impute')
+        
     #% SQI using Deep Learning
     sqi = fmap(segmenter, indicators, nirs)
     sqi = sqi.drop_vars(['component_start', 'component_stop', 'label'])
@@ -50,9 +47,7 @@ for nirs, subject in zip([nirsA, nirsB], ['A', 'B']):
     hb = Raw2Oxy(age=21)(nirs)
     
     #% filters
-    # hb = filters.FIRFilter([0.5], [0.6])(hb)
-    # hb = filters.ConvolutionalFilter('rect', 1)(hb)
-    hb = filters.IIRFilter([0.01, 0.2])(hb)
+    hb = filters.FIRFilter(fp = [0.01, 0.2], fs = [0, 0.5])(hb)
     hb = NegativeCorrelationFilter()(hb)
     
     #%plot
@@ -60,10 +55,5 @@ for nirs, subject in zip([nirsA, nirsB], ['A', 'B']):
 
     #% save
     hb = SDto1darray(hb)
-    hb.to_netcdf('/home/bizzego/tmp/nirs'+subject)
-
-#%%
-for hb in hb_:
-   hb.p.plot(sharey=False)
-    
-#%%
+    hb.attrs['good_channels'] = id_good_channels
+    hb.to_netcdf(f'{OUT_FOLDER}/hb_{subject}')

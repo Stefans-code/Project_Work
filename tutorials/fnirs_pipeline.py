@@ -65,12 +65,17 @@ hb.p.plot(sharey=False)
 #frequency band / moving average
 # hb_f = filters.IIRFilter(fp = [0.01, 0.2], order=3, ftype='ellip')(hb)
 # hb_f = filters.ConvolutionalFilter('rect', win_len=1)(hb)
-hb_f = filters.FIRFilter(fp = [0.01, 0.2], fs = [0, 0.5])(hb)
+order = 30
 
+hb_f = filters.FIRFilter(fp = [0.01, 0.5], order=order, btype='bandpass')(hb)
+# 
 plt.figure()
+# plt.plot(hb.p.main_signal.values[:,0,0])
+# plt.plot(hb_f.p.main_signal.values[:,0,0])
 hb.p.plot(sharey=False)
 hb_f.p.plot(sharey=False)
-
+# 
+#%%
 #negative correlation filter
 hb_nc = NegativeCorrelationFilter()(hb_f)
 

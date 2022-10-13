@@ -4,8 +4,8 @@ import numpy as _np
 import scipy.stats as _stats
 from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, \
     filter_design as _filter_design, iirfilter as _iirfilter, \
-        deconvolve as _deconvolve, firwin as _firwin, convolve as _convolve, \
-            iirnotch as _iirnotch
+        deconvolve as _deconvolve, firwin as _firwin, \
+            iirnotch as _iirnotch, lfilter as _lfilter
 # from matplotlib.pyplot import plot as _plot
 from ._base_algorithm import _Algorithm
 # from ..Utility import abstractmethod as _abstract
@@ -221,43 +221,46 @@ class FIRFilter(_Algorithm):
     for additional information
     """
 
-    def __init__(self, fp, fs, att=40, wtype='hamming', safe=True):
+    def __init__(self, fp, fs=None, order=5, btype='lowpass', att=40, wtype='hamming', safe=True):
         assert att > 0, "Attenuation value should be positive"
         assert wtype in ['hamming'],\
             "Window type must be in ['hamming']"
-        _Algorithm.__init__(self, fp=fp, fs=fs, att=att, wtype=wtype, safe=True)
+        _Algorithm.__init__(self, fp=fp, fs=fs, order=order, btype=btype,
+                            att=att, wtype=wtype, safe=True)
         self.dimensions = {'time' : 0}
 
     def algorithm(self, signal):
         params = self._params
         fsamp = signal.p.get_sampling_freq()
-        fp, fs, att, wtype = params["fp"], params["fs"], params["att"], params["wtype"]
+        fp, fs, order = params["fp"], params["fs"], params["order"]
+        btype, att, wtype = params["btype"], params["att"], params["wtype"]
         safe = params["safe"]
         fp = _np.array(fp)
-        fs = _np.array(fs)
-        
+                
         if fp.ndim == 0:
             fp = _np.expand_dims(fp, 0)
+    
+        if fs is None:
+            pass_zero = btype
+            N = order+1
+        
+        else:
+            if fs.ndim == 0:
+                fs = _np.expand_dims(fs, 0)
+    
+            # d1 = 10**(loss/10)
+            # d2 = 10**(att/10)
+            Dsamp = _np.min(abs(fs-fp))/fsamp
             
-        if fs.ndim == 0:
-            fs = _np.expand_dims(fs, 0)
-
-        # d1 = 10**(loss/10)
-        # d2 = 10**(att/10)
-        Dsamp = _np.min(abs(fs-fp))/fsamp
-        
-
-        # from https://dsp.stackexchange.com/questions/31066/how-many-taps-does-an-fir-filter-need
-        # N = int(2/3*_np.log10(1/(10*d1*d2))*fsamp/Dsamp)
-        
-        N = int(att/(22*Dsamp))
-        
-        # print(N)                
-        pass_zero=True
-                  
-        if fp[0]>fs[0]:
-            pass_zero=False
-        
+            # from https://dsp.stackexchange.com/questions/31066/how-many-taps-does-an-fir-filter-need
+            # N = int(2/3*_np.log10(1/(10*d1*d2))*fsamp/Dsamp)
+            N = int(att/(22*Dsamp))
+                           
+            pass_zero=True
+                      
+            if fp[0]>fs[0]:
+                pass_zero=False
+            
         nyq = 0.5 * fsamp
         fp = _np.array(fp)
         wp = fp / nyq
@@ -265,15 +268,20 @@ class FIRFilter(_Algorithm):
         if N%2 ==0:
             N+=1
             
-        b = _firwin(N, wp, width=Dsamp, window=wtype, pass_zero=pass_zero)
-        sig_filtered = _convolve(signal.values.ravel(), b, mode='same')
-
+        b = _firwin(N, wp, window=wtype, pass_zero=pass_zero)
+        signal_values = signal.values.ravel()
+        sig_filtered = _lfilter(b, 1.0, signal_values)
+        sig_out = _np.ones(len(signal_values)) * signal_values[-1]
+        idx_ = N//2
+        # print(sig_out.shape, sig_filtered.shape, idx_)
+        sig_out[:-idx_] = sig_filtered[idx_:]
+        
         if safe:
             if _np.isnan(sig_filtered[0]):
                 print('Filter parameters allow no solution. Returning original signal.')
-                return signal.values
+                return signal_values
         
-        return sig_filtered
+        return sig_out
 
 class KalmanFilter(_Algorithm):
     def __init__(self, R, ratio, win_len=1, win_step=0.5):

@@ -3,6 +3,28 @@ import scipy.linalg as _sal
 from ..._base_algorithm import _Algorithm
 from ._convert import Raw2Oxy
 from ._dl_sqi import SignalQualityDeepLearning
+import xarray as _xr
+
+
+
+
+
+def load_xrnirs(file):
+    nirs = _xr.load_dataset(file)
+    attrs = nirs.p.main_signal.attrs
+    todel=[]
+    for k in attrs.keys():
+        if k.endswith('_shape'):
+            attr_name = k.split('_shape')[0]
+            attr_numpy = attrs[attr_name]
+            attr_numpy = attr_numpy.reshape(attrs[k])
+            attrs[attr_name] = attr_numpy
+            todel.append(k)
+    for k in todel:
+        del attrs[k]
+    
+    nirs.p.main_signal.attrs = attrs
+    return(nirs)
 
 def SDto1darray(nirs):
     for k in nirs.keys():

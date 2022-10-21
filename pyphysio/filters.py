@@ -271,9 +271,10 @@ class FIRFilter(_Algorithm):
         b = _firwin(N, wp, window=wtype, pass_zero=pass_zero)
         signal_values = signal.values.ravel()
         sig_filtered = _lfilter(b, 1.0, signal_values)
-        sig_out = _np.ones(len(signal_values)) * signal_values[-1]
+        sig_filtered[0:N] = sig_filtered[N]
+        sig_out = _np.ones(len(signal_values)) * sig_filtered[-1]
+        
         idx_ = N//2
-        # print(sig_out.shape, sig_filtered.shape, idx_)
         sig_out[:-idx_] = sig_filtered[idx_:]
         
         if safe:

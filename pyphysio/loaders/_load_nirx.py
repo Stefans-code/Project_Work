@@ -139,19 +139,11 @@ def load_nirx2(DATADIR):
         idx_pi = _np.where([x.endswith('probeInfo.mat') for x in filelist])[0][0]
         FILE_PI = filelist[idx_pi]
         
-        newcoords = load_probeInfo(f'{DATADIR}/{FILE_PI}')
-        nsrc = int(content_dict['Sources'][0])
-        ndet = int(content_dict['Detectors'][0])
+        srcPos, detPos = load_probeInfo(f'{DATADIR}/{FILE_PI}')
         
-        srcPos = _np.zeros((nsrc, 3))
-        srcPos[:,2] = newcoords[0:nsrc,2] #src coords
-        srcPos[:,0:2] = -newcoords[0:nsrc,0:2]# %additional 180º rotation
         SD['SrcPos'] = srcPos
-        
-        detPos = _np.zeros((ndet, 3))
-        detPos[:,2] = newcoords[nsrc:,2] #det coords
-        detPos[:,0:2] = -newcoords[nsrc:,0:2] #additional 180º rotation
         SD['DetPos'] = detPos
+        
         ChnPos = _np.array(compute_channelsPos(SD['SDkey'], SD['SrcPos'], SD['DetPos']))
         SD['ChnPos'] = ChnPos
     
@@ -196,7 +188,7 @@ def loadmat(filename):
         todict is called to change them to nested dictionaries
         '''
         for key in dict:
-            if isinstance(dict[key], _spio.matlab.mat_struct):
+            if isinstance(dict[key], _spio.matlab.mio5_params.mat_struct):
                 dict[key] = _todict(dict[key])
         return dict   
 
@@ -207,7 +199,7 @@ def loadmat(filename):
         dict = {}
         for strg in matobj._fieldnames:
             elem = matobj.__dict__[strg]
-            if isinstance(elem, _spio.matlab.mat_struct):
+            if isinstance(elem, _spio.matlab.mio5_params.mat_struct):
                 dict[strg] = _todict(elem)
             else:
                 dict[strg] = elem
@@ -405,8 +397,19 @@ def load_probeInfo(FILE):
     src = probeInfo['probes']['coords_s3']
     det = probeInfo['probes']['coords_d3']
     newcoords = _np.concatenate([src, det], axis=0)
-    # newcoords = _rotate_clusters(probeInfo)
-    return(newcoords)
+    
+    nsrc = src.shape[0]
+    ndet = det.shape[0]
+    
+    srcPos = _np.zeros((nsrc, 3))
+    srcPos[:,2] = newcoords[0:nsrc,2] #src coords
+    srcPos[:,0:2] = -newcoords[0:nsrc,0:2]# %additional 180º rotation
+    
+    detPos = _np.zeros((ndet, 3)) #!!! WTF
+    detPos[:,2] = newcoords[nsrc:,2] #det coords
+    detPos[:,0:2] = -newcoords[nsrc:,0:2] #additional 180º rotation
+    
+    return(srcPos, detPos)
     
 def load_events(FILE, has_stim=True):
     if not has_stim:
@@ -510,17 +513,10 @@ def load_nirx(DATADIR):
     idx_pi = _np.where([x.endswith('probeInfo.mat') for x in filelist])[0][0]
     FILE_PI = filelist[idx_pi]
     
-    newcoords = load_probeInfo(f'{DATADIR}/{FILE_PI}')
-            
-    srcPos = _np.zeros((nsrc, 3))
-    srcPos[:,2] = newcoords[0:nsrc,2] #src coords
-    srcPos[:,0:2] = -newcoords[0:nsrc,0:2]# %additional 180º rotation
+    srcPos, detPos = load_probeInfo(f'{DATADIR}/{FILE_PI}')
     SD['SrcPos'] = srcPos
-    
-    detPos = _np.zeros((ndet-nsrc, 3))
-    detPos[:,2] = newcoords[nsrc:,2] #det coords
-    detPos[:,0:2] = -newcoords[nsrc:,0:2] #additional 180º rotation
     SD['DetPos'] = detPos
+    
     ChnPos = _np.array(compute_channelsPos(SD['SDkey'], SD['SrcPos'], SD['DetPos']))
     SD['ChnPos'] = ChnPos
     

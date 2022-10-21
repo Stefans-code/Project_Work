@@ -43,6 +43,11 @@ class _Simple(_nn.Module):
         x_feat = x_feat.view(x_feat.shape[0], -1)
         x_out = self.linear(x_feat)
         return(x_out)
+
+    def extract_features(self, x):
+        x_feat = self.conv_branch(x)
+        x_feat = x_feat.view(x_feat.shape[0], -1)
+        return(x_feat)
     
 #%%
 class SignalQualityDeepLearning(_SignalQualityIndicator):
@@ -69,5 +74,3 @@ class SignalQualityDeepLearning(_SignalQualityIndicator):
         _, quality = _torch.max(output,1)
         quality = quality.cpu().numpy()
         return(_np.array([[quality]]))
-
-

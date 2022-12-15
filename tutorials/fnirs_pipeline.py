@@ -12,6 +12,13 @@ import matplotlib.pyplot as plt
 DATA_FOLDER = '/home/bizzego/UniTn/data/fnirs_technical_validation/hyper/pilot'
 nirs = load_nirx2(f'{DATA_FOLDER}/TN001/TN001_base/tn001fa_001') 
 
+#%%
+signal_values = nirs.p.main_signal.values[:,1,0]
+iqr = 1.5
+import numpy as _np
+import pywt
+from copy import deepcopy as copy
+
 #%% remove nans, if present
 if np.sum(np.isnan(nirs.p.main_signal.values)) > 0:
     nirs = nirs.process_na('impute')
@@ -48,7 +55,7 @@ nirs.p.plot(sharey=False)
 nirs_noMA.p.plot(sharey=False)
 
 #remove MA with wavelet
-nirs_wav = artefacts.WaveletFilter()(nirs_noMA)
+nirs_wav = artefacts.WaveletFilter()(nirs)
 
 plt.figure()
 nirs_noMA.p.plot(sharey=False)

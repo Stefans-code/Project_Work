@@ -1,6 +1,6 @@
 import numpy as _np
 from ._base_algorithm import _Algorithm
-
+from copy import deepcopy as copy
 from .filters import IIRFilter as _IIRFilter
 import pywt
 from scipy.stats import median_abs_deviation as _mad
@@ -138,9 +138,13 @@ class WaveletFilter(_Algorithm):
         qmf = _np.array([-0.0915, -0.1585, 0.5915, -0.3415])
         
         n = len(y)
-        c = _np.convolve(_np.tile(y, 2), qmf, 'same')[:n]
-        MAD = _mad(c, scale='normal')
+        c = _np.convolve(_np.tile(y, 2), qmf)[n:2*n] #% circular convolution (final length = length(y))
+
+
+        y_downsampled = c[1::2]# % downsample by 2
         
+        MAD = _np.mean(abs(y_downsampled - _np.mean(y_downsampled))); #TODO: MEAN OR MEDIAN? CHECK HOMER3
+
         if MAD !=0:
             y_norm = (1/1.4826)*y/MAD
             coeff = 1/(1.4826*MAD)
@@ -151,97 +155,182 @@ class WaveletFilter(_Algorithm):
     
     def algorithm(self, signal): #TODO: correct sintax for **kwargs
         
+    
+        def matlab_percentile(x, p):
+            p = _np.asarray(p, dtype=float)
+            n = len(x)
+            p = (p-50)*n/(n-1) + 50
+            p = _np.clip(p, 0, 100)
+            return _np.percentile(x, p)
+    
         signal_values = signal.values.ravel()
         
         iqr = self._params['iqr']
         
+        #%%
+        from pyphysio.loaders import load_nirx2
+        import matplotlib.pyplot as plt
+        import numpy as _np
+        import pywt
+        from copy import deepcopy as copy
+        
+        #% load data
+        DATA_FOLDER = '/home/bizzego/UniTn/data/fnirs_technical_validation/hyper/pilot'
+        nirs = load_nirx2(f'{DATA_FOLDER}/TN001/TN001_base/tn001fa_001') 
+
+        #%
+        signal_values = nirs.p.main_signal.values[:,2,0]
+        
+        _np.savetxt('/home/bizzego/tmp/nirs.txt', signal_values)
+        
+        iqr = 1.5
+
+
+        #%
         n = len(signal_values)
         N = int(_np.ceil(_np.log2(n)))
         
         L = 4
-        D = N - L
+        D = int(N - L)
         
-        n_padded = 2**N
+        n_padded = int(2**N)
         signal_padded = _np.zeros(shape = n_padded)
         signal_padded[:n] = signal_values
         mean_padded = _np.mean(signal_padded)
         signal_padded = signal_padded-mean_padded
         
-        signal_norm, norm_coeff = self._normalization_noise(signal_padded)
+        #%
+        # signal_norm, norm_coeff = self._normalization_noise(signal_padded)
+        qmf = _np.array([-0.0915, -0.1585, 0.5915, -0.3415])
         
+        y = signal_padded
+        
+        n_ = len(y)
+        c = _np.convolve(_np.tile(y, 2), qmf)[n_:2*n_] #% circular convolution (final length = length(y))
+
+
+        y_downsampled = c[1::2]# % downsample by 2
+        
+        MAD = _np.mean(abs(y_downsampled - _np.mean(y_downsampled))); #TODO: MEAN OR MEDIAN? CHECK HOMER3
+        
+        if MAD !=0:
+            signal_norm = (1/1.4826)*y/MAD
+            norm_coeff = 1/(1.4826*MAD)
+        else:
+            signal_norm = y
+            norm_coeff = 1
+            
+        #%
         #+++++++++++++++++++++++++
         #compute discrete wavelet transform on signal and shifted version
         #for all block lengths
         wp = _np.zeros(shape=(n_padded,D+1))
         wp[:,0] = signal_norm
         
-        for d in range(0, D):
+        for d in range(D):
             n_blocks = int(2**d) # number of blocks in the level
-            l_blocks = int(n/n_blocks) # length of the blocks in the level
-            for b in range(0, n_blocks):
+            l_blocks = int(n_padded/n_blocks) # length of the blocks in the level
+            l_blocks_2 = l_blocks//2
+            for b in range(n_blocks):
                 # first time take signal, from the second the approximation
-                s = wp[b*l_blocks:b*l_blocks+l_blocks,0] 
+                s = copy(wp[b*l_blocks:b*l_blocks+l_blocks,0])
                 #create a shift version of the block
-                s_shift = _np.concatenate([[s[-1]], s[0:-1]])
+                s_shift = copy(_np.concatenate([[s[-1]], s[:-1]]))
                 
                 #discrete wavelet transform
-                cA,cD = pywt.dwt(s,'db2', mode='periodization')
-                cA_shift, cD_shift = pywt.dwt(s_shift,'db2', mode='periodization')
+                cA, cD = pywt.dwt(s,'db2', 
+                                  mode='periodization')
+                cA_shift, cD_shift = pywt.dwt(s_shift,'db2', 
+                                              mode='periodization')
                 
                 #save coefficients
-                wp[b*l_blocks : b*l_blocks+len(cA), 0] = cA
-                wp[b*l_blocks+len(cA):b*l_blocks+len(cA)+len(cA_shift),0] = cA_shift
+                wp[b*l_blocks : b*l_blocks+l_blocks_2, 0] = cA
+                wp[b*l_blocks+l_blocks_2:b*l_blocks+l_blocks, 0] = cA_shift
                 
-                wp[b*l_blocks:b*l_blocks+len(cD),d+1] = cD
-                wp[b*l_blocks+len(cD):b*l_blocks+len(cD) + len(cD_shift),d+1] = cD_shift
+                wp[b*l_blocks : b*l_blocks+l_blocks_2, d+1] = cD
+                wp[b*l_blocks+l_blocks_2 : b*l_blocks+l_blocks, d+1] = cD_shift
         
+        print(wp[:10, 3])
+
+        #%
         #+++++++++++++++++++++++++
         #filter oulier coefficients
+        
+        
+        def quantile(x,q):
+            n = len(x)
+            y = _np.sort(x)
+            return(_np.interp(q, _np.linspace(1/(2*n), (2*n-1)/(2*n), n), y))
+        
+        def prctile(x,p):
+            return(quantile(x,_np.array(p)/100))
+
+        
         n_tmp = n
         
-        for d in range(1, D):
-            n_tmp = n_tmp//2
-            n_blocks = int(2**d)
-            l_blocks = int(n/n_blocks)
-            for b in range(0, n_blocks):
-                sr = wp[b*l_blocks:b*l_blocks+l_blocks,d]
+        for j in range(D-1):
+            n_tmp = int(n_tmp/2)
+            n_blocks = int(2**(j+1))
+            l_blocks = int(n_padded/n_blocks)
+            
+            for b in range(2**j):
+                sr = copy(wp[b*l_blocks:b*l_blocks+l_blocks,j+1])
                 
                 #obtain outliers based on IQR
-                sr_ = sr[:n_tmp] # compute statistics only on original data
-                quants = _np.quantile(sr_,[.25, .50, .75]) # compute quantiles
-                IQR = quants[2]-quants[0] # compute interquartile range
-                prob1 = quants[2]+IQR*iqr#
+                sr_ = copy(sr[:n_tmp]) # compute statistics only on original data
+                quants = _np.quantile(sr_,[.25, .75],
+                                      method = 'interpolated_inverted_cdf') # compute quantiles
+                IQR = quants[1]-quants[0] # compute interquartile range
+                prob1 = quants[1]+IQR*iqr#
                 prob2 = quants[0]-IQR*iqr#
                 outliers_1 = _np.where(sr>prob1)[0]
                 outliers_2 = _np.where(sr<prob2)[0]
                 outliers = _np.concatenate([outliers_1, outliers_2])
                 
                 #set outliers to zero
-                sr[outliers] = 0 
-                
+                sr[[0,1,3]] = 0 
+
                 #save results
-                wp[b*l_blocks:b*l_blocks+l_blocks,d] = sr
+                wp[b*l_blocks:b*l_blocks+l_blocks,j+1] = sr
         
+        print(wp[:10, 3])
+        print(_np.min(wp), _np.max(wp), _np.mean(wp), _np.std(wp))
+        
+        #%
         #++++++++++++++++++++++++
         #discrete inverse transform to obtain the reconstructed signal
-        approx = wp[:,0] #approximation coefficients in the first column
+        approx = copy(wp[:,0]) #approximation coefficients in the first column
         
-        for d in range(D-2,-1,-1):
+        for d in range(D-1,-1,-1):
             n_blocks = int(2**d)
-            l_blocks = int(n/n_blocks)
+            l_blocks = int(n_padded/n_blocks)
             l_blocks_2 = l_blocks//2
             
-            for b in range(0,n_blocks):
+            for b in range(n_blocks):
                 cD = wp[b*l_blocks : b*l_blocks+l_blocks_2, d+1]
-                cD_shift = wp[b*l_blocks+l_blocks_2 : b*l_blocks+2*l_blocks_2, d+1]
+                cD_shift = wp[b*l_blocks+l_blocks_2 : b*l_blocks+l_blocks, d+1]
                 cA = approx[b*l_blocks : b*l_blocks+l_blocks_2]
-                cA_shift = approx[b*l_blocks+l_blocks_2 : b*l_blocks+l_blocks_2*2]
+                cA_shift = approx[b*l_blocks+l_blocks_2 : b*l_blocks+l_blocks]
                 
-                s1 = pywt.idwt(cA,cD,'db2', mode='periodization')
-                s_shift = pywt.idwt(cA_shift,cD_shift,'db2', mode='periodization')
-                s2 = _np.concatenate([ s_shift[1:], [s_shift[0]]])
+                s1 = pywt.idwt(cA,cD,'db2', 
+                               mode='periodization')
+                s_shift = pywt.idwt(cA_shift,cD_shift,'db2', 
+                                    mode='periodization')
                 
-                approx[b*l_blocks:b*l_blocks+len(s1)] = (s1+s2)/2
+                s2 = _np.concatenate([s_shift[1:], [s_shift[0]]])
+                
+                approx[b*l_blocks:b*l_blocks+l_blocks] = (s1+s2)/2
                 
         reconstructed = approx/norm_coeff + mean_padded
+        
+        reconstructed = reconstructed[:n]
+        
+        plt.plot(signal_values)
+        plt.plot(reconstructed)
+        
+        _np.savetxt('/home/bizzego/tmp/nirs_wav.txt', reconstructed, delimiter='\t')
+        #%%
+        
+        
+        
         return(reconstructed[:n])

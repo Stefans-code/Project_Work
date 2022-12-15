@@ -5,10 +5,6 @@ from ._convert import Raw2Oxy
 from ._dl_sqi import SignalQualityDeepLearning
 import xarray as _xr
 
-
-
-
-
 def load_xrnirs(file):
     nirs = _xr.load_dataset(file)
     attrs = nirs.p.main_signal.attrs
@@ -24,6 +20,7 @@ def load_xrnirs(file):
         del attrs[k]
     
     nirs.p.main_signal.attrs = attrs
+    nirs.attrs['history'] = [nirs.attrs['history']]
     return(nirs)
 
 def SDto1darray(nirs):

@@ -1,24 +1,27 @@
+format long
 dod = importdata('/home/bizzego/tmp/nirs.txt');
 
-SD = [];
 iqr = 1.5;
 SignalLength = size(dod,1); % #time points of original signal
 N = ceil(log2(SignalLength)); % #of levels for the wavelet decomposition
 DataPadded = zeros (2^N,1); % data length should be power of 2  
 
-
 load('/home/bizzego/Downloads/db2.mat')
 qmfilter = qmf(db2,4);
-L = 4;  % Lowest wavelet scale used in the analysis
+L = 4;  % Lowest 
+% wavelet scale used in the analysis
+
 DataPadded(1:SignalLength) = dod;  % zeros pad data to have length of power of 2   
 DataPadded(SignalLength+1:end) = 0;  
-    
-DCVal = mean(DataPadded);         
+
+DCVal = mean(DataPadded);
 DataPadded = DataPadded-DCVal;    % removing mean value
+
 DataLength = size(DataPadded,1);  
 
 y = DataPadded';
 c = cconv(y,qmfilter,length(y)); % circular convolution (final length = length(y))
+
 c_downsampled = dyaddown(c); % downsample by 2
 
 medianAbsDev = mad(c_downsampled);
@@ -35,9 +38,12 @@ wavename='db2';
 D = N-L;
 n = length(yn);
 wp = zeros(n,D+1);
-dwtmode('per');  % set the wavelet mode to periodization
 
 wp(:,1) = yn';
+
+dwtmode('per');  % set the wavelet mode to periodization
+
+
 for d=0:(D-1)
     n_blocks = 2^d; % number of blocks in the level
     l_blocks = n/n_blocks; % length of the blocks in the level
@@ -47,7 +53,7 @@ for d=0:(D-1)
         
         [cA,cD] = dwt(s,wavename);  % discrete wavelet transform
         [cA_shift,cD_shift] = dwt(s_shift,wavename); % discrete wavelet transform of the shifted version
-        
+
         wp(b*l_blocks+1:b*l_blocks+l_blocks/2,1) = cA;
         wp(b*l_blocks+l_blocks/2+1:b*l_blocks+l_blocks,1) = cA_shift;
         
@@ -56,13 +62,10 @@ for d=0:(D-1)
     end
 end
 
-wp(1:10, 4)
-
-%
 n=size(wp,1);       % Length of data vector with zero padding
 N=log2(size(wp,1)); % Finest scale (original signal)
 SignalLength_tmp = SignalLength;
-
+count=0;
 for j=1:N-L-1
     SignalLength_tmp = fix(SignalLength_tmp/2);
     n_blocks = 2^j; % number of blocks in the level
@@ -77,14 +80,12 @@ for j=1:N-L-1
         outliers_1 = find(sr>prob1);
         outliers_2 = find(sr<prob2);
         outliers = [outliers_1' outliers_2'];
-        outliers = [1 2 4]
+        
         sr(outliers) = 0;  % set outliers to 0
         wp(b*l_blocks+1:b*l_blocks+l_blocks,j+1) = sr;
+        count = count+1;
     end
 end
-
-wp(1:10, 4)
-[min(min(wp)) max(max(wp))]
 
 %
 [n,D] = size(wp);
@@ -94,8 +95,8 @@ dwtmode('per');
 
 approx = wp(:,1)'; % approximation coefficients in the first column
 for d = D-1:-1:0
-     n_blocks = 2^d;
-     l_blocks = n/n_blocks;
+    n_blocks = 2^d;
+    l_blocks = n/n_blocks;
     for b = 0:(2^d-1)
         cD = wp(b*l_blocks+1  :  b*l_blocks+l_blocks/2,d+2)';
         cD_shift = wp(b*l_blocks+l_blocks/2+1:b*l_blocks+l_blocks,d+2)';
@@ -115,6 +116,10 @@ x = x/NormCoeff+DCVal;
 
 dodWavelet = x(1:length(dod));
 
+%% ALL FINE UNTIL HERE
+% except approx issues on low significance digits (e-15)
+
+%%
 %
 dodWavelet_py = importdata('/home/bizzego/tmp/nirs_wav.txt');
 

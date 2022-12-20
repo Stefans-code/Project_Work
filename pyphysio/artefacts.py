@@ -1,9 +1,9 @@
 import numpy as _np
 from ._base_algorithm import _Algorithm
 from copy import deepcopy as copy
-from .filters import IIRFilter as _IIRFilter
+from .filters import IIRFilter as _IIRFilter, Normalize as _Normalize
 import pywt
-from scipy.stats import median_abs_deviation as _mad
+from scipy.stats import median_abs_deviation as _mad, iqr as _iqr
 
 #TODO: There could be three types of classes:
 # - DetectNAME (to detect artefacts), 
@@ -11,73 +11,138 @@ from scipy.stats import median_abs_deviation as _mad
 # - NAME (algorithm that do both)
 # see Di Lorenzo et al: https://www.sciencedirect.com/science/article/pii/S1053811919305531?via%3Dihub
 
-
-class MARA(_Algorithm):
+class DetectMA(_Algorithm):
     '''
     F Scholkmann et al 2010 Physiol. Meas. 31 649
     '''
-    def __init__(self, win_len = 5, threshold = None, thcoeff=0.9, fuse=False, **kwargs):
+    def __init__(self, win_len=1, win_mask=1, method='iqr',
+                 iqr=1.5,
+                 th_std = None, th_std_coeff=None, 
+                 th_amp = None, fuse=False, **kwargs):
         
-        
-        _Algorithm.__init__(self, win_len=win_len, threshold=threshold, thcoeff=thcoeff, **kwargs)
+        assert method in ['iqr', 'mad', 'fixed']
+        if method == 'fixed':
+            assert th_std is not None
+            assert th_amp is not None
+        if method == 'mad':
+            assert th_std_coeff is not None
+            th_amp = _np.Inf #deactivate detection based on AMP
+            #TODO: ideas on how to compute threshold for AMP?
+            
+        _Algorithm.__init__(self, win_len=win_len, win_mask=win_mask,
+                            method=method, iqr=iqr,
+                            th_std=th_std, th_std_coeff=th_std_coeff, 
+                            th_amp=th_amp, **kwargs)
         
         #IDEA for the MA detection, we can do that by channel or globally
+        #(using fused channels)
         #and adapt the behaviour of the algorithm on the different dimensions:
         if fuse:
             self.dimensions = {'time' : 0, 'channels':1, 'components':1}
         else:
             self.dimensions = {'time' : 0}
-        #TODO: compute threshold automatically
-        #TODO: MA estimated from fused channels?
+   
     
+    def algorithm(self, signal):
+        params = self._params
+        win_len = params['win_len']
+        win_mask = params['win_mask']
+        method = params['method']
+        th_std = params['th_std']
+        th_std_coeff= params['th_std_coeff']
+        th_amp = params['th_amp']
+        iqr = params['iqr']
+        
+        fsamp = signal.p.get_sampling_freq()
+                
+        signal_norm = _Normalize()(signal)
+        signal_values = signal_norm.values.ravel()
+        
+        
+        # compute moving standard deviation (MSD) and range (AMP)
+        idx_len = int(win_len*fsamp)
+        half = idx_len // 2
+        MSD = []
+        AMP = []
+        for i in range(len(signal_values) - idx_len):
+            signal_values_win = signal_values[i: i+idx_len]
+            MSD.append(_np.std(signal_values_win))
+            AMP.append(_np.max(signal_values_win) - _np.min(signal_values_win))
+        
+        MSD = _np.array(MSD)
+        AMP = _np.array(AMP)
+        
+        #compute thresholds
+        if method == 'iqr':
+            #get thresholds using iqr
+            quants = _np.quantile(MSD, [.25, .50, .75])
+            IQR = quants[2]-quants[0]
+            th_MSD = quants[2]+IQR*iqr
+            
+            quants = _np.quantile(AMP, [.25, .50, .75])
+            IQR = quants[2]-quants[0]
+            th_AMP = quants[2]+IQR*iqr
+        
+        elif method == 'mad':    
+            signal_f =  _Normalize()(_IIRFilter(fp = [0.01, 0.5], btype='bandpass')(signal))
+            signal_values_filt = signal_f.values.ravel()
+            th_MSD = th_std_coeff*_np.median(abs(signal_values_filt - _np.median(signal_values_filt)))
+            th_AMP = th_amp
+            
+        else:
+            th_MSD = th_std
+            th_AMP = th_amp
+        
+        # fig, axes = plt.subplots(2,1,sharex=True)
+        # axes[0].plot(data_ch)
+        # axes[1].plot(np.arange(len(MA))+half, MA)
+        # axes[1].plot(np.arange(len(MSD))+half, MSD)
+        # axes[1].plot(np.arange(len(MSD))+half, AMP)
+        # axes[1].hlines(threshold, 0, len(MSD))
+        # axes[1].hlines(1.5, 0, len(MSD))
+        
+        # 2 detection motion artifacts (MA)
+        #IDEA: use peakdetection to identify the MA (on the MSD and AMP)
+        
+        # MSD = MSD - _np.median(MSD) #TODO: needed for method = 'mad'?
+        MSD = (MSD >= th_MSD)
+        AMP = (AMP > th_AMP)
+        
+        MA = (AMP | MSD).astype(int)
+        
+        idxlen_smooth = int(win_mask*fsamp)
+        MA = _np.convolve(MA, _np.ones(idxlen_smooth)/idxlen_smooth, 'same')
+        
+        signal_out = _np.zeros(len(signal_values))
+        idx_MA = _np.where(MA>0)[0] + half
+        signal_out[idx_MA] = 1
+        return(signal_out)
+        
+        
+class MARA(_Algorithm):
+    '''
+    F Scholkmann et al 2010 Physiol. Meas. 31 649
+    '''
+    def __init__(self, MA, **kwargs):
+        _Algorithm.__init__(self, MA=MA, **kwargs)
+        self.dimensions = {'time' : 0}
     
     def algorithm(self, signal):
         from csaps import csaps as _csaps
 
-        # signal = nirs.p.main_signal.isel(channel = [2], component=[0])
-        # import pyphysio.filters as flt
-        # import numpy as _np
-        # from pyphysio.filters import IIRFilter as _IIRFilter
-        # win_len = 5
-        # thcoeff = 0.9
-        params = self._params
-        win_len = params['win_len']
-        threshold = params['threshold']
-        thcoeff= params['thcoeff']
-        
+        signal_values = signal.values.ravel()
         fsamp = signal.p.get_sampling_freq()
-        data_ch = signal.values.ravel()
-
-        #compute threshold
-        if threshold is None:
-            # hb_f = filters.FIRFilter(fp = [0.01, 0.5], order=order, btype='bandpass')(hb)
-            signal_f = _IIRFilter(fp = [0.01, 0.5], btype='bandpass')(signal)
-            data_ch_filt = signal_f.values.ravel()
-            # threshold = _np.std(data_ch_filt)
-            
-            threshold = thcoeff*_np.median(abs(data_ch_filt - _np.median(data_ch_filt)))
-            
-        # 1 moving standard deviation MSD (win size/step?) 
-        idx_len = int(win_len*fsamp)
-        half = idx_len //2
-        MSD = []
-        for i in range(len(data_ch - idx_len)):
-            MSD.append(_np.std(data_ch[i: i+idx_len]))
-
-        # 2 detection moving artifacts (MA) start and end
-        #IDEA: use peakdetection to identify the MA, with onset and offsets
-        MSD = _np.array(MSD)
-        MSD = MSD - _np.median(MSD)
-        MSD = (MSD >= threshold).astype(int)
         
-        idxlen_smooth = int(2*fsamp) #see tMask
-        MSD = _np.convolve(MSD, _np.ones(idxlen_smooth)/idxlen_smooth, 'same') #TODO: needed?
-        MSD = (MSD > 0).astype(int)
-
-        MSD_ = _np.diff(MSD)
+        params = self._params
+        MA = params['MA']
         
-        idx_st = _np.where(MSD_ > 0)[0] + half
-        idx_sp = _np.where(MSD_ < 0)[0] + half
+        ch = signal.channel.values[0]
+        cp = signal.component.values[0]
+        MA_signal = MA.isel(channel=[ch], component=[cp])
+        MA_signal_values = MA_signal.p.main_signal.values.ravel()
+        MA_signal_diff = _np.diff(MA_signal_values)
+        idx_st = _np.where(MA_signal_diff > 0)[0]
+        idx_sp = _np.where(MA_signal_diff < 0)[0]
         
         #manage special cases with MA at beginning or end
         #TODO: check
@@ -87,7 +152,7 @@ class MARA(_Algorithm):
         
         if len(idx_st)>0:
             if ((len(idx_sp)==0) or (idx_sp[-1] < idx_st[-1])): #ending with a MA
-                idx_sp = _np.insert(idx_sp, len(idx_sp), len(data_ch))
+                idx_sp = _np.insert(idx_sp, len(idx_sp), len(MA_signal))
         
         
         # 3 create list of segments w/ MA x_bad and w/o MA x_good
@@ -97,10 +162,10 @@ class MARA(_Algorithm):
         for id_MA, (idx_st_MA, idx_sp_MA) in enumerate(zip(idx_st,idx_sp)):
             # if (idx_sp_MA - idx_st_MA) < 2:
             #     plt.plot(signal.values.ravel())
-            x_good.append(data_ch[idx_start: idx_st_MA])
-            x_bad.append(data_ch[idx_st_MA : idx_sp_MA])
+            x_good.append(signal_values[idx_start: idx_st_MA])
+            x_bad.append(signal_values[idx_st_MA : idx_sp_MA])
             idx_start = idx_sp_MA
-        x_good.append(data_ch[idx_start:])
+        x_good.append(signal_values[idx_start:])
         
         # 4 spline interpolation (X_MA_s) of each segment in X_MA
         #+5 subtraction of X_MA_s from each X_MA
@@ -190,7 +255,7 @@ class WaveletFilter(_Algorithm):
 
         #% normalize
         signal_padded, norm_coeff = self._normalization_noise(signal_padded)
-            
+        
         #% compute wavelets coefficients
         wp = _np.zeros((nsamples_out,D+1));
 

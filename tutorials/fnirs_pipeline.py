@@ -12,13 +12,6 @@ import matplotlib.pyplot as plt
 DATA_FOLDER = '/home/bizzego/UniTn/data/fnirs_technical_validation/hyper/pilot'
 nirs = load_nirx2(f'{DATA_FOLDER}/TN001/TN001_base/tn001fa_001') 
 
-#%%
-signal_values = nirs.p.main_signal.values[:,1,0]
-iqr = 1.5
-import numpy as _np
-import pywt
-from copy import deepcopy as copy
-
 #%% remove nans, if present
 if np.sum(np.isnan(nirs.p.main_signal.values)) > 0:
     nirs = nirs.process_na('impute')
@@ -50,12 +43,12 @@ sqi.p.plot()
 #remove MA with splines
 nirs_noMA = artefacts.MARA()(nirs)
 
-plt.figure()
-nirs.p.plot(sharey=False)
-nirs_noMA.p.plot(sharey=False)
+# plt.figure()
+# nirs.p.plot(sharey=False)
+# nirs_noMA.p.plot(sharey=False)
 
 #remove MA with wavelet
-nirs_wav = artefacts.WaveletFilter()(nirs)
+nirs_wav = artefacts.WaveletFilter()(nirs_noMA)
 
 plt.figure()
 nirs_noMA.p.plot(sharey=False)
@@ -70,7 +63,7 @@ hb.p.plot(sharey=False)
 #%% filtering
 
 #frequency band / moving average
-# hb_f = filters.IIRFilter(fp = [0.01, 0.2], order=3, ftype='ellip')(hb)
+hb_f = filters.IIRFilter(fp = [0.01, 0.5], btype='bandpass')(hb)
 # hb_f = filters.ConvolutionalFilter('rect', win_len=1)(hb)
 order = 30
 

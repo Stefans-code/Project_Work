@@ -16,10 +16,10 @@ class MARA(_Algorithm):
     '''
     F Scholkmann et al 2010 Physiol. Meas. 31 649
     '''
-    def __init__(self, win_len = 5, threshold = None, fuse=False, **kwargs):
+    def __init__(self, win_len = 5, threshold = None, thcoeff=0.9, fuse=False, **kwargs):
         
         
-        _Algorithm.__init__(self, win_len=win_len, threshold=threshold, **kwargs)
+        _Algorithm.__init__(self, win_len=win_len, threshold=threshold, thcoeff=thcoeff, **kwargs)
         
         #IDEA for the MA detection, we can do that by channel or globally
         #and adapt the behaviour of the algorithm on the different dimensions:
@@ -34,18 +34,28 @@ class MARA(_Algorithm):
     def algorithm(self, signal):
         from csaps import csaps as _csaps
 
+        # signal = nirs.p.main_signal.isel(channel = [2], component=[0])
+        # import pyphysio.filters as flt
+        # import numpy as _np
+        # from pyphysio.filters import IIRFilter as _IIRFilter
+        # win_len = 5
+        # thcoeff = 0.9
         params = self._params
         win_len = params['win_len']
         threshold = params['threshold']
+        thcoeff= params['thcoeff']
         
         fsamp = signal.p.get_sampling_freq()
         data_ch = signal.values.ravel()
 
         #compute threshold
         if threshold is None:
-            signal_f = _IIRFilter(fp=[0.05], btype='highpass')(signal)
+            # hb_f = filters.FIRFilter(fp = [0.01, 0.5], order=order, btype='bandpass')(hb)
+            signal_f = _IIRFilter(fp = [0.01, 0.5], btype='bandpass')(signal)
             data_ch_filt = signal_f.values.ravel()
-            threshold = _np.std(data_ch_filt)
+            # threshold = _np.std(data_ch_filt)
+            
+            threshold = thcoeff*_np.median(abs(data_ch_filt - _np.median(data_ch_filt)))
             
         # 1 moving standard deviation MSD (win size/step?) 
         idx_len = int(win_len*fsamp)
@@ -66,8 +76,8 @@ class MARA(_Algorithm):
 
         MSD_ = _np.diff(MSD)
         
-        idx_st = _np.where(MSD_ > 0)[0]
-        idx_sp = _np.where(MSD_ < 0)[0]
+        idx_st = _np.where(MSD_ > 0)[0] + half
+        idx_sp = _np.where(MSD_ < 0)[0] + half
         
         #manage special cases with MA at beginning or end
         #TODO: check
@@ -87,9 +97,9 @@ class MARA(_Algorithm):
         for id_MA, (idx_st_MA, idx_sp_MA) in enumerate(zip(idx_st,idx_sp)):
             # if (idx_sp_MA - idx_st_MA) < 2:
             #     plt.plot(signal.values.ravel())
-            x_good.append(data_ch[idx_start: idx_st_MA + half])
-            x_bad.append(data_ch[idx_st_MA + half : idx_sp_MA + half])
-            idx_start = idx_sp_MA + half
+            x_good.append(data_ch[idx_start: idx_st_MA])
+            x_bad.append(data_ch[idx_st_MA : idx_sp_MA])
+            idx_start = idx_sp_MA
         x_good.append(data_ch[idx_start:])
         
         # 4 spline interpolation (X_MA_s) of each segment in X_MA

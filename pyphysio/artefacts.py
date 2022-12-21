@@ -235,6 +235,12 @@ class WaveletFilter(_Algorithm):
     
     def algorithm(self, signal): 
         signal_values = signal.values.ravel()
+        
+        #%
+        mean_original = _np.mean(signal_values)
+        signal_values = signal_values - mean_original
+        #%
+        
         nsamples = len(signal_values)
         
         #params
@@ -345,6 +351,6 @@ class WaveletFilter(_Algorithm):
         #restore original scale
         approx = approx/norm_coeff+mean_padded
         
-        reconstructed = approx[:nsamples]
+        reconstructed = approx[:nsamples] + mean_original
         
         return(reconstructed)

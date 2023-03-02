@@ -32,7 +32,7 @@ class _Algorithm(object):
 
         Returns
         -------
-        chink_dict : dictionary
+        chunk_dict : dictionary
             dictionary with information on how to perform the rolling
         template : xarray.DataArrat
             template of the output
@@ -60,6 +60,8 @@ class _Algorithm(object):
                     size_out_dim = dimensions[dim]
                     if size_out_dim <= size_in_dim:
                         coords = signal.coords[dim].values[:size_out_dim]
+                    else:
+                        coords = _np.arange(len(size_out_dim))
             template_coords[dim] = coords
             template_shape.append(size_out_dim)
         
@@ -157,20 +159,19 @@ class _Algorithm(object):
 
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
+ 
             #create the rolling mechanism
             #which calls self.__mapper_func__ on all chunks
             mapper =  _xr.map_blocks(self.__mapper_func__, 
                                       signal_dask.copy(deep=True), 
                                       kwargs = kwargs,
                                       template = template_dask)
-            
             #apply the rollink mechanism and compose the results
             signal_out = mapper.load(scheduler=scheduler) #distributed, single-threaded
 
         #The user will mainly call Algorithms on a Dataset
         #so it will expect a Dataset as result
         if isinstance(signal_in, _xr.Dataset):
-
             output_name = f'{signal_name}_{self.name}'
 
             #TODO: why are we repeating these? they are also in __mapper_func__?
@@ -194,6 +195,7 @@ class _Algorithm(object):
                         # we should just convert the result to a dataset and return it
                         # so we flag this as strange_result
                         strange_result = True
+            
             
             #TODO: ISSUE: if "expanding" a coordinate (e.g. see pyphysio.FunctionalSeparationFilter)
             #these steps reset the original shape (e.g. from 4 to 2)
@@ -255,6 +257,7 @@ class _Algorithm(object):
         
         result_numpy = self.algorithm(signal_in, **kwargs)
         result_out = self.__finalize__(result_numpy, signal_in)
+        
         return(result_out)
 
     def __finalize__(self, result, signal_in, dimensions='none'):
@@ -263,13 +266,14 @@ class _Algorithm(object):
         from the calls to self.algorithm.
         The output should be a dataaarry or dataset
         '''
+
         if result.ndim == 1:
             result = _np.expand_dims(result, [1,2])
 
         signal_out = _xr.DataArray(result, 
                                    dims=('time', 'channel', 'component'), 
                                    name=signal_in.name)
-        
+
         for dim in ('time', 'channel', 'component'):
             
             if signal_in.sizes[dim] == signal_out.sizes[dim]:
@@ -282,8 +286,7 @@ class _Algorithm(object):
                 signal_out = signal_out.assign_coords({dim:[coord_start]})
                 
             else:
-                #we do not know how to assign coordinates to this dimension
-                pass
+                signal_out = signal_out.assign_coords({dim:_np.arange(signal_out.sizes[dim])})
                     
         signal_out.attrs = signal_in.attrs.copy()
         return(signal_out)

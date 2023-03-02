@@ -89,6 +89,7 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
+
 pwd = utils.PSD('fft')(signal)
 
 for i in np.arange(1, len(freqs)):
@@ -108,13 +109,14 @@ for i in np.arange(1, len(freqs)):
 #     assert abs((pwd.coords['freq'].values[idx_max] - i)) < 0.01
 
 #%% test wavelet
+fsamp = 10
 freqs = np.arange(0,10)
-t = np.arange(0, 20, 0.05)
+t = np.arange(0, 20, 1/fsamp)
 data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
-signal = create_signal(data, sampling_freq=20, name = 'random')
+signal = create_signal(data, sampling_freq=fsamp, name = 'random')
 
-wavelet = utils.Wavelet()(signal, add_signal=True)
+wavelet = utils.Wavelet()(signal)
 
     
 #%% test maxima

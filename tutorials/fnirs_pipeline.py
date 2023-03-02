@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 #%% load data
 DATA_FOLDER = '/home/bizzego/UniTn/data/fnirs_technical_validation/hyper/pilot'
 
-nirs = load_nirx2(f'{DATA_FOLDER}/TN001/TN001_base/tn001fb_001') 
-
-nirs = load_nirx2('/home/bizzego/UniTn/data/fnirs_hyper_RP/ITA/Signals/Raw/TN008/RR/B')
+# nirs = load_nirx2(f'{DATA_FOLDER}/TN001/TN001_base/tn001fb_001') 
+# 
+nirs = load_nirx2('/home/bizzego/UniTn/data/fnirs_hyper_RP/ITA/Signals/Raw/TN008/BASE/B')
 
 #%% remove nans, if present
 if np.sum(np.isnan(nirs.p.main_signal.values)) > 0:
@@ -68,10 +68,10 @@ hb.p.plot(sharey=False)
 #%% filtering
 
 #frequency band / moving average
-# hb_f = filters.IIRFilter(fp = [0.01, 0.5], btype='bandpass')(hb)
+hb_f = filters.IIRFilter(fp = [0.01, 0.5], btype='bandpass')(hb)
 # hb_f = filters.ConvolutionalFilter('rect', win_len=1)(hb)
-order = 30
-hb_f = filters.FIRFilter(fp = [0.01, 0.5], order=order, btype='bandpass')(hb)
+# order = 30
+# hb_f = filters.FIRFilter(fp = [0.01, 0.5], order=order, btype='bandpass')(hb)
 # 
 plt.figure()
 # plt.plot(hb.p.main_signal.values[:,0,0])

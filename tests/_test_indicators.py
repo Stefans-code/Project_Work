@@ -13,21 +13,25 @@ tstart_ecg = 15
 ecg = create_signal(data = ecg_data, sampling_freq = fsamp, start_time = tstart_ecg)
 
 #%%
-import pyphysio.processing.estimators as est
+import pyphysio.specialized.heart as heart
 
-ibi_ecg = est.BeatFromECG()
+ibi_ecg = heart.BeatFromECG()
 # apply an Estimator
 ibi = ibi_ecg(ecg, add_signal=False)
 
 #%%
 import pyphysio.indicators.frequencydomain as fd_ind
+import pyphysio.indicators.timedomain as td_ind
 
-ibi_ = ibi.dropna('time') #dropna is needed to correctly resample
+ibi_ = ibi.p.process_na('remove')
 ibi_ = ibi_.p.resample(4) #resampling is needed to compute the Power Spectrum Density
 
 
 HF = fd_ind.PowerInBand(freq_min=0.15, freq_max=0.4, method = 'welch')
-HF_ = HF(ibi_, add_signal=False) 
+HF_ = HF(ibi_) 
+
+
+mean = td_ind.Mean()(ibi_, add_signal=False)
 
 print(HF_.dropna('time'))
 

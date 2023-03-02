@@ -212,11 +212,9 @@ class BeatFromBP(_Algorithm):
 
         # STAGE 1 - EXTRACT BEAT POSITION SIGNAL
         # filtering
-        signal_f = _IIRFilter(fp=1.2 * fmax, fs=3 * fmax,
-                              ftype='ellip')(signal)
+        signal_f =  _IIRFilter(fp=[0.5*fmax, 1.5*fmax], btype='bandpass')(signal)
         # find range for the adaptive peak detection
-        delta = 0.5 * _SignalRange(win_len=1.5 / fmax,
-                                   win_step=1 / fmax)(signal_f)
+        delta = 0.5 * _SignalRange(win_len=1.5 / fmax, win_step=1 / fmax)(signal_f)
 
         delta = delta.values.ravel()
 
@@ -266,8 +264,7 @@ class BeatFromBP(_Algorithm):
             minima = _Minima(win_len=0.1, win_step=0.025,
                              method='windowing')(true_obs)
 
-            idx_mins = _np.where(~_np.isnan(minima.p.main_signal.values))[
-                0].ravel()
+            idx_mins = _np.where(~_np.isnan(minima.p.main_signal.values))[0].ravel()
 
             if len(idx_mins) >= 1:
                 peak = idx_mins[0]

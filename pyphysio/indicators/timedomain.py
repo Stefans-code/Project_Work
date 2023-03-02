@@ -12,7 +12,9 @@ class Mean(_Algorithm):
         self.dimensions = {'time' : 1}
         
     def algorithm(self, signal):
-        return _np.mean(signal.values, keepdims=True)
+        result = _np.mean(signal.values, keepdims=True)
+        # print(result.shape)
+        return result
 
 class Min(_Algorithm):
     """

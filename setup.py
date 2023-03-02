@@ -1,5 +1,6 @@
 # coding=utf-8
 from setuptools import setup
+import conda_build.bdist_conda
 
 setup(
     name='pyphysio',

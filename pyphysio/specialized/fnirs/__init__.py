@@ -5,6 +5,8 @@ from ._convert import Raw2Oxy
 from ._dl_sqi import SignalQualityDeepLearning
 import xarray as _xr
 
+from ... import scheduler
+
 def load_xrnirs(file):
     nirs = _xr.load_dataset(file)
     attrs = nirs.p.main_signal.attrs
@@ -48,7 +50,9 @@ class PCAFilter(_Algorithm):
     """    
     def __init__(self, nSV=0.8, **kwargs):
         _Algorithm.__init__(self, nSV=nSV, **kwargs)
-        self.dimensions = 'none'
+        self.dimensions = {'time':0, 
+                           'channel': 0, 
+                           'component':0}
     
     # def __call__(self, signal, manage_original):
     #     return _Algorithm.__call__(self, signal,
@@ -118,22 +122,73 @@ class NegativeCorrelationFilter(_Algorithm):
         return(signal_out)
 
 
-"""
-
-def __finalize_special__(res_sig):
-    # print('----->', self.name, 'finalize')
-    original_coords = list(res_sig.coords)
-    res_sig = res_sig.reset_coords()
+class ComputeClusters(_Algorithm):
+    def __init__(self, clusters, n_min_good=3, normalize=True, **kwargs):
+        _Algorithm.__init__(self, clusters = clusters, 
+                            n_min_good = n_min_good, 
+                            normalize=normalize, **kwargs)
+        
+        self.dimensions = {'time':0, 
+                           'channel': len(clusters), 
+                           'component':0}
     
-    dimensions = list(res_sig.dims)
-    for c in original_coords:
-        if c not in dimensions:
-            res_sig = res_sig.drop(c)
-    res_sig = res_sig.to_array()
-    res_sig = res_sig.squeeze(dim='variable').drop('variable')
-    # print('<-----', self.name, 'finalize')
-    return res_sig
+    def __call__(self, signal_in, **kwargs):
+        if 'good_channels' in signal_in.attrs:
+            self.good_channels = signal_in.attrs['good_channels']
+        else:
+            self.good_channels = _np.arange(signal_in.dims['channel'])
+        
+        return(_Algorithm.__call__(self, signal_in, **kwargs))
+                                            
+                                            
+    def algorithm(self, signal):
+        def normalize_signal(x):
+            return( (x-_np.mean(x))/_np.std(x))
+        clusters = self._params['clusters']
+        n_min_good = self._params['n_min_good']
+        normalize = self._params['normalize']
+        
+        signal_values = signal.p.get_values()
+        
+        good_channels = self.good_channels
+        
+        out_signal = _np.nan*_np.zeros((len(signal_values), len(clusters), 2))
+        for i_cluster, cluster_channels in enumerate(clusters):
+            
+            cluster_good_channels = []
+            for ch in cluster_channels:
+                if ch in good_channels:
+                    cluster_good_channels.append(ch)
+            
+            if len(cluster_good_channels)>= n_min_good:
+                signals_cluster = signal_values[:, cluster_good_channels, :]
+                    
+                if normalize:
+                    signals_cluster = _np.apply_along_axis(normalize_signal, 0,  signals_cluster)
+                
+                cluster_mean = _np.mean(signals_cluster, axis=1, keepdims=True)
+                out_signal[:,i_cluster, :] = cluster_mean[:,0,:]
+        
+        return(out_signal)
+        
 
+
+# def __finalize_special__(res_sig):
+#     # print('----->', self.name, 'finalize')
+#     original_coords = list(res_sig.coords)
+#     res_sig = res_sig.reset_coords()
+    
+#     dimensions = list(res_sig.dims)
+#     for c in original_coords:
+#         if c not in dimensions:
+#             res_sig = res_sig.drop(c)
+#     res_sig = res_sig.to_array()
+#     res_sig = res_sig.squeeze(dim='variable').drop('variable')
+#     # print('<-----', self.name, 'finalize')
+#     return res_sig
+
+        
+"""
 class FunctionalSeparationFilter(_Algorithm):
     '''
     Yamada, T., Umeyama, S., & Matsuda, K. (2012). 

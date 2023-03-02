@@ -35,15 +35,14 @@ class PowerInBand(_Algorithm):
         self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        # print('-----> PowerInBand')
         params = self._params
-        psd = PSD(**params)(signal, dimensions='none')
+        fsamp = signal.p.get_sampling_freq()
+        psd = PSD(scaling='density', **params)(signal)
         freq = psd.coords['freq'].values
-        power = psd.values.ravel()
+        power = psd.values
         i_min = _np.searchsorted(freq, params["freq_min"])
         i_max = _np.searchsorted(freq, params["freq_max"])
-        result = _np.sum(power[i_min:i_max], keepdims=True)
-        # print('<----- PowerInBand')
+        result = _np.sum(power[i_min:i_max]*fsamp, axis=0, keepdims=True)
         return result
 
 class PeakInBand(_Algorithm):

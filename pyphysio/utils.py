@@ -2,8 +2,10 @@
 # from __future__ import division
 import numpy as _np
 import xarray as _xr
-from scipy.signal import welch as _welch, periodogram as _periodogram
-import pycwt.wavelet as wave
+from scipy.signal import welch as _welch, periodogram as _periodogram, \
+    detrend as _detrend
+# import pycwt.wavelet as wave
+import pywt as _pywt
 #TODO replace with pywavelets
 from ._base_algorithm import _Algorithm
 
@@ -245,7 +247,7 @@ class PSD(_Algorithm): #xarray done
     Parameters
     ----------
     method : str
-        Method to estimate the PSD. Available methods: 'welch', 'fft', 'ar'
+        Method to estimate the PSD. Available methods: 'welch', 'period'
         
     Optional parameters
     -------------------
@@ -271,11 +273,11 @@ class PSD(_Algorithm): #xarray done
         Power Spectrum Density
     """
 
-    def __init__(self, method, nfft=2048, window='hamming', min_order=10, max_order=30, normalize=False,
-                 remove_mean=True, **kwargs):
+    def __init__(self, method, nfft=2048, window='hamming', min_order=10, max_order=30,
+                 remove_mean=True, scaling='density', **kwargs):
         
-        _method_list = ['welch', 'fft', 'ar']
-        _window_list = ['hamming', 'blackman', 'hanning', 'bartlett', 'none']
+        _method_list = ['welch', 'period', 'ar']
+        _window_list = ['hamming', 'blackman', 'hanning', 'bartlett', 'boxcar']
 
         assert method in _method_list, "Parameter method should be in " + _method_list.__repr__()
         assert nfft > 0, "nfft value should be positive"
@@ -284,17 +286,12 @@ class PSD(_Algorithm): #xarray done
             assert min_order > 0, "Minimum order for the AR method should be positive"
             assert max_order > 0, "Maximum order for the AR method should be positive"
         
+        assert scaling in ['density', 'spectrum']
         _Algorithm.__init__(self, method=method, nfft=nfft, window=window, min_order=min_order,
-                       max_order=max_order, normalize=normalize, remove_mean=remove_mean, **kwargs)
+                       max_order=max_order, remove_mean=remove_mean, scaling=scaling, **kwargs)
         
         self.dimensions = 'special'
-        
-    # TODO (Feature - Issue #15): consider point below:
-    # A density spectrum considers the amplitudes per unit frequency.
-    # Density spectra are used to compare spectra with different frequency resolution as the
-    # magnitudes are not influenced by the resolution because it is per Hertz. The amplitude
-    # spectra on the other hand depend on the chosen frequency resolution.
-
+    
     def __finalize__(self, res_sig, arr_window):
         return __finalize_special__(res_sig)
     
@@ -304,9 +301,9 @@ class PSD(_Algorithm): #xarray done
         method = params['method']
         nfft = params['nfft'] if "nfft" in params else None
         window = params['window']
-        normalize = params['normalize']
         remove_mean = params['remove_mean']
-
+        scaling = params['scaling']
+        
         fsamp = signal.p.get_sampling_freq()
         
         signal_values = signal.values.ravel()
@@ -314,11 +311,13 @@ class PSD(_Algorithm): #xarray done
         if remove_mean:
             signal_values = signal_values - _np.mean(signal_values)
 
-        if method == 'fft':
-            freqs, psd = _periodogram(signal_values, fs=fsamp, window = window, nfft=nfft, return_onesided=True)
+        if method == 'period':
+            freqs, psd = _periodogram(signal_values, fs=fsamp, window = window, 
+                                      nfft=nfft, return_onesided=True, scaling=scaling)
 
         elif method == 'welch':
-            freqs, psd = _welch(signal_values, fsamp, window=window, return_onesided=True, nfft=nfft)
+            freqs, psd = _welch(signal_values, fs=fsamp, window=window, 
+                                nfft=nfft, return_onesided=True, scaling=scaling)
 
         elif method == 'ar':
             raise NotImplementedError
@@ -398,13 +397,13 @@ class PSD(_Algorithm): #xarray done
             w, P = _freqz(1, a, whole = False, worN = nfft)
             
             psd = 2*_np.abs(P)/fsamp
+            
+            freqs = _np.linspace(start=0, stop=fsamp / 2, num=len(psd))
             '''
 
-        freqs = _np.linspace(start=0, stop=fsamp / 2, num=len(psd))
-
         # NORMALIZE
-        if normalize:
-            psd /= _np.sum(psd)
+        if scaling == 'density':
+            psd /= len(psd)
       
         # out = signal.copy(deep=True)
         # out = out.expand_dims({'freq':freqs}, axis=0)[:,0]
@@ -446,74 +445,113 @@ class Wavelet(_Algorithm): #xarray dones
     """
     TODO
     """
-    def __init__(self, detrend=True, mother = None, J = None, **kwargs):
-        mother = wave.Morlet(6) if mother is None else mother
-        
-        if J is None:
-            J = 68 #default value in cwt function
-        else:
-            assert J>1
+    def __init__(self, wtype = 'cmor_1.15-1.0',
+                 scales = None,
+                 minScale = None,
+                 nNotes = 12,
+                 detrend=True,
+                 normalize=True):
             
         
-        _Algorithm.__init__(self, detrend = detrend, mother = mother, J=J, **kwargs)
+        _Algorithm.__init__(self, wtype = wtype, scales = scales, 
+                            minScale = minScale, nNotes = nNotes,
+                            detrend=detrend, normalize=normalize)
         self.dimensions = 'special'
         
     def __finalize__(self, res_sig, arr_window):
         return __finalize_special__(res_sig)
     
+    def _get_scales(self, signal):
+        params = self._params
+        # wtype = params['wtype']
+        scales = params['scales']
+        nNotes = params['nNotes']
+        
+        signal_values = signal.p.get_values()
+        fsamp = signal.p.get_sampling_freq()
+        
+        N = signal_values.shape[0]
+        
+        #use nsamp and nyq_freq instead of t, fsamp
+        if scales is None:
+            minScale = params['minScale']
+            if minScale is None:
+                minScale_idx = 2
+            else:
+                minScale_idx = int(_np.round(minScale*fsamp))
+            # The scales as of Mallat 1999
+            # minScale = 2 # / wavelet.flambda()
+            nOctaves = int(_np.round(_np.log2(N/2) / (1/nNotes)))
+            scales_idx = minScale_idx * 2 ** (_np.arange(0, nOctaves + 1) * (1/nNotes))
+        else:
+            scales_idx = scales*fsamp
+        return(scales_idx)
+    
     def algorithm(self, signal):
         params = self._params
-        
-        fsamp = signal.p.get_sampling_freq()
-        t = signal.p.get_times()
-        t0 = signal.p.get_start_time()
-        dt = 1/fsamp
-        
+        wtype = params['wtype']
+        # scales = params['scales']
+        # nNotes = params['nNotes']
         detrend = params['detrend']
-        signal_values = signal.values.ravel()
+        normalize = params['normalize']
+        
+        signal_values = signal.p.get_values().ravel()
+        fsamp = signal.p.get_sampling_freq()
+        N = len(signal_values)
         
         if detrend:
-            #% detrend
-            p = _np.polyfit(t - t0, signal_values, 1)
-            signal_values = signal_values - _np.polyval(p, t - t0)
+            signal_values = _detrend(signal_values, type='linear')
             
-        #% wavelet
-        J = params['J']
-        freqs = _np.logspace(1, _np.log10(fsamp/2), J+1)[::-1]
+        scales_idx = self._get_scales(signal)
         
-        mother = params['mother']
-        w, scales, freqs, coi, fft, fftfreqs = wave.cwt(signal_values, dt, 
-                                                        wavelet=mother,
-                                                        J=J,
-                                                        freqs=freqs)
+        W, freqs = _pywt.cwt(signal_values, scales_idx, wavelet=wtype)
+        coif_ = 1/(2*_np.arange(1, N//2))
         
-        power = (_np.abs(w)) ** 2
-        power /= scales[:, None]
-        power = _np.expand_dims(power,[2,3])
+        # coif_ = fsamp/(2*np.arange(1, N//2))
+        min_coif = coif_[-1]
+        coif = _np.zeros(N) + min_coif
+        coif[:len(coif_)] = coif_
+        coif[-len(coif_):] = coif_[::-1]
+
+        
+        freqs = freqs*fsamp
+        if normalize:
+            scaleMatrix = _np.ones([1, N]) * scales_idx[:, None]
+            W = W**2 / scaleMatrix
+        
+        W = _np.expand_dims(W,[2,3])
+        # print(W.shape)
 
         out = signal.copy(deep=True)
         out = out.expand_dims({'freq':freqs}, axis=0)
         # out.name = signal.name+'_'#+self.name
         
-        out.values = power
+        out.values = W
         return out
     
     def __get_template__(self, signal):
-        J = self._params['J']
-        N = signal.shape[0]
-        out = _np.zeros(shape=(J+1, N,
+        params = self._params
+        wtype = params['wtype']
+        
+        scales_idx = self._get_scales(signal)
+
+        signal_values = signal.p.get_values()
+        fsamp = signal.p.get_sampling_freq()
+        N = signal_values.shape[0]
+
+        out = _np.zeros(shape=(len(scales_idx), N,
                                signal.sizes['channel'], 
                                signal.sizes['component']))
-        
-        fsamp = signal.p.get_sampling_freq()
-        freqs = _np.logspace(1, _np.log10(fsamp/2), J+1)[::-1]
+
+        freqs = _pywt.scale2frequency(wtype, scales_idx)*fsamp
+        # print(len(freqs))
         
         out = _xr.DataArray(out, dims=('freq', 'time', 'channel', 'component'),
                             coords = {'freq': freqs,
                                       'time': signal.coords['time'].values,
                                       'channel': signal.coords['channel'],
                                       'component': signal.coords['component']})
-        # print(out)
+
         return {'channel': 1, 'component':1}, out
         
 

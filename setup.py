@@ -12,8 +12,8 @@ setup(
     package_data={'tests': ['data/*']},
     version='3.0',
 
-    description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP...)',
-    author='MPBA FBK',
+    description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP, fNIRS, ...)',
+    author='a.bizzego',
     author_email='andrea.bizzego@unitn.it',
     url='https://gitlab.com/a.bizzego/pyphysio',
     keywords=['eda', 'gsr', 'ecg', 'bvp', 'fnirs', 'signal', 'analysis', 'physiological', 'psychopysiology', 'neuroscience'],

@@ -22,7 +22,12 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 
 #TODO: add to_hdf method
 #See the _to1darray function in _load_nirx
-
+    
+def load(file):
+    signal = _xr.load_dataset(file)
+    
+    return(signal)
+    
 def create_signal(data, times=None, sampling_freq=None,
                   start_time=0, name='signal', info={}):
     '''
@@ -75,6 +80,7 @@ def create_signal(data, times=None, sampling_freq=None,
         sampling_freq = 'unevenly'
     else: 
         assert sampling_freq > 0
+        sampling_freq = float(sampling_freq)
         if times is None: #create times
             times = _np.arange(0, data.shape[0])/sampling_freq + start_time
         else: #check that provided times are valid, given the sampling freq
@@ -238,6 +244,10 @@ class PyphysioDataArray(object):
         '''
         assert na_action in ['impute', 'keep', 'remove']
         data = self.da.values
+        
+        #TODO: whole signal of nans??
+        #replace with user-defined value?
+        
         
         #--> check the nans situation
         nans_in_dataset = False

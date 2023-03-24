@@ -90,7 +90,7 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
 
-pwd = utils.PSD('fft')(signal)
+pwd = utils.PSD('welch')(signal)
 
 for i in np.arange(1, len(freqs)):
     idx_max = np.argmax(pwd.p.get_values()[:,i])
@@ -118,6 +118,19 @@ signal = create_signal(data, sampling_freq=fsamp, name = 'random')
 
 wavelet = utils.Wavelet()(signal)
 
+#TODO: create assert here
+
+#%%
+fsamp = 10
+f = 0.5
+t = np.arange(0, 20, 1/fsamp)
+data = np.sin(2*np.pi*f*t)
+
+signal = create_signal(data, sampling_freq=fsamp, name = 'random')
+
+wavelet = utils.Wavelet(freqs = np.array([5,3,2,0.5]))(signal)
+
+#TODO: create assert here
     
 #%% test maxima
 freqs = np.arange(0,5)

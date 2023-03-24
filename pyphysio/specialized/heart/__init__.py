@@ -197,7 +197,6 @@ class BeatFromBP(_Algorithm):
         self.dimensions = {'time': 0}
 
     def algorithm(self, signal):
-
         params = self._params
         fsamp = signal.p.get_sampling_freq()
         bpm_max = params["bpm_max"]
@@ -208,11 +207,12 @@ class BeatFromBP(_Algorithm):
         fmax = bpm_max / 60
         ibi_min = 1 / fmax
 
-        times = signal.p.get_times()
-
+        times = signal.p.get_times() 
+        
         # STAGE 1 - EXTRACT BEAT POSITION SIGNAL
         # filtering
         signal_f =  _IIRFilter(fp=[0.5*fmax, 1.5*fmax], btype='bandpass')(signal)
+        
         # find range for the adaptive peak detection
         delta = 0.5 * _SignalRange(win_len=1.5 / fmax, win_step=1 / fmax)(signal_f)
 
@@ -227,7 +227,7 @@ class BeatFromBP(_Algorithm):
         maxima = _PeakDetection(
             delta=delta, refractory=ibi_min, start_max=True, return_peaks=True)(signal_f)
         maxp = _np.where(~_np.isnan(maxima.values))[0].ravel()
-
+        
         if maxp[0] == 0:
             maxp = maxp[1:]
 
@@ -273,6 +273,7 @@ class BeatFromBP(_Algorithm):
             #     print('Peak not found; idx_beat: ' + str(idx_beat))
             #     pass
         true_peaks = _np.array(true_peaks)
+        
         # STAGE 3 - FINALIZE computing IBI
         t_ibi = true_peaks / fsamp
         v_ibi = _np.diff(t_ibi)

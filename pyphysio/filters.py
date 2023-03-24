@@ -13,27 +13,38 @@ from .utils import SignalRange as _SignalRange
 
 class Normalize(_Algorithm):
     """
-    Normalized the input signal using the general formula: ( signal - BIAS ) / RANGE
+    Normalizes the input signal using the general formula: (signal - BIAS) / RANGE.
 
     Parameters
-    -------------------
-    norm_method : 
-        Method for the normalization. Available methods are:
-    * 'mean' - remove the mean [ BIAS = mean(signal); RANGE = 1 ]
-    * 'standard' - standardization [ BIAS = mean(signal); RANGE = std(signal) ]
-    * 'min' - remove the minimum [ BIAS = min(signal); RANGE = 1 ]
-    * 'maxmin' - maxmin normalization [ BIAS = min(signal); RANGE = ( max(signal) - min(signal ) ]
-    * 'custom' - custom, bias and range are manually defined [ BIAS = bias, RANGE = range ]
-    
-    norm_bias : float, default = 0
-        Bias for custom normalization
-    norm_range : float, !=0, default = 1
-        Range for custom normalization
+    ----------
+    norm_method : str, optional
+        Method for normalization. Available methods are:
+        * 'mean' - remove the mean [BIAS = mean(signal); RANGE = 1]
+        * 'standard' - standardization [BIAS = mean(signal); RANGE = std(signal)]
+        * 'min' - remove the minimum [BIAS = min(signal); RANGE = 1]
+        * 'maxmin' - maxmin normalization [BIAS = min(signal); RANGE = (max(signal) - min(signal))]
+        * 'custom' - custom, bias and range are manually defined [BIAS = bias, RANGE = range].
+        Default is 'standard'.
+    norm_bias : float, optional
+        Bias for custom normalization. Default is 0.
+    norm_range : float, optional
+        Range for custom normalization. Must not be zero if norm_method is 'custom'. Default is 1.
+    **kwargs : dict
+        Additional keyword arguments to pass to _Algorithm.__init__().
 
     Returns
     -------
-    signal: 
-        The normalized signal. 
+    signal : numpy.ndarray
+        The normalized signal.
+
+    Raises
+    ------
+    ValueError
+        If norm_method is not one of 'mean', 'standard', 'min', 'maxmin', or 'custom'.
+
+    Notes
+    -----
+    This class inherits from _Algorithm.
 
     """
 

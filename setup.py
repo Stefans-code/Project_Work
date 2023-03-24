@@ -10,7 +10,7 @@ setup(
               'pyphysio.indicators',
               'pyphysio.generators'],
     package_data={'tests': ['data/*']},
-    version='3.0',
+    version='3.0.3',
 
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP, fNIRS, ...)',
     author='a.bizzego',
@@ -33,11 +33,13 @@ setup(
         'matplotlib',
         'pycwt',
         'dask',
-        'netcdf4'
+        'netcdf4',
+        'xarray',
+	'pywavelets',
+	'h5py'
     ],
     requires=[
         'csaps',
-        'pywavelets',
         'nilearn',
         'pytest',
     ],

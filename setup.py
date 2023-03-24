@@ -1,12 +1,14 @@
 # coding=utf-8
 from setuptools import setup
+import conda_build.bdist_conda
 
 setup(
     name='pyphysio',
     packages=['pyphysio',
-              'pyphysio.estimators',
-              'pyphysio.filters',
+              'pyphysio.loaders',
+              'pyphysio.specialized',
               'pyphysio.indicators',
+<<<<<<< HEAD
               'pyphysio.segmentation',
               'pyphysio.tools',
               'pyphysio.tests',
@@ -14,30 +16,38 @@ setup(
               ],
     package_data={'pyphysio.tests': ['data/*']},
     version='2.4.3',
+=======
+              'pyphysio.generators'],
+    package_data={'tests': ['data/*']},
+    version='3.0',
+>>>>>>> xarray
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP...)',
     author='MPBA FBK',
     author_email='andrea.bizzego@unitn.it',
     url='https://github.com/MPBA/pyphysio',
     keywords=['eda', 'gsr', 'ecg', 'bvp', 'signal', 'analysis', 'physiological', 'pyhrv', 'hrv'],
     classifiers=[
-        'Development Status :: 5 - Production/Stable',
-        'Environment :: Console',
         'Intended Audience :: Healthcare Industry',
         'Intended Audience :: Information Technology',
         'Intended Audience :: Science/Research',
         'License :: OSI Approved :: GNU General Public License (GPL)',
         'Natural Language :: English',
         'Operating System :: OS Independent',
-        'Programming Language :: Python :: 3.5',
+        'Programming Language :: Python :: 3.10',
         'Topic :: Scientific/Engineering :: Bio-Informatics',
     ],
     install_requires=[
         'numpy',
         'scipy',
         'matplotlib',
-        'pycwt'
+        'pycwt',
+        'dask',
+        'netcdf4'
     ],
     requires=[
+        'csaps',
+        'pywavelets',
+        'nilearn',
         'pytest',
     ],
 )

@@ -1,20 +1,13 @@
 import bioread
 import numpy as np
-import pyphysio as ph
-import os
 
-datadir = '/home/bizzego/Downloads'
-outdir = '/home/bizzego/tmp/cecilia'
+datafile = '/home/bizzego/Downloads/Subj1_empathy.acq'
 
-target_signal = 'ECG'
-
-subject = 'Subj1_empathy.acq'
-
-#%%
-subname = subject.split('.')[0]
-data = bioread.read_file(os.path.join(datadir, subject))
+data = bioread.read_file(datafile)
 
 amp_digital_channels = 5
+#%%
+target_signal = 'ECG'
 
 channel_labels = [data.channels[i].name for i in range(len(data.channels))]
 
@@ -30,17 +23,16 @@ if i_target is not None:
     signal = data.channels[i_target]
     fsamp = signal.samples_per_second
     values = signal.data
-
-signal = ph.EvenlySignal(values, fsamp)    
-signal.to_pickle(os.path.join(outdir, f'{subname}_ECG.pkl'))
-
-if len(i_digital)>0:
-    #for each channel/bit
-    #add the bits considering the exponential associated to each bit position
-    trg = np.zeros(len(values))
-    exp_digital = range(len(i_digital))
-    for (i_ch, exp) in zip(i_digital, exp_digital): 
-        trg = trg+ (data.channels[i_ch].data/amp_digital_channels)*(2**exp)
     
-    trg = ph.EvenlySignal(trg, fsamp)
-    trg.to_pickle(os.path.join(outdir, f'{subname}_TRG.pkl'))
+# if len(i_digital)>0:
+
+#for each channel/bit
+#add the bits considering the exponential associated to each bit position
+trg = np.zeros(len(values))
+exp_digital = range(len(i_digital))
+for (i_ch, exp) in zip(i_digital, exp_digital): 
+    trg = trg+ (data.channels[i_ch].data/amp_digital_channels)*(2**exp)
+
+# create pkl and save
+# trg = ph.EvenlySignal(values = trg, sampling_freq = fsamp, signal_type = 'trg', start_time = 0)
+# trg.to_pickle(f'{outdir}/trg/{sub}.pkl')

@@ -1,11 +1,10 @@
 # coding=utf-8
-from __future__ import print_function
-from __future__ import division
+# from __future__ import print_function
+# from __future__ import division
 
 import matplotlib.pyplot as plt
-import pyphysio as ph
-import numpy as np
-
+import numpy as _np
+from . import create_signal
 
 class _MouseSelectionFilter(object):
     def __init__(self, onselect):
@@ -65,21 +64,18 @@ class Annotate(object):
         self.p_sig = self.fig.add_subplot(2, 1, 1)
         self.p_res = self.fig.add_subplot(2, 1, 2, sharex=self.p_sig)
 
-        self.max = ph.Max()(self.ecg)
-        self.min = ph.Min()(self.ecg)
+        self.max = _np.max(self.ecg)
+        self.min = _np.min(self.ecg)
 
-        self.margin = ph.Range()(self.ecg) * .1
+        self.margin = (self.max - self.min) * .1
         self.max += self.margin
         self.min -= self.margin
 
-        if isinstance(ibi, ph.UnevenlySignal):
-            self.peaks_t = self.ibi.get_times()
-            self.peaks_v = self.ibi.get_values()
-        else:
-            self.peaks_t = np.empty(0)
-            self.peaks_v = np.empty(0)
-
-        self.p_sig.plot(self.ecg.get_times(), self.ecg.get_values(), 'b')
+        
+        self.peaks_t = self.ibi.p.get_times()
+        self.peaks_v = self.ibi.p.get_values()
+        
+        self.p_sig.plot(self.ecg.p.get_times(), self.ecg.p.get_values(), 'b')
 
         self.p_res.plot(self.peaks_t, self.peaks_v, 'b'),
         self.p_res.plot(self.peaks_t, self.peaks_v, 'go')
@@ -90,7 +86,7 @@ class Annotate(object):
             left = None
             right = None
             radius = .3
-            radiusi = int(radius * self.ecg.get_sampling_freq())
+            radiusi = int(radius * self.ecg.p.get_sampling_freq())
 
             @staticmethod
             def on_move(event):
@@ -102,7 +98,7 @@ class Annotate(object):
                     Cursor.radiusi += 3
                 elif event.button == "down":
                     Cursor.radiusi -= 7
-                Cursor.radius = Cursor.radiusi / self.ecg.get_sampling_freq()
+                Cursor.radius = Cursor.radiusi / self.ecg.p.get_sampling_freq()
                 Cursor.draw(event)
 
             @staticmethod
@@ -120,7 +116,7 @@ class Annotate(object):
                 self.fig.canvas.draw()
 
         def find_peak(s):
-            return np.argmax(s)
+            return _np.argmax(s)
 
         def snap(xdata, ydata):
             nearest_after = self.peaks_t.searchsorted(xdata)
@@ -136,10 +132,10 @@ class Annotate(object):
                 if dist_after is not None and dist_after < Cursor.radius:
                     return self.peaks_t[nearest_after], ydata, nearest_after, False
 
-            s = self.ecg.segment_time(xdata - Cursor.radius, xdata + Cursor.radius)
-            s = np.array(s)
+            s = self.ecg.p.segment_time(xdata - Cursor.radius, xdata + Cursor.radius)
+            s = _np.array(s)
             m = find_peak(s)
-            return xdata - Cursor.radius + m / self.ecg.get_sampling_freq(), ydata, nearest_after, True
+            return xdata - Cursor.radius + m / self.ecg.p.get_sampling_freq(), ydata, nearest_after, True
 
         class Selector(object):
             selector = None
@@ -157,11 +153,11 @@ class Annotate(object):
 
         # it is correct that the computation of the values is done at the end (line 186)
         def add(time, y, pos):
-            self.peaks_t = np.insert(self.peaks_t, pos, time)
+            self.peaks_t = _np.insert(self.peaks_t, pos, time)
             self.replot()
 
         def delete(item):
-            self.peaks_t = np.delete(self.peaks_t, item)
+            self.peaks_t = _np.delete(self.peaks_t, item)
             self.replot()
 
         im = _ItemManager(snap, Selector.select, Selector.unselect, add, delete)
@@ -193,25 +189,13 @@ class Annotate(object):
         plt.close(self.fig)
         # it is correct that the computation of the values is done at the end!
         # do not change!
-        self.peaks_v = np.diff(self.peaks_t)
-        self.peaks_v = np.r_[self.peaks_v[0], self.peaks_v]
-                    
-        if isinstance(ibi, ph.UnevenlySignal):
-            self.ibi_ok =  ph.UnevenlySignal(values=self.peaks_v,
-                                     sampling_freq=self.ibi.get_sampling_freq(),
-                                     signal_type=self.ibi.get_signal_type(),
-                                     start_time=self.ibi.get_start_time(),
-                                     x_values=self.peaks_t,
-                                     x_type='instants',
-                                     duration=self.ibi.get_duration())
-        else:
-            self.ibi_ok = ph.UnevenlySignal(values=self.peaks_v,
-                                     sampling_freq=self.ecg.get_sampling_freq(),
-                                     signal_type=self.ecg.get_signal_type(),
-                                     start_time=self.ecg.get_start_time(),
-                                     x_values=self.peaks_t,
-                                     x_type='instants',
-                                     duration=self.ecg.get_duration())
+        self.peaks_v = _np.diff(self.peaks_t)
+        self.peaks_v = _np.r_[self.peaks_v[0], self.peaks_v]
+        
+        ibi_ok = create_signal(self.peaks_v, 
+                               times=self.peaks_t, 
+                               info = self.ibi.p.get_info())
+        self.ibi_ok =  ibi_ok
         
     def __call__(self):
         return self.ibi_ok

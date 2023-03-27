@@ -24,8 +24,3 @@ ibi_rco = heart.BeatOptimizer()(ibi)
 ibi_corr = heart.RemoveBeatOutliers()(ibi_rco)
 
 ibi = ibi.p.process_na('remove')
-
-#%%
-params = {'cache': 3,
-          'ibi_median': 0,
-          'sensitivity': 0.25}

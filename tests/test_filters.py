@@ -19,7 +19,7 @@ def _test_filters(signal):
     assert isinstance(signal.p.main_signal, xr.DataArray)
     
     for f in filters:
-        print(f)
+        # print(f)
         result = f(signal)
         # print(f.__name__())
         assert result.p.main_signal.values.ndim == signal.p.get_values().ndim
@@ -36,3 +36,5 @@ def test_filter():
             data = np.random.uniform(size = size)
             signal = create_signal(data, sampling_freq=sampling_freq, name = 'random')
             _test_filters(signal)
+            
+test_filter()

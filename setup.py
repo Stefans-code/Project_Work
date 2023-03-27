@@ -10,13 +10,13 @@ setup(
               'pyphysio.indicators',
               'pyphysio.generators'],
     package_data={'tests': ['test_data/*']},
-    version='3.0.5',
-
+    version='3.1',
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP, fNIRS, ...)',
     author='a.bizzego',
     author_email='andrea.bizzego@unitn.it',
     url='https://gitlab.com/a.bizzego/pyphysio',
-    keywords=['eda', 'gsr', 'ecg', 'bvp', 'fnirs', 'signal', 'analysis', 'physiological', 'psychopysiology', 'neuroscience'],
+    keywords=['eda', 'gsr', 'ecg', 'bvp', 'fnirs', 'signal', 
+              'analysis', 'physiological', 'psychopysiology', 'neuroscience'],
     classifiers=[
         'Intended Audience :: Healthcare Industry',
         'Intended Audience :: Information Technology',
@@ -31,14 +31,14 @@ setup(
         'numpy',
         'scipy',
         'matplotlib',
-        'pycwt',
         'dask',
         'netcdf4',
         'xarray',
-	'pywavelets',
-	'h5py'
+        'pywavelets',
     ],
     requires=[
+        'h5py'
+        'pytorch',
         'csaps',
         'nilearn',
         'pytest',

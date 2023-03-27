@@ -252,6 +252,7 @@ class FIRFilter(_Algorithm):
             N = order+1
         
         else:
+            fs = _np.array(fs)
             if fs.ndim == 0:
                 fs = _np.expand_dims(fs, 0)
     

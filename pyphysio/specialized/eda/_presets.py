@@ -1,8 +1,8 @@
-from .indicators.frequencydomain import *
-from .indicators.nonlinear import *
-from .indicators.peaks import *
-from .indicators.timedomain import *
-from .sqi.sqi import *
+from ...indicators.frequencydomain import *
+from ...indicators.nonlinear import *
+from ...indicators.peaks import *
+from ...indicators.timedomain import *
+# from ...sqi.sqi import *
 
 def preset_phasic(delta, prefix="pha_"):
     mean = Mean()

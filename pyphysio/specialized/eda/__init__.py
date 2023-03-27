@@ -1,9 +1,9 @@
 import numpy as _np
-from . import Algorithm as _Algorithm
-from ..signal import create_signal
-from .filters import DeConvolutionalFilter as _DeConvolutionalFilter, \
+from ..._base_algorithm import _Algorithm
+# from ...signal import create_signal
+from ...filters import DeConvolutionalFilter as _DeConvolutionalFilter, \
     ConvolutionalFilter as _ConvolutionalFilter
-from .tools import PeakDetection as _PeakDetection, PeakSelection as _PeakSelection
+from ...utils import PeakDetection as _PeakDetection, PeakSelection as _PeakSelection
 
 # PHASIC ESTIMATION
 class DriverEstim(_Algorithm):

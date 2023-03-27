@@ -49,7 +49,6 @@ signal = create_signal(data, sampling_freq=sampling_freq, name = 'random')
 result = utils.Diff()(signal)
 check_shape(signal, result)
 assert result.p.get_values().sum() == 0
-
 result = utils.Diff(degree = 3)(signal)
 check_shape(signal, result)
 assert result.p.get_values().sum() == 0

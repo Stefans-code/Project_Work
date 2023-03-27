@@ -27,5 +27,5 @@ for size in sizes:
         
    
 #%%
-print(signal.p.get_sampling_freq())
+# print(signal.p.get_sampling_freq())
 # data.p.plot()

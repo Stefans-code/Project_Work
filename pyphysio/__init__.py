@@ -23,7 +23,7 @@ from .signal import *
 
 class TestData(object):
     _sing = None
-    _path = _os.path.join(_os.path.dirname(__file__), '..', 'test_data')
+    _path = _os.path.join(_os.path.dirname(__file__), 'test_data')
     _file = "medical.txt.bz2"
 
     @classmethod

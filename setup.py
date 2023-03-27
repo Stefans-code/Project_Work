@@ -9,8 +9,8 @@ setup(
               'pyphysio.specialized',
               'pyphysio.indicators',
               'pyphysio.generators'],
-    package_data={'tests': ['data/*']},
-    version='3.0.3',
+    package_data={'tests': ['test_data/*']},
+    version='3.0.5',
 
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP, fNIRS, ...)',
     author='a.bizzego',

@@ -900,53 +900,85 @@ class PeakSelection(_Algorithm):
         assert win_pre > 0, "Window pre peak value should be positive"
         assert win_post > 0, "Window post peak value should be positive"
         _Algorithm.__init__(self, indices=indices, win_pre=win_pre, win_post=win_post)
+        self.dimensions = {'time': 0}
 
     
     def algorithm(self, signal):
+        
         params = self._params
         i_peaks = params['indices']
-        i_pre_max = int(params['win_pre'] * signal.get_sampling_freq())
-        i_post_max = int(params['win_post'] * signal.get_sampling_freq())
+        i_pre_max = int(params['win_pre'] * signal.p.get_sampling_freq())
+        i_post_max = int(params['win_post'] * signal.p.get_sampling_freq())
+        
+        signal_values = signal.p.get_values().ravel()
+        
+        dd = _np.convolve(_np.diff(signal_values)//1.0, _np.ones(2)/2)
+        i_start = []
+        i_stop = []
 
-        ZERO = 0.01
+        
+        for idx_max in i_peaks:
+            idx_pre = idx_max-1
+            s_pre = dd[idx_pre]
+            while ((s_pre>-0.5) and ((idx_max-idx_pre) <= i_pre_max)):
+                idx_pre -=1
+                s_pre = dd[idx_pre]
+            idx_pre +=1
+            i_start.append(idx_pre)
+            
+            idx_post = idx_max+1
+            s_post = dd[idx_post]
+            while ((s_post<-0.5) and ((idx_post-idx_max) <= i_post_max)):
+                idx_post +=1
+                s_post = dd[idx_post]
+            idx_post -=1    
+            i_stop.append(idx_post)
+        
+        
+        
+        
+        # i_start = _np.empty(len(i_peaks), int)
+        # i_stop = _np.empty(len(i_peaks), int)
 
-        i_start = _np.empty(len(i_peaks), int)
-        i_stop = _np.empty(len(i_peaks), int)
+        # signal_dt = _np.diff(signal_values)
+        # for i in range(len(i_peaks)):
+        #     i_pk = int(i_peaks[i])
 
-        signal_dt = Diff()(signal)
-        for i in range(len(i_peaks)):
-            i_pk = int(i_peaks[i])
+        #     if i_pk < i_pre_max:
+        #         i_st = 0
+        #         i_sp = i_pk + i_post_max
+        #     elif i_pk >= len(signal_dt) - i_post_max:
+        #         i_st = i_pk - i_pre_max
+        #         i_sp = len(signal_dt) - 1
+        #     else:
+        #         i_st = i_pk - i_pre_max
+        #         i_sp = i_pk + i_post_max
 
-            if i_pk < i_pre_max:
-                i_st = 0
-                i_sp = i_pk + i_post_max
-            elif i_pk >= len(signal_dt) - i_post_max:
-                i_st = i_pk - i_pre_max
-                i_sp = len(signal_dt) - 1
-            else:
-                i_st = i_pk - i_pre_max
-                i_sp = i_pk + i_post_max
+        #     # find START
+        #     signal_dt_pre = signal_dt[i_st:i_pk]
+        #     i_pre = len(signal_dt_pre) - 1
 
-            # find START
-            signal_dt_pre = signal_dt[i_st:i_pk]
-            i_pre = len(signal_dt_pre) - 1
+        #     # OR below is to allow small fluctuations (?)
 
-            # OR below is to allow small fluctuations (?)
+        #     while i_pre > 0 and (signal_dt_pre[i_pre] > 0 or abs(signal_dt_pre[i_pre]) >= ZERO):
+        #         i_pre -= 1
 
-            while i_pre > 0 and (signal_dt_pre[i_pre] > 0 or abs(signal_dt_pre[i_pre]) <= ZERO):
-                i_pre -= 1
+        #     i_start[i] = i_st + i_pre + 1
 
-            i_start[i] = i_st + i_pre + 1
+        #     # find STOP
+        #     signal_dt_post = signal_dt[i_pk: i_sp]
+        #     i_post = 1
 
-            # find STOP
-            signal_dt_post = signal_dt[i_pk: i_sp]
-            i_post = 1
+        #     # OR below is to allow small fluctuations (?)
+        #     while i_post < len(signal_dt_post) - 1 and (
+        #                     signal_dt_post[i_post] < 0 or abs(signal_dt_post[i_post]) >= ZERO):
+        #         i_post += 1
 
-            # OR below is to allow small fluctuations (?)
-            while i_post < len(signal_dt_post) - 1 and (
-                            signal_dt_post[i_post] < 0 or abs(signal_dt_post[i_post]) <= ZERO):
-                i_post += 1
-
-            i_stop[i] = i_pk + i_post
-
-        return i_start, i_stop
+        #     i_stop[i] = i_pk + i_post
+        # print(i_start, i_stop)
+        sig_out = _np.zeros(len(signal_values))
+        
+        for i_st, i_sp in zip(i_start, i_stop):
+            sig_out[i_st:i_sp] = 1
+        
+        return sig_out

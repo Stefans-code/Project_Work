@@ -10,6 +10,6 @@ def compute_indicators(indicators, signal):
     indicators_dict = {}
     
     for ind in indicators:
-        indicators_dict[ind.get('name')] = ind(signal).p.get_values()[0]
+        indicators_dict[ind.get('name')] = ind(signal).p.get_values()[0][0][0]
         
     return(indicators_dict)

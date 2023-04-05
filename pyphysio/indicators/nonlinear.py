@@ -19,6 +19,7 @@ class PoincareSD1(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         """
@@ -26,8 +27,8 @@ class PoincareSD1(_Algorithm):
         @return: (SD1, SD2)
         @rtype: (array, array)
         """
-        
-        xd, yd = _np.array(list(signal[:-1])), _np.array(list(signal[1:]))
+        signal_values = signal.p.get_values()
+        xd, yd = _np.array(list(signal_values[:-1])), _np.array(list(signal_values[1:]))
         sd1 = _np.std((xd - yd) / _np.sqrt(2.0))
         return sd1
 
@@ -45,6 +46,7 @@ class PoincareSD2(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         """
@@ -52,7 +54,8 @@ class PoincareSD2(_Algorithm):
         @return: (SD1, SD2)
         @rtype: (array, array)
         """
-        xd, yd = _np.array(list(signal[:-1])), _np.array(list(signal[1:]))
+        signal_values = signal.p.get_values()
+        xd, yd = _np.array(list(signal_values[:-1])), _np.array(list(signal_values[1:]))
         sd2 = _np.std((xd + yd) / _np.sqrt(2.0))
         return sd2
 
@@ -70,6 +73,7 @@ class PoincareSD1SD2(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         """
@@ -95,6 +99,7 @@ class PoinEll(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         sd1 = PoincareSD1()(signal)
@@ -120,14 +125,16 @@ class PNNx(_Algorithm):
 
     def __init__(self, threshold, **kwargs):
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         params = self._params
+        signal_values = signal.p.get_values()
         
-        if len(signal) ==0:
+        if len(signal_values) ==0:
             return _np.nan
         else:
-            return NNx.algorithm(signal, params) / float(len(signal))
+            return NNx.algorithm(signal, params) / float(len(signal_values))
 
 
 class NNx(_Algorithm):
@@ -143,6 +150,7 @@ class NNx(_Algorithm):
     def __init__(self, threshold, **kwargs):
         assert threshold > 0, "Not implemented for threshold not > 0"
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         params = self._params
@@ -154,6 +162,7 @@ class NNx(_Algorithm):
 class _Embed(_Algorithm):
     def __init__(self, dimension, **kwargs):
         _Algorithm.__init__(self, dimension=dimension, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         """
@@ -194,6 +203,7 @@ class ApproxEntropy(_Algorithm):
     def __init__(self, radius=.5, **kwargs):
         assert radius > 0, "Parameter radius should be > 0"
         _Algorithm.__init__(self, radius=radius, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         params = self._params
@@ -246,6 +256,7 @@ class SampleEntropy(_Algorithm):
     def __init__(self, radius=.5, **kwargs):
         assert radius > 0, "Parameter radius should be > 0"
         _Algorithm.__init__(self, radius=radius, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         params = self._params
@@ -294,6 +305,7 @@ class DFAShortTerm(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         
@@ -333,6 +345,7 @@ class DFALongTerm(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         

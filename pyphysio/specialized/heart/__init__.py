@@ -8,6 +8,7 @@ from ...filters import IIRFilter as _IIRFilter
 from ...utils import SignalRange as _SignalRange, Minima as _Minima, Diff as _Diff, PeakDetection as _PeakDetection
 import itertools as _itertools
 
+from ._presets import *
 # IBI ESTIMATION
 
 class BeatMSPTD(_Algorithm):
@@ -47,7 +48,7 @@ class BeatMSPTD(_Algorithm):
         fsamp = signal.p.get_sampling_freq()
         tol = int(_np.ceil(fsamp*tol))
 
-        no_samps_in_win = win_len * fsamp
+        no_samps_in_win = int(win_len * fsamp)
 
         signal_values = signal.values.ravel()
 
@@ -56,19 +57,16 @@ class BeatMSPTD(_Algorithm):
         else:
             win_offset = round(no_samps_in_win * (1-overlap))
             win_starts = _np.arange(
-                0, len(signal_values)-no_samps_in_win, win_offset)
+                0, len(signal_values)-no_samps_in_win, win_offset).astype(int)
 
             if win_starts[-1] + no_samps_in_win < len(signal_values):
                 win_starts = _np.insert(win_starts, len(
                     win_starts), len(signal_values) - no_samps_in_win)
 
-        # TODO: downsampling here?
-
         peaks = []
         onsets = []
 
         for i_win, idx_st in enumerate(win_starts):
-
             # % - extract this window's data
             win_sig = signal_values[idx_st:idx_st+no_samps_in_win+1]
 
@@ -360,7 +358,7 @@ class BeatFromECG(_Algorithm):
 
 class RemoveBeatOutliers(_Algorithm):
     """
-    Detects outliers in the IBI signal. 
+    Detect and remove outliers in the IBI signal. 
 
     Optional parameters
     -------------------
@@ -374,12 +372,8 @@ class RemoveBeatOutliers(_Algorithm):
 
     Returns
     -------
-    id_bad_ibi : numpy.array
-        Identifiers of wrong beats
-
-    Notes
-    -----
-    It only detects outliers. You should manually remove outliers using FixIBI
+    ibi : pyphysio.Signal
+        Corrected ibi
 
     """
 

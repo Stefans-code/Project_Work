@@ -26,6 +26,9 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 def load(file):
     signal = _xr.load_dataset(file)
     
+    history = signal.attrs['history']
+    if isinstance(history, str):
+        signal.attrs['history'] = ['history']
     return(signal)
     
 def create_signal(data, times=None, sampling_freq=None,

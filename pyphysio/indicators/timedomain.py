@@ -12,7 +12,8 @@ class Mean(_Algorithm):
         self.dimensions = {'time' : 1}
         
     def algorithm(self, signal):
-        result = _np.mean(signal.values, keepdims=True)
+        signal_values = signal.p.get_values()
+        result = _np.mean(signal_values, keepdims=True)
         # print(result.shape)
         return result
 
@@ -26,7 +27,8 @@ class Min(_Algorithm):
 
     @classmethod
     def algorithm(cls, signal):
-        return _np.min(signal.values, keepdims=True)
+        signal_values = signal.p.get_values()
+        return _np.min(signal_values, keepdims=True)
 
 
 class Max(_Algorithm):
@@ -38,7 +40,8 @@ class Max(_Algorithm):
         self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.max(signal.values, keepdims=True)
+        signal_values = signal.p.get_values()
+        return _np.max(signal_values, keepdims=True)
 
 
 class Range(_Algorithm):
@@ -62,7 +65,8 @@ class Median(_Algorithm):
         self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.median(signal.values, keepdims=True)
+        signal_values = signal.p.get_values()
+        return _np.median(signal_values, keepdims=True)
 
 
 class StDev(_Algorithm):
@@ -74,7 +78,8 @@ class StDev(_Algorithm):
         self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.std(signal.values, keepdims=True)
+        signal_values = signal.p.get_values()
+        return _np.std(signal_values, keepdims=True)
 
 
 class Sum(_Algorithm):
@@ -86,7 +91,8 @@ class Sum(_Algorithm):
         self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
-        return _np.sum(signal.values, keepdims=True)
+        signal_values = signal.p.get_values()
+        return _np.sum(signal_values, keepdims=True)
 
 
 class AUC(_Algorithm):
@@ -112,7 +118,7 @@ class DetrendedAUC(_Algorithm):
     def algorithm(self, signal):
         fsamp = signal.p.get_sampling_freq()
         
-        signal_values = signal.values
+        signal_values = signal.p.get_values()
         
         #detrend
         idx = _np.arange(len(signal_values))[:, _np.newaxis, _np.newaxis]
@@ -140,7 +146,6 @@ class RMSSD(_Algorithm):
         signal_values = signal.p.get_values()
         diff = _np.diff(signal_values, axis=0)
         return _np.sqrt(_np.mean(_np.power(diff, 2), keepdims=True))
-
 
 class SDSD(_Algorithm):
     """

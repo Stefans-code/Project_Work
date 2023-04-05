@@ -93,3 +93,6 @@ ENV/
 .spyderworkspace
 .spyproject/
 
+# Develop
+develop/*
+develop

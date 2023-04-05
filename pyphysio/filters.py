@@ -490,7 +490,6 @@ class ConvolutionalFilter(_Algorithm):
 
         fsamp = signal.p.get_sampling_freq()
         irf = None
-
         if irftype == 'custom':
             assert 'irf' in params, "'irf' parameter should be defined when irftype = 'custom'"
                 
@@ -502,11 +501,8 @@ class ConvolutionalFilter(_Algorithm):
             n = int(params['win_len'] * fsamp)
 
             if irftype == 'gauss':
-                if n < 8:
-                    # TODO (Andrea): test, sometimes it returns nan
-                    print(f"'win_len' too short to generate a gaussian IRF, expected > {str(_np.ceil(8 / fsamp))}")
-                    std = _np.floor(n / 8)
-                    irf = _gaussian(n, std)
+                std = _np.floor(n / 8)
+                irf = _gaussian(n, std)
             elif irftype == 'rect':
                 irf = _np.ones(n)
 
@@ -524,6 +520,7 @@ class ConvolutionalFilter(_Algorithm):
 
         # NORMALIZE
         if normalize:
+            # irf = irf / (_np.sum(irf) * len(irf) / fsamp)
             irf = irf / _np.sum(irf)
         
         s = signal.values.ravel()
@@ -571,14 +568,17 @@ class DeConvolutionalFilter(_Algorithm):
         normalize = params["normalize"]
         deconvolution_method = params["deconv_method"]
 
+        fsamp = signal.p.get_sampling_freq()
         s = signal.values.ravel()
         if normalize:
-            irf = irf / _np.sum(irf)
+            irf = irf / (_np.sum(irf) * len(irf) / fsamp)
         if deconvolution_method == 'fft':
             l = len(s)
             fft_signal = _np.fft.fft(s, n=l)
             fft_irf = _np.fft.fft(irf, n=l)
-            out = _np.fft.ifft(fft_signal / fft_irf)
+            out = abs(_np.fft.ifft(fft_signal / fft_irf))
+            out[0] = out[1]
+            out[-1] = out[-2]
         elif deconvolution_method == 'sps':
             print('sps based deconvolution needs to be tested. Use carefully.')
             out_dec, _ = _deconvolve(s, irf)

@@ -6,6 +6,8 @@ from ...filters import DeConvolutionalFilter as _DeConvolutionalFilter, \
     ConvolutionalFilter as _ConvolutionalFilter
 from ...utils import PeakDetection as _PeakDetection, PeakSelection as _PeakSelection
 
+from ._presets import *
+
 # PHASIC ESTIMATION
 class DriverEstim(_Algorithm):
     """

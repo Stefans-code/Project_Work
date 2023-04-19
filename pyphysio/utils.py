@@ -743,134 +743,134 @@ class Minima(_Algorithm): #xarray done
         return(result)
 
 #TODO from here
-class BootstrapEstimation(_Algorithm):
-    """
-    Perform a bootstrapped estimation of given statistical indicator
+# class BootstrapEstimation(_Algorithm):
+#     """
+#     Perform a bootstrapped estimation of given statistical indicator
     
-    Parameters
-    ----------
-    func : numpy function
-        Function to use in the bootstrapping. Must accept data as input
+#     Parameters
+#     ----------
+#     func : numpy function
+#         Function to use in the bootstrapping. Must accept data as input
         
-    Optional parameters
-    -------------------
+#     Optional parameters
+#     -------------------
     
-    n : int, >0, default = 100
-        Number of iterations
-    k : float, (0,1), default = 0.5
-        Portion of data to be used at each iteration
+#     n : int, >0, default = 100
+#         Number of iterations
+#     k : float, (0,1), default = 0.5
+#         Portion of data to be used at each iteration
     
-    Returns
-    -------
-    estim : float
-        Bootstrapped estimate
+#     Returns
+#     -------
+#     estim : float
+#         Bootstrapped estimate
     
-    """
+#     """
 
-    def __init__(self, func, n=100, k=0.5):
-        from types import FunctionType as Func
-        assert isinstance(func, Func), "Parameter function should be a function (types.FunctionType)"
-        assert n > 0, "n should be positive"
-        assert 0 < k <= 1, "k should be between (0 and 1]"
-        _Algorithm.__init__(self, func=func, n=n, k=k)
-
-    
-    def algorithm(self, signal):
-        params = self._params
-        signal = _np.asarray(signal)
-        l = len(signal)
-        func = params['func']
-        niter = int(params['n'])
-        k = params['k']
-
-        estim = []
-        for i in range(niter):
-            ixs = _np.arange(l)
-            ixs_p = _np.random.permutation(ixs)
-            sampled_data = signal[ixs_p[:int(round(k * l))]]
-            curr_est = func(sampled_data)
-            estim.append(curr_est)
-        estim = _np.sort(estim)
-        return estim[int(len(estim) / 2)]
-
-class Durations(_Algorithm):
-    """
-    Compute durations of events starting from their start and stop indexes
-
-    Parameters:
-    -----------
-    starts : array
-        Start indexes along the data
-    stops : array
-        Stop indexes along the data
-
-    Return:
-    -------
-    durations : array
-        durations of the events
-    """
-
-    def __init__(self, starts, stops):
-        starts = _np.array(starts)
-        assert starts.ndim == 1
-        stops = _np.array(stops)
-        assert stops.ndim == 1
-        _Algorithm.__init__(self, starts=starts, stops=stops)
+#     def __init__(self, func, n=100, k=0.5):
+#         from types import FunctionType as Func
+#         assert isinstance(func, Func), "Parameter function should be a function (types.FunctionType)"
+#         assert n > 0, "n should be positive"
+#         assert 0 < k <= 1, "k should be between (0 and 1]"
+#         _Algorithm.__init__(self, func=func, n=n, k=k)
 
     
-    def algorithm(self, signal):
-        params = self._params
-        starts = params["starts"]
-        stops = params["stops"]
+#     def algorithm(self, signal):
+#         params = self._params
+#         signal = _np.asarray(signal)
+#         l = len(signal)
+#         func = params['func']
+#         niter = int(params['n'])
+#         k = params['k']
 
-        fsamp = signal.get_sampling_freq()
-        durations = []
-        for I in range(len(starts)):
-            if (stops[I] > 0) & (starts[I] >= 0):
-                durations.append((stops[I] - starts[I]) / fsamp)
-            else:
-                durations.append(_np.nan)
-        return durations
+#         estim = []
+#         for i in range(niter):
+#             ixs = _np.arange(l)
+#             ixs_p = _np.random.permutation(ixs)
+#             sampled_data = signal[ixs_p[:int(round(k * l))]]
+#             curr_est = func(sampled_data)
+#             estim.append(curr_est)
+#         estim = _np.sort(estim)
+#         return estim[int(len(estim) / 2)]
 
-class Slopes(_Algorithm):
-    """
-    Compute rising slope of peaks
+# class Durations(_Algorithm):
+#     """
+#     Compute durations of events starting from their start and stop indexes
 
-    Parameters:
-    -----------
-    starts : array
-        Start of the peaks indexes
-    peaks : array
-        Peaks indexes
+#     Parameters:
+#     -----------
+#     starts : array
+#         Start indexes along the data
+#     stops : array
+#         Stop indexes along the data
 
-    Return:
-    -------
-    slopes : array
-        Rising slopes the peaks
-    """
+#     Return:
+#     -------
+#     durations : array
+#         durations of the events
+#     """
 
-    def __init__(self, starts, peaks):
-        starts = _np.array(starts)
-        assert starts.ndim == 1
-        peaks = _np.array(peaks)
-        assert peaks.ndim == 1
-        _Algorithm.__init__(self, starts=starts, peaks=peaks)
+#     def __init__(self, starts, stops):
+#         starts = _np.array(starts)
+#         assert starts.ndim == 1
+#         stops = _np.array(stops)
+#         assert stops.ndim == 1
+#         _Algorithm.__init__(self, starts=starts, stops=stops)
 
     
-    def algorithm(cls, data, params):
-        starts = params["starts"]
-        peaks = params["peaks"]
+#     def algorithm(self, signal):
+#         params = self._params
+#         starts = params["starts"]
+#         stops = params["stops"]
 
-        fsamp = data.get_sampling_freq()
-        slopes = []
-        for I in range(len(starts)):
-            if peaks[I] > 0 & starts[I] >= 0:
-                dy = data[peaks[I]] - data[starts[I]]
-                dt = (peaks[I] - starts[I]) / fsamp
-                slopes.append(dy / dt)
-            else:
-                slopes.append(_np.nan)
-        return slopes
+#         fsamp = signal.get_sampling_freq()
+#         durations = []
+#         for I in range(len(starts)):
+#             if (stops[I] > 0) & (starts[I] >= 0):
+#                 durations.append((stops[I] - starts[I]) / fsamp)
+#             else:
+#                 durations.append(_np.nan)
+#         return durations
+
+# class Slopes(_Algorithm):
+#     """
+#     Compute rising slope of peaks
+
+#     Parameters:
+#     -----------
+#     starts : array
+#         Start of the peaks indexes
+#     peaks : array
+#         Peaks indexes
+
+#     Return:
+#     -------
+#     slopes : array
+#         Rising slopes the peaks
+#     """
+
+#     def __init__(self, starts, peaks):
+#         starts = _np.array(starts)
+#         assert starts.ndim == 1
+#         peaks = _np.array(peaks)
+#         assert peaks.ndim == 1
+#         _Algorithm.__init__(self, starts=starts, peaks=peaks)
+
+    
+#     def algorithm(cls, data, params):
+#         starts = params["starts"]
+#         peaks = params["peaks"]
+
+#         fsamp = data.get_sampling_freq()
+#         slopes = []
+#         for I in range(len(starts)):
+#             if peaks[I] > 0 & starts[I] >= 0:
+#                 dy = data[peaks[I]] - data[starts[I]]
+#                 dt = (peaks[I] - starts[I]) / fsamp
+#                 slopes.append(dy / dt)
+#             else:
+#                 slopes.append(_np.nan)
+#         return slopes
 
 class PeakSelection(_Algorithm):
     """

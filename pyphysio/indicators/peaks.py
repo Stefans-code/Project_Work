@@ -4,13 +4,14 @@
 # from abc import abstractmethod as _abstract, ABCMeta as _ABCMeta
 
 import numpy as _np
+import xarray as _xr
 from .._base_algorithm import _Algorithm
 from ..utils import PeakDetection as _PeakDetection,\
-    PeakSelection as _Algorithmelection, Durations as _Durations,\
-    Slopes as _Slopes
+    PeakSelection as _PeakSelection
 
 # __author__ = 'AleB'
 
+#TODO: create just one function for duration and slopes
 
 class PeaksMax(_Algorithm):
     """
@@ -18,8 +19,9 @@ class PeaksMax(_Algorithm):
 
     Parameters
     ----------
-    delta : float, >0
-        Minimum amplitude of peaks to be selected
+    peaks : numpy array
+        values of the result of PeakSelection
+        
     
     Returns
     -------
@@ -28,21 +30,22 @@ class PeaksMax(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         _Algorithm.__init__(self, delta=delta, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         params = self._params
-        
         delta = params['delta']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-
-        if len(idx_maxs) == 0:
-            print("No peak found")
-            return _np.nan
-        else:
-            return _np.nanmax(val_maxs)
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        signal_values = signal.p.get_values()
+        
+        if len(idx_peaks) == 0:
+            out = _np.nan * _np.max(signal_values, keepdims=True)
+            return out
+            
+        return _np.max(signal_values[idx_peaks], keepdims=True)
 
 
 class PeaksMin(_Algorithm):
@@ -61,20 +64,22 @@ class PeaksMin(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         _Algorithm.__init__(self, delta=delta, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         params = self._params
         delta = params['delta']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-
-        if len(idx_maxs) == 0:
-            print("No peak found, returning numpy.nan")
-            return _np.nan
-        else:
-            return _np.nanmin(val_maxs)
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        signal_values = signal.p.get_values()
+        
+        if len(idx_peaks) == 0:
+            out = _np.nan * _np.min(signal_values, keepdims=True)
+            return out
+            
+        return _np.min(signal_values[idx_peaks], keepdims=True)
 
 
 class PeaksMean(_Algorithm):
@@ -93,20 +98,23 @@ class PeaksMean(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         _Algorithm.__init__(self, delta=delta, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
         params = self._params
+        
         delta = params['delta']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-
-        if len(idx_maxs) == 0:
-            print("No peak found")
-            return _np.nan
-        else:
-            return _np.nanmean(val_maxs)
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        signal_values = signal.p.get_values()
+        
+        if len(idx_peaks) == 0:
+            out = _np.nan * _np.mean(signal_values, keepdims=True)
+            return out
+            
+        return _np.mean(signal_values[idx_peaks], keepdims=True)
 
 
 class PeaksNum(_Algorithm):
@@ -125,20 +133,16 @@ class PeaksNum(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         _Algorithm.__init__(self, delta=delta, **kwargs)
-
+        self.dimensions = {'time' : 1}
+    
     def algorithm(self, signal):
         params = self._params
         delta = params['delta']
-        
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        return _np.array([len(idx_peaks)])
 
-        if len(idx_maxs) == 0:
-            print("No peak found")
-            return _np.nan
-        else:
-            return len(idx_maxs)
 
 class DurationMin(_Algorithm):
     """
@@ -159,31 +163,47 @@ class DurationMin(_Algorithm):
         Minimum duration of detected peaks
     
     """
-    def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
-        assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
+    def __init__(self, delta, win_pre, win_post, **kwargs):
+        assert delta > 0, 'delta must be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-
+        self.dimensions = {'time' : 1}
+        
     def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
         params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
+        
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        if len(idx_peaks) == 0:
+            return _np.array([_np.nan])
+            
+        peaks_area = _PeakSelection(idx_peaks, win_pre, win_post)(signal).p.get_values().ravel()
+        
+        idx_start_peaks = _np.where(_np.diff(peaks_area) ==1)[0]
+        idx_stop_peaks = _np.where(_np.diff(peaks_area) == -1)[0]
+        
+        if idx_start_peaks[0] > idx_stop_peaks[0]: #start with a peak
+            idx_start_peaks = _np.insert(idx_start_peaks, 0, 0)
+            
+        if idx_start_peaks[-1] > idx_stop_peaks[-1]: #stop with a peak
+            idx_stop_peaks = _np.insert(idx_stop_peaks, 
+                                        len(idx_stop_peaks), 
+                                        len(peaks_area))
+        
+        durations = []
+        for i_st, i_sp in zip(idx_start_peaks, idx_stop_peaks):
+            durations.append((i_sp - i_st)/fsamp)
+        
+        return(_np.array([_np.min(durations)]))
+        
 
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-        if len(idx_maxs) == 0:
-            print("No peaks found")
-            return _np.nan
-
-        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
-
-        if len(idxs_start) == 0:
-            print("Unable to detect the start of the peaks")
-            return _np.nan
-        else:
-            durations = _Durations(starts=idxs_start, stops=idxs_stop)(signal)
-            return _np.nanmin(_np.array(durations))
+        
 
 
 class DurationMax(_Algorithm):
@@ -205,32 +225,44 @@ class DurationMax(_Algorithm):
         Maximum duration of detected peaks
     
     """
-    def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
+    def __init__(self, delta, win_pre, win_post, **kwargs):
         assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
         params = self._params
-
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-        if len(idx_maxs) == 0:
-            print("No peaks found")
-            return _np.nan
-
-        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
-
-        if len(idxs_start) == 0:
-            print("Unable to detect the start of the peaks")
-            return _np.nan
-        else:
-            durations = _Durations(starts=idxs_start, stops=idxs_stop)(signal)
-            return _np.nanmax(_np.array(durations))
+        
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        if len(idx_peaks) == 0:
+            return _np.array([_np.nan])
+            
+        peaks_area = _PeakSelection(idx_peaks, win_pre, win_post)(signal).p.get_values().ravel()
+        
+        idx_start_peaks = _np.where(_np.diff(peaks_area) ==1)[0]
+        idx_stop_peaks = _np.where(_np.diff(peaks_area) == -1)[0]
+        
+        if idx_start_peaks[0] > idx_stop_peaks[0]: #start with a peak
+            idx_start_peaks = _np.insert(idx_start_peaks, 0, 0)
+            
+        if idx_start_peaks[-1] > idx_stop_peaks[-1]: #stop with a peak
+            idx_stop_peaks = _np.insert(idx_stop_peaks, 
+                                        len(idx_stop_peaks), 
+                                        len(peaks_area))
+        
+        durations = []
+        for i_st, i_sp in zip(idx_start_peaks, idx_stop_peaks):
+            durations.append((i_sp - i_st)/fsamp)
+        
+        return(_np.array([_np.max(durations)]))
 
 
 class DurationMean(_Algorithm):
@@ -257,26 +289,39 @@ class DurationMean(_Algorithm):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
         params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-        if len(idx_maxs) == 0:
-            print("No peaks found")
-            return _np.nan
-
-        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
-
-        if len(idxs_start) == 0:
-            print("Unable to detect the start of the peaks")
-            return _np.nan
-        else:
-            durations = _Durations(starts=idxs_start, stops=idxs_stop)(signal)
-            return _np.nanmean(_np.array(durations))
+        
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        if len(idx_peaks) == 0:
+            return _np.array([_np.nan])
+            
+        peaks_area = _PeakSelection(idx_peaks, win_pre, win_post)(signal).p.get_values().ravel()
+        
+        idx_start_peaks = _np.where(_np.diff(peaks_area) ==1)[0]
+        idx_stop_peaks = _np.where(_np.diff(peaks_area) == -1)[0]
+        
+        if idx_start_peaks[0] > idx_stop_peaks[0]: #start with a peak
+            idx_start_peaks = _np.insert(idx_start_peaks, 0, 0)
+            
+        if idx_start_peaks[-1] > idx_stop_peaks[-1]: #stop with a peak
+            idx_stop_peaks = _np.insert(idx_stop_peaks, 
+                                        len(idx_stop_peaks), 
+                                        len(peaks_area))
+        
+        durations = []
+        for i_st, i_sp in zip(idx_start_peaks, idx_stop_peaks):
+            durations.append((i_sp - i_st)/fsamp)
+        
+        return(_np.array([_np.mean(durations)]))
 
 
 class SlopeMin(_Algorithm):
@@ -298,31 +343,46 @@ class SlopeMin(_Algorithm):
         Minimum slope of detected peaks
     
     """
-    def __init__(self, delta, win_pre=1, win_post=1, **kwargs):
+    def __init__(self, delta, win_pre, win_post, **kwargs):
         assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
         params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-        if len(idx_maxs) == 0:
-            print("No peaks found")
-            return _np.nan
-
-        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
         
-        if len(idxs_start) == 0:
-            print("Unable to detect the start of the peaks")
-            return _np.nan
-        else:
-            slopes = _Slopes(starts=idxs_start, peaks=idx_maxs)(signal)
-            return _np.nanmin(_np.array(slopes))
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        if len(idx_peaks) == 0:
+            return _np.array([_np.nan])
+            
+        peaks_area = _PeakSelection(idx_peaks, win_pre, win_post)(signal).p.get_values().ravel()
+        
+        idx_start_peaks = _np.where(_np.diff(peaks_area) ==1)[0]
+        idx_stop_peaks = _np.where(_np.diff(peaks_area) == -1)[0]
+        
+        if idx_start_peaks[0] > idx_stop_peaks[0]: #start with a peak
+            idx_start_peaks = _np.insert(idx_start_peaks, 0, 0)
+            
+        if idx_start_peaks[-1] > idx_stop_peaks[-1]: #stop with a peak
+            idx_stop_peaks = _np.insert(idx_stop_peaks, 
+                                        len(idx_stop_peaks), 
+                                        len(peaks_area))
+        signal_values = signal.p.get_values().ravel()
+        slopes = []
+        for i_st, i_sp in zip(idx_start_peaks, idx_stop_peaks):
+            if (i_sp-i_st)>1:
+                slopes.append(fsamp*_np.max(_np.diff(signal_values[i_st:i_sp])))
+            
+        
+        return(_np.array([_np.min(slopes)]))
 
 
 class SlopeMax(_Algorithm):
@@ -349,26 +409,41 @@ class SlopeMax(_Algorithm):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        self.dimensions = {'time' : 1}
 
     def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
         params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-        if len(idx_maxs) == 0:
-            print("No peaks found")
-            return _np.nan
-
-        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
         
-        if len(idxs_start) == 0:
-            print("Unable to detect the start of the peaks")
-            return _np.nan
-        else:
-            slopes = _Slopes(starts=idxs_start, peaks=idx_maxs)(signal)
-            return _np.nanmax(_np.array(slopes))
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        if len(idx_peaks) == 0:
+            return _np.array([_np.nan])
+            
+        peaks_area = _PeakSelection(idx_peaks, win_pre, win_post)(signal).p.get_values().ravel()
+        
+        idx_start_peaks = _np.where(_np.diff(peaks_area) ==1)[0]
+        idx_stop_peaks = _np.where(_np.diff(peaks_area) == -1)[0]
+        
+        if idx_start_peaks[0] > idx_stop_peaks[0]: #start with a peak
+            idx_start_peaks = _np.insert(idx_start_peaks, 0, 0)
+            
+        if idx_start_peaks[-1] > idx_stop_peaks[-1]: #stop with a peak
+            idx_stop_peaks = _np.insert(idx_stop_peaks, 
+                                        len(idx_stop_peaks), 
+                                        len(peaks_area))
+        signal_values = signal.p.get_values().ravel()
+        slopes = []
+        for i_st, i_sp in zip(idx_start_peaks, idx_stop_peaks):
+            if (i_sp-i_st)>1:
+                slopes.append(fsamp*_np.max(_np.diff(signal_values[i_st:i_sp])))
+            
+        
+        return(_np.array([_np.max(slopes)]))
 
 
 class SlopeMean(_Algorithm):
@@ -395,23 +470,38 @@ class SlopeMean(_Algorithm):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        self.dimensions = {'time' : 1}
 
-    
     def algorithm(self, signal):
+        fsamp = signal.p.get_sampling_freq()
         params = self._params
         delta = params['delta']
         win_pre = params['win_pre']
         win_post = params['win_post']
-
-        idx_maxs, idx_mins, val_maxs, val_mins = _PeakDetection(delta=delta)(signal)
-        if len(idx_maxs) == 0:
-            print("No peaks found")
-            return _np.nan
-
-        idxs_start, idxs_stop = _Algorithmelection(indices=idx_maxs, win_pre=win_pre, win_post=win_post)(signal)
-        if len(idxs_start) == 0:
-            print("Unable to detect the start of the peaks")
-            return _np.nan
-        else:
-            slopes = _Slopes(starts=idxs_start, peaks=idx_maxs)(signal)
-            return _np.nanmean(_np.array(slopes))
+        
+        peaks = _PeakDetection(delta = delta)(signal)
+        idx_peaks = _np.where(~_np.isnan(peaks.p.get_values()))[0].ravel()
+        
+        if len(idx_peaks) == 0:
+            return _np.array([_np.nan])
+            
+        peaks_area = _PeakSelection(idx_peaks, win_pre, win_post)(signal).p.get_values().ravel()
+        
+        idx_start_peaks = _np.where(_np.diff(peaks_area) ==1)[0]
+        idx_stop_peaks = _np.where(_np.diff(peaks_area) == -1)[0]
+        
+        if idx_start_peaks[0] > idx_stop_peaks[0]: #start with a peak
+            idx_start_peaks = _np.insert(idx_start_peaks, 0, 0)
+            
+        if idx_start_peaks[-1] > idx_stop_peaks[-1]: #stop with a peak
+            idx_stop_peaks = _np.insert(idx_stop_peaks, 
+                                        len(idx_stop_peaks), 
+                                        len(peaks_area))
+        signal_values = signal.p.get_values().ravel()
+        slopes = []
+        for i_st, i_sp in zip(idx_start_peaks, idx_stop_peaks):
+            if (i_sp-i_st)>1:
+                slopes.append(fsamp*_np.max(_np.diff(signal_values[i_st:i_sp])))
+            
+        
+        return(_np.array([_np.mean(slopes)]))

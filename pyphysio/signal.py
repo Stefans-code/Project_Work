@@ -298,7 +298,7 @@ class PyphysioDataArray(object):
             print('No nans in the signal, no action performed')
             return(self.da)
     
-    def plot(self, marker=None, ncols=4, sharey=True):
+    def plot(self, marker=None, ncols=4, sharey=False):
         fig = _gcf()
         t_ = self.get_times()
         v_ = self.get_values()
@@ -472,7 +472,7 @@ class PyPhysioDataset(object):
             processed_dataset = processed_dataset.dropna('time')
         return(processed_dataset)
         
-    def plot(self, marker=None, ncols=4, sharey=True):
+    def plot(self, marker=None, ncols=4, sharey=False):
         self.main_signal.p.plot(marker=marker,
                                 ncols=ncols,
                                 sharey=sharey)

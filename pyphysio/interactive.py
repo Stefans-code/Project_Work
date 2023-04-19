@@ -55,30 +55,36 @@ class _ItemManager(object):
 
 class Annotate(object):
     def __init__(self, ecg, ibi):
+        ibi = ibi.p.process_na('remove')
+        
         self.plots = None
-        self.peaks_t = None
         self.done = False
+        
         self.ecg = ecg
+        self.t_ecg = ecg.p.get_times()
+        self.v_ecg = ecg.p.get_values().ravel()
+        
         self.ibi = ibi
-        self.fig = plt.figure()
-        self.p_sig = self.fig.add_subplot(2, 1, 1)
-        self.p_res = self.fig.add_subplot(2, 1, 2, sharex=self.p_sig)
-
-        self.max = _np.max(self.ecg)
-        self.min = _np.min(self.ecg)
-
-        self.margin = (self.max - self.min) * .1
-        self.max += self.margin
-        self.min -= self.margin
-
+        self.t_ibi = ibi.p.get_times().ravel()
+        self.v_ibi = ibi.p.get_values().ravel()
         
-        self.peaks_t = self.ibi.p.get_times()
-        self.peaks_v = self.ibi.p.get_values()
+        self.fig, self.axes = plt.subplots(2,1, sharex=True)
         
-        self.p_sig.plot(self.ecg.p.get_times(), self.ecg.p.get_values(), 'b')
+        max_ecg = _np.max(self.v_ecg)
+        min_ecg = _np.min(self.v_ecg)
 
-        self.p_res.plot(self.peaks_t, self.peaks_v, 'b'),
-        self.p_res.plot(self.peaks_t, self.peaks_v, 'go')
+        self.margin = (max_ecg - min_ecg) * .1
+        self.max = max_ecg + self.margin
+        self.min = min_ecg + self.margin
+        
+        
+        plt.sca(self.axes[0])
+        ecg.p.plot()
+        # ibi.p.plot('|')
+        
+        plt.sca(self.axes[1])
+        ibi.p.plot()
+        ibi.p.plot('|')
 
         self.replot()
 
@@ -109,9 +115,9 @@ class Annotate(object):
                     Cursor.left = None
                     Cursor.right = None
                 if event.xdata is not None:  # TODO (Andrea): not do this if speed (dxdata/dt) is high
-                    Cursor.left = self.p_sig.vlines(event.xdata - Cursor.radius, self.min - self.margin * 2,
+                    Cursor.left = self.axes[0].vlines(event.xdata - Cursor.radius, self.min - self.margin * 2,
                                                     self.max + self.margin * 2, 'k')
-                    Cursor.right = self.p_sig.vlines(event.xdata + Cursor.radius, self.min - self.margin * 2,
+                    Cursor.right = self.axes[0].vlines(event.xdata + Cursor.radius, self.min - self.margin * 2,
                                                      self.max + self.margin * 2, 'k')
                 self.fig.canvas.draw()
 
@@ -119,20 +125,20 @@ class Annotate(object):
             return _np.argmax(s)
 
         def snap(xdata, ydata):
-            nearest_after = self.peaks_t.searchsorted(xdata)
+            nearest_after = self.t_ibi.searchsorted(xdata)
             nearest_prev = nearest_after - 1
 
-            dist_after = self.peaks_t[nearest_after] - xdata if 0 <= nearest_after < len(self.peaks_t) else None
-            dist_prev = xdata - self.peaks_t[nearest_prev] if 0 <= nearest_prev < len(self.peaks_t) else None
+            dist_after = self.t_ibi[nearest_after] - xdata if 0 <= nearest_after < len(self.t_ibi) else None
+            dist_prev = xdata - self.t_ibi[nearest_prev] if 0 <= nearest_prev < len(self.t_ibi) else None
 
             if dist_after is None or dist_prev < dist_after:
                 if dist_prev is not None and dist_prev < Cursor.radius:
-                    return self.peaks_t[nearest_prev], ydata, nearest_prev, False
+                    return self.t_ibi[nearest_prev], ydata, nearest_prev, False
             elif dist_prev is None or dist_after < dist_prev:
                 if dist_after is not None and dist_after < Cursor.radius:
-                    return self.peaks_t[nearest_after], ydata, nearest_after, False
+                    return self.t_ibi[nearest_after], ydata, nearest_after, False
 
-            s = self.ecg.p.segment_time(xdata - Cursor.radius, xdata + Cursor.radius)
+            s = self.ecg.p.segment_time(xdata - Cursor.radius, xdata + Cursor.radius).p.get_values().ravel()
             s = _np.array(s)
             m = find_peak(s)
             return xdata - Cursor.radius + m / self.ecg.p.get_sampling_freq(), ydata, nearest_after, True
@@ -143,7 +149,7 @@ class Annotate(object):
             @staticmethod
             def select(item):
 #                print("select: %d" % item)
-                Selector.selector = self.p_sig.vlines(self.peaks_t[item], self.min - self.margin, self.max + self.margin, 'g')
+                Selector.selector = self.axes[0].vlines(self.t_ibi[item], self.min - self.margin, self.max + self.margin, 'g')
 
             @staticmethod
             def unselect(item):
@@ -153,11 +159,11 @@ class Annotate(object):
 
         # it is correct that the computation of the values is done at the end (line 186)
         def add(time, y, pos):
-            self.peaks_t = _np.insert(self.peaks_t, pos, time)
+            self.t_ibi = _np.insert(self.t_ibi, pos, time)
             self.replot()
 
         def delete(item):
-            self.peaks_t = _np.delete(self.peaks_t, item)
+            self.t_ibi = _np.delete(self.t_ibi, item)
             self.replot()
 
         im = _ItemManager(snap, Selector.select, Selector.unselect, add, delete)
@@ -189,11 +195,11 @@ class Annotate(object):
         plt.close(self.fig)
         # it is correct that the computation of the values is done at the end!
         # do not change!
-        self.peaks_v = _np.diff(self.peaks_t)
-        self.peaks_v = _np.r_[self.peaks_v[0], self.peaks_v]
+        self.v_ibi = _np.diff(self.t_ibi)
+        self.v_ibi = _np.r_[self.v_ibi[0], self.v_ibi]
         
-        ibi_ok = create_signal(self.peaks_v, 
-                               times=self.peaks_t, 
+        ibi_ok = create_signal(self.v_ibi, 
+                               times=self.t_ibi, 
                                info = self.ibi.p.get_info())
         self.ibi_ok =  ibi_ok
         
@@ -203,6 +209,6 @@ class Annotate(object):
     def replot(self):
         if self.plots is not None:
             self.plots.remove()
-        if self.peaks_t is not None:
-            self.plots = self.p_sig.vlines(self.peaks_t, self.min, self.max, 'y')
+        if self.t_ibi is not None:
+            self.plots = self.axes[0].vlines(self.t_ibi, self.min, self.max, 'y')
             self.fig.canvas.draw()

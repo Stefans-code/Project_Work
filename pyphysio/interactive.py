@@ -31,7 +31,7 @@ class _ItemManager(object):
         self._snap_func = snap_func
         self._select = select
         self._unselect = unselect
-        self._delete = delete
+        # self._delete = delete
         self._add = add
         self.selection = -1
 
@@ -54,38 +54,45 @@ class _ItemManager(object):
 
 
 class Annotate(object):
+    
+    def recompute_ibi(self):
+        self.v_ibi = _np.repeat(_np.nan, len(self.v_ibi))
+        t_ibi = self.t_ibi[self.idx_beats]
+        v_ibi = _np.diff(t_ibi)        
+        v_ibi = _np.insert(v_ibi, 0, v_ibi[0])
+        self.idx_beats_good = [i for i in self.idx_beats if i not in self.idx_outliers]
+        self.v_ibi[self.idx_beats] = v_ibi
+    
+    
     def __init__(self, ecg, ibi):
-        ibi = ibi.p.process_na('remove')
+        # self.cursor = None
         
-        self.plots = None
+        self.beats = None
+        self.outliers = None
+        self.ibi_plot = None
         self.done = False
         
         self.ecg = ecg
-        self.t_ecg = ecg.p.get_times()
-        self.v_ecg = ecg.p.get_values().ravel()
-        
         self.ibi = ibi
-        self.t_ibi = ibi.p.get_times().ravel()
+        
+        self.t_ibi = ibi.p.get_times()
         self.v_ibi = ibi.p.get_values().ravel()
+        self.idx_beats = _np.where(~_np.isnan(self.v_ibi))[0]
+        self.idx_outliers = _np.array([self.idx_beats[0]])
+        self.idx_beats_good = [i for i in self.idx_beats if i not in self.idx_outliers]
+        
+        self.min = _np.min(ecg.p.get_values())
+        self.max = _np.max(ecg.p.get_values())
         
         self.fig, self.axes = plt.subplots(2,1, sharex=True)
-        
-        max_ecg = _np.max(self.v_ecg)
-        min_ecg = _np.min(self.v_ecg)
-
-        self.margin = (max_ecg - min_ecg) * .1
-        self.max = max_ecg + self.margin
-        self.min = min_ecg + self.margin
-        
         
         plt.sca(self.axes[0])
         ecg.p.plot()
         # ibi.p.plot('|')
-        
         plt.sca(self.axes[1])
-        ibi.p.plot()
-        ibi.p.plot('|')
-
+        ibi.p.plot('.')
+        # ibi.p.plot('|')
+        
         self.replot()
 
         class Cursor(object):
@@ -114,29 +121,35 @@ class Annotate(object):
                     Cursor.right.remove()
                     Cursor.left = None
                     Cursor.right = None
+        
                 if event.xdata is not None:  # TODO (Andrea): not do this if speed (dxdata/dt) is high
-                    Cursor.left = self.axes[0].vlines(event.xdata - Cursor.radius, self.min - self.margin * 2,
-                                                    self.max + self.margin * 2, 'k')
-                    Cursor.right = self.axes[0].vlines(event.xdata + Cursor.radius, self.min - self.margin * 2,
-                                                     self.max + self.margin * 2, 'k')
+                    Cursor.left = self.axes[0].vlines(event.xdata - Cursor.radius, 
+                                                      self.min,
+                                                      self.max, 'k')
+                    
+                    Cursor.right = self.axes[0].vlines(event.xdata + Cursor.radius, 
+                                                       self.min,
+                                                       self.max, 'k')
                 self.fig.canvas.draw()
 
         def find_peak(s):
             return _np.argmax(s)
-
+       
         def snap(xdata, ydata):
-            nearest_after = self.t_ibi.searchsorted(xdata)
+            t_ibi = self.t_ibi[self.idx_beats]
+            
+            nearest_after = t_ibi.searchsorted(xdata)
             nearest_prev = nearest_after - 1
 
-            dist_after = self.t_ibi[nearest_after] - xdata if 0 <= nearest_after < len(self.t_ibi) else None
-            dist_prev = xdata - self.t_ibi[nearest_prev] if 0 <= nearest_prev < len(self.t_ibi) else None
+            dist_after = t_ibi[nearest_after] - xdata if 0 <= nearest_after < len(t_ibi) else None
+            dist_prev = xdata - t_ibi[nearest_prev] if 0 <= nearest_prev < len(t_ibi) else None
 
             if dist_after is None or dist_prev < dist_after:
                 if dist_prev is not None and dist_prev < Cursor.radius:
-                    return self.t_ibi[nearest_prev], ydata, nearest_prev, False
+                    return t_ibi[nearest_prev], ydata, nearest_prev, False
             elif dist_prev is None or dist_after < dist_prev:
                 if dist_after is not None and dist_after < Cursor.radius:
-                    return self.t_ibi[nearest_after], ydata, nearest_after, False
+                    return t_ibi[nearest_after], ydata, nearest_after, False
 
             s = self.ecg.p.segment_time(xdata - Cursor.radius, xdata + Cursor.radius).p.get_values().ravel()
             s = _np.array(s)
@@ -149,7 +162,11 @@ class Annotate(object):
             @staticmethod
             def select(item):
 #                print("select: %d" % item)
-                Selector.selector = self.axes[0].vlines(self.t_ibi[item], self.min - self.margin, self.max + self.margin, 'g')
+                t_ibi = self.t_ibi[self.idx_beats]
+                Selector.selector = self.axes[0].vlines(t_ibi[item], 
+                                                        self.min, 
+                                                        self.max, 
+                                                        'g')
 
             @staticmethod
             def unselect(item):
@@ -159,56 +176,83 @@ class Annotate(object):
 
         # it is correct that the computation of the values is done at the end (line 186)
         def add(time, y, pos):
-            self.t_ibi = _np.insert(self.t_ibi, pos, time)
+            fsamp = self.ecg.p.get_sampling_freq()
+            
+            self.idx_beats = _np.insert(self.idx_beats, pos, time*fsamp)
             self.replot()
 
         def delete(item):
-            self.t_ibi = _np.delete(self.t_ibi, item)
+            self.idx_beats = _np.delete(self.idx_beats, item)
             self.replot()
-
-        im = _ItemManager(snap, Selector.select, Selector.unselect, add, delete)
-        mf = _MouseSelectionFilter(im.on_select)
-
+            
+        def switch_outlier(item):
+            idx_ibi_to_outlier = self.idx_beats[item]
+            if idx_ibi_to_outlier not in self.idx_outliers:
+                self.idx_outliers = _np.append(self.idx_outliers, idx_ibi_to_outlier)
+            else:
+                self.idx_outliers = [i for i in self.idx_outliers if i != idx_ibi_to_outlier]
+            self.replot()
+            
+        
         def press(ev):
 #            print(ev.key)
             if ev.key == "d" and im.selection is not None:
                 delete(im.selection)
                 im.unselect()
+            
+            if ev.key == "o" and im.selection is not None:
+                switch_outlier(im.selection)
+                im.unselect()
                 
         def handle_close(ev):
             self.done = True
             return
-                
 
+        im = _ItemManager(snap, Selector.select, Selector.unselect, add, delete)
+        mf = _MouseSelectionFilter(im.on_select)
             
-        clim = self.fig.canvas.mpl_connect('motion_notify_event', lambda e: (mf.on_move(e), Cursor.on_move(e)))
-        clip = self.fig.canvas.mpl_connect('button_press_event', mf.on_press)
-        clir = self.fig.canvas.mpl_connect('button_release_event', mf.on_release)
-        clis = self.fig.canvas.mpl_connect('scroll_event', Cursor.on_scroll)
-        clik = self.fig.canvas.mpl_connect('key_press_event', press)
-        ccls = self.fig.canvas.mpl_connect('close_event', handle_close)
+        self.fig.canvas.mpl_connect('motion_notify_event', lambda e: (mf.on_move(e), Cursor.on_move(e)))
+        self.fig.canvas.mpl_connect('button_press_event', mf.on_press)
+        self.fig.canvas.mpl_connect('button_release_event', mf.on_release)
+        self.fig.canvas.mpl_connect('scroll_event', Cursor.on_scroll)
+        self.fig.canvas.mpl_connect('key_press_event', press)
+        self.fig.canvas.mpl_connect('close_event', handle_close)
         
         while not self.done :
-#            print('waiting')
             plt.pause(1)
         
         plt.close(self.fig)
-        # it is correct that the computation of the values is done at the end!
-        # do not change!
-        self.v_ibi = _np.diff(self.t_ibi)
-        self.v_ibi = _np.r_[self.v_ibi[0], self.v_ibi]
+
         
+        self.recompute_ibi()
+        
+        self.v_ibi[self.idx_outliers] = _np.nan
         ibi_ok = create_signal(self.v_ibi, 
                                times=self.t_ibi, 
                                info = self.ibi.p.get_info())
+        ibi_ok = ibi_ok.p.process_na('remove')
         self.ibi_ok =  ibi_ok
         
     def __call__(self):
         return self.ibi_ok
     
     def replot(self):
-        if self.plots is not None:
-            self.plots.remove()
-        if self.t_ibi is not None:
-            self.plots = self.axes[0].vlines(self.t_ibi, self.min, self.max, 'y')
-            self.fig.canvas.draw()
+        
+        xlims = self.axes[0].get_xlim()
+        self.recompute_ibi()
+        
+        if self.beats is not None:
+            self.beats.remove()
+        self.beats = self.axes[0].vlines(self.t_ibi[self.idx_beats], self.min, self.max, 'y')
+        
+        if self.outliers is not None:
+            self.outliers.remove()
+        self.outliers = self.axes[0].vlines(self.t_ibi[self.idx_outliers], self.min, self.max, 'r')
+        
+        if self.ibi_plot is not None:
+            self.ibi_plot.remove()
+        self.ibi_plot = self.axes[1].plot(self.t_ibi[self.idx_beats_good], 
+                                          self.v_ibi[self.idx_beats_good], '.-', color='b')[0]
+        
+        self.axes[0].set_xlim(xlims)
+        self.fig.canvas.draw()

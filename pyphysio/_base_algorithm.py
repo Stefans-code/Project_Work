@@ -172,7 +172,7 @@ class _Algorithm(object):
         #The user will mainly call Algorithms on a Dataset
         #so it will expect a Dataset as result
         if isinstance(signal_in, _xr.Dataset):
-            output_name = f'{signal_name}_{self.name}'
+            output_name = f'{signal_name}_{self.__repr__()}'
 
             #TODO: why are we repeating these? they are also in __mapper_func__?
             # we should decide what happens to a dataset when an algorithm is applied!!!
@@ -292,7 +292,7 @@ class _Algorithm(object):
         return(signal_out)
     
     def __repr__(self):
-        return self.__class__.__name__ + str(self._params) if 'name' not in self._params else self._params['name']
+        return self.__class__.__name__ if 'name' not in self._params else self._params['name']
 
     def set_params(self, **kwargs):
         self._params.update(kwargs)

@@ -327,18 +327,19 @@ def fmap(segmenter, algorithms, signal):
         for i_seg, seg in enumerate(segmenter): #this generates segments from the segmenter
             # print(seg.get_begin_time())    
             signal_segment = seg(signal)
-            res = alg(signal_segment, add_signal=True)
-            res = res.drop(signal_name)
-            res = res.dropna(dim='time', 
-                             how='all', 
-                             subset=[f'{signal_name}_{alg.name}'])
-            res = res.assign_coords(label=('time', [seg.get_label()]))
-            
-            result_algorithm.append(res)
+            if signal_segment.p.get_values().shape[0] > 0:
+                res = alg(signal_segment, add_signal=True)
+                res = res.drop(signal_name)
+                res = res.dropna(dim='time', 
+                                 how='all', 
+                                 subset=[f'{signal_name}_{alg.__repr__()}'])
+                res = res.assign_coords(label=('time', [seg.get_label()]))
+                
+                result_algorithm.append(res)
 
         result.append(_xr.concat(result_algorithm, dim='time'))
 
-    result = _xr.merge(result)
+    result = _xr.merge(result,compat='override')
     return result
 
 #TODO: needed? if yes, fix--->

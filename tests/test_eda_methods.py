@@ -30,7 +30,13 @@ driver = flt.ConvolutionalFilter('rect', 1, normalize=True)(driver)
 # driver.p.plot()
 # driver_.p.plot()
 
-phasic = eda_tools.PhasicEstim(0.005, win_pre=3, win_post=3)(driver)
+#%%
+# driver.p.segment_time(5, 7).p.plot('.')
+phasic = eda_tools.PhasicEstim(0.005, win_pre=3, win_post=3)(driver)#.p.segment_time(5, 7))
+
+# phasic.p.plot('.')
+
+#%%
 tonic = eda_tools.PhasicEstim(0.005, win_pre=3, win_post=3, return_phasic=False)(driver)
 
 #%%

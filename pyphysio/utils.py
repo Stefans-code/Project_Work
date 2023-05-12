@@ -911,8 +911,8 @@ class PeakSelection(_Algorithm):
         i_post_max = int(params['win_post'] * signal.p.get_sampling_freq())
         
         signal_values = signal.p.get_values().ravel()
-        
         dd = _np.convolve(_np.diff(signal_values)//1.0, _np.ones(2)/2)
+
         i_start = []
         i_stop = []
 
@@ -920,7 +920,7 @@ class PeakSelection(_Algorithm):
         for idx_max in i_peaks:
             idx_pre = idx_max-1
             s_pre = dd[idx_pre]
-            while ((s_pre>-0.5) and ((idx_max-idx_pre) <= i_pre_max)):
+            while ((s_pre>-0.5) and ((idx_max-idx_pre) <= i_pre_max)) and (idx_pre>=0):
                 idx_pre -=1
                 s_pre = dd[idx_pre]
             idx_pre +=1
@@ -928,7 +928,7 @@ class PeakSelection(_Algorithm):
             
             idx_post = idx_max+1
             s_post = dd[idx_post]
-            while ((s_post<-0.5) and ((idx_post-idx_max) <= i_post_max)):
+            while ((s_post<-0.5) and ((idx_post-idx_max) <= i_post_max)) and (idx_post<=len(signal_values)):
                 idx_post +=1
                 s_post = dd[idx_post]
             idx_post -=1    

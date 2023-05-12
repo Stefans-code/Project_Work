@@ -141,13 +141,14 @@ class PhasicEstim(_Algorithm):
 
         fsamp = signal.p.get_sampling_freq()
         signal_values = signal.p.get_values().ravel()
-
+        
         # find peaks in the driver
         maxima = _PeakDetection(delta=amplitude, refractory=1, start_max=True, return_peaks=True)(signal)
-        maxp = _np.where(~_np.isnan(maxima.p.main_signal.values))[0].ravel()
-
+        idx_maxp = _np.where(~_np.isnan(maxima.p.main_signal.values))[0].ravel()
+        # print(idx_maxp)
+        
         # identify start and stop of the peaks
-        peaks = _PeakSelection(indices=maxp, win_pre=win_pre, win_post=win_post)(signal)
+        peaks = _PeakSelection(indices=idx_maxp, win_pre=win_pre, win_post=win_post)(signal)
         
         # find tonic component (= portion outside the peaks ==> peaks == 0)
         idx_tonic = _np.where(peaks.p.get_values().ravel() == 0)[0]
@@ -159,9 +160,10 @@ class PhasicEstim(_Algorithm):
         if idx_tonic[-1] != (len(signal_values) - 1):
             idx_tonic = _np.insert(idx_tonic, len(idx_tonic), len(signal_values) - 1)
         
+        
         tonic_interp = signal_values[idx_tonic]
 
-        tonic = create_signal(tonic_interp, times = idx_tonic/fsamp)
+        tonic = create_signal(tonic_interp, times = idx_tonic/fsamp + signal.p.get_start_time())
         tonic = tonic.interp({'time': signal.p.get_times()}, 'cubic')
         tonic_values = tonic.p.get_values().ravel()
         

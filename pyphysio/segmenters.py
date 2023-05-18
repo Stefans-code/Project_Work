@@ -153,7 +153,7 @@ class FixedSegments(_Segmenter):
         Whether to drop segments that are shorter due to the crossing of the signal end.
     """
 
-    def __init__(self, step, width=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
+    def __init__(self, step, width=None, timeline=None, drop_mixed=True, drop_cut=False, **kwargs):
         super(FixedSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         assert step > 0
         assert width is None or width > 0
@@ -197,7 +197,7 @@ class CustomSegments(_Segmenter):
         Weather to drop segments that are shorter due to the crossing of the signal end.
     """
 
-    def __init__(self, begins, ends, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
+    def __init__(self, begins, ends, timeline=None, drop_mixed=True, drop_cut=False, **kwargs):
         #TODO: timeline can also be a list with labels of each segment
         super(CustomSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         
@@ -233,7 +233,7 @@ class LabelSegments(_Segmenter):
         Weather to drop segments that are shorter due to the crossing of the signal end.
     """
 
-    def __init__(self, timeline, drop_mixed=True, drop_cut=True, **kwargs):
+    def __init__(self, timeline, drop_mixed=True, drop_cut=False, **kwargs):
         super(LabelSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         self._i = 0
         

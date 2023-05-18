@@ -9,39 +9,28 @@ from .utils import SignalRange as _SignalRange
 
 class Normalize(_Algorithm):
     """
-    Normalizes the input signal using the general formula: (signal - BIAS) / RANGE.
+    A class for normalizing signals using various methods.
 
-    Parameters
-    ----------
-    norm_method : str, optional
-        Method for normalization. Available methods are:
-        * 'mean' - remove the mean [BIAS = mean(signal); RANGE = 1]
-        * 'standard' - standardization [BIAS = mean(signal); RANGE = std(signal)]
-        * 'min' - remove the minimum [BIAS = min(signal); RANGE = 1]
-        * 'maxmin' - maxmin normalization [BIAS = min(signal); RANGE = (max(signal) - min(signal))]
-        * 'custom' - custom, bias and range are manually defined [BIAS = bias, RANGE = range].
-        Default is 'standard'.
-    norm_bias : float, optional
-        Bias for custom normalization. Default is 0.
-    norm_range : float, optional
-        Range for custom normalization. Must not be zero if norm_method is 'custom'. Default is 1.
-    **kwargs : dict
-        Additional keyword arguments to pass to _Algorithm.__init__().
+    This class provides functionality to normalize signals using different normalization methods, including mean subtraction, standardization, min-max scaling, and custom scaling.
 
-    Returns
-    -------
-    signal : numpy.ndarray
-        The normalized signal.
+    Parameters:
+        norm_method (str, optional): The normalization method to be used. Defaults to 'standard'.
+            - 'mean': Subtract the mean from each value.
+            - 'standard': Standardize the signal by subtracting the mean and dividing by the standard deviation.
+            - 'min': Subtract the minimum value from each value.
+            - 'maxmin': Scale the values to the range [0, 1] by subtracting the minimum value and dividing by the difference between the maximum and minimum values.
+            - 'custom': Scale the values by subtracting a custom bias and dividing by a custom range.
+        norm_bias (float, optional): The bias value used for custom scaling. Defaults to 0.
+        norm_range (float, optional): The range value used for custom scaling. Must not be zero. Defaults to 1.
+        **kwargs: Additional keyword arguments to be passed to the base class constructor.
 
-    Raises
-    ------
-    ValueError
-        If norm_method is not one of 'mean', 'standard', 'min', 'maxmin', or 'custom'.
+    Methods:
+        algorithm(signal, **kwargs): Normalize the given signal using the specified normalization method.
 
-    Notes
-    -----
-    This class inherits from _Algorithm.
-
+    Raises:
+        AssertionError: If norm_method is not one of 'mean', 'standard', 'min', 'maxmin', 'custom'.
+        AssertionError: If norm_range is zero when norm_method is 'custom'.
+        ValueError: If an unsupported norm_method is specified.
     """
 
     def __init__(self, norm_method='standard', norm_bias=0, norm_range=1, **kwargs):
@@ -78,33 +67,44 @@ class Normalize(_Algorithm):
 
 class IIRFilter(_Algorithm):
     """
-    Filter the input signal using an Infinite Impulse Response filter.
+    Infinite Impulse Response (IIR) Filter implementation.
 
-    Parameters
-    ----------
-    fp : list or float
-        The pass frequencies
-    fs : list or float
-        The stop frequencies
-    
-    Optional parameters
-    -------------------
-    loss : float, >0, default = 0.1
-        Loss tolerance in the pass band
-    att : float, >0, default = 40
-        Minimum attenuation required in the stop band.
-    ftype : str, default = 'butter'
-        Type of filter. Available types: 'butter', 'cheby1', 'cheby2', 'ellip', 'bessel'
+    This class implements an IIR filter algorithm for signal filtering. It supports different filter types
+    such as Butterworth, Chebyshev Type I, Chebyshev Type II, elliptic, and Bessel filters. The filter can
+    operate in various modes including lowpass, highpass, bandpass, and bandstop.
 
-    Returns
-    -------
-    signal : EvenlySignal
-        Filtered signal
+    Parameters:
+        fp (float or array_like): Passband edge frequencies. For a lowpass or highpass filter, it should be a
+            single value. For a bandpass or bandstop filter, it should be a tuple of two values representing
+            the lower and upper passband edge frequencies.
+        fs (float or array_like, optional): Stopband edge frequencies. Required for bandpass and bandstop
+            filters. For a lowpass or highpass filter, it is ignored. If not provided, the stopband edge
+            frequencies are set to None.
+        btype (str, optional): Filter type. Can be one of the following: 'lowpass', 'highpass', 'bandpass',
+            or 'bandstop'. Defaults to 'bandpass'.
+        order (int, optional): Filter order. Defaults to 3.
+        loss (float, optional): Passband loss (ripple) in decibels (dB). Must be a positive value.
+            Defaults to 0.1.
+        att (float, optional): Stopband attenuation in decibels (dB). Must be a positive value and greater than
+            the loss value. Defaults to 40.
+        ftype (str, optional): Filter type. Can be one of the following: 'butter', 'cheby1', 'cheby2', 'ellip',
+            or 'bessel'. Defaults to 'cheby1'.
+        safe (bool, optional): Whether to enable safe mode. When safe mode is enabled, if the filter parameters
+            result in no solution, the original signal is returned. Defaults to True.
 
-    Notes
-    -----
-    This is a wrapper of *scipy.signal.filter_design.iirdesign*. Refer to `scipy.signal.filter_design.iirdesign`
-    for additional information
+    Attributes:
+        dimensions (dict): Dictionary specifying the dimensions of the filter. In this case, only the 'time'
+            dimension is used, which is set to 0.
+
+    Methods:
+        algorithm(signal):
+            Apply the IIR filter algorithm to the input signal and return the filtered signal.
+
+    Notes:
+        - The IIRFilter class inherits from the _Algorithm base class.
+        - The _Algorithm base class provides common functionality and is not defined in this documentation.
+        - The IIRFilter class uses functions from numpy, scipy, and other modules.
+
     """
 
     def __init__(self, fp, fs=None, btype='bandpass', order=3, loss=.1, att=40, ftype='cheby1', safe=True):
@@ -153,24 +153,16 @@ class IIRFilter(_Algorithm):
 
 class NotchFilter(_Algorithm):
     """
-    Filter the input signal using an Infinite Impulse Response filter.
+    NotchFilter is a class that implements a notch filter algorithm to remove a specific frequency component from a signal.
 
-    Parameters
-    ----------
+    Parameters:
+    -----------
     f : float
-        The frequency to be removed
-    Q : float
-        Quality
-    
-    Returns
-    -------
-    signal : Signal
-        Filtered signal
-
-    Notes
-    -----
-    This is a wrapper of *scipy.signal.iirnotch*. Refer to `scipy.signal.iirnotch`
-    for additional information
+        The frequency of the notch filter in Hz. Must be greater than 0.
+    Q : float, optional
+        The quality factor of the notch filter. Higher values result in a narrower bandwidth. Must be greater than 0. Default is 30.
+    safe : bool, optional
+        A flag indicating whether to handle unsafe filter parameters. If set to True, and the filter parameters result in no valid solution, the original signal will be returned instead. Default is True.
     """
 
     def __init__(self, f, Q=30, safe=True):
@@ -199,33 +191,37 @@ class NotchFilter(_Algorithm):
         
 class FIRFilter(_Algorithm):
     """
-    Filter the input signal using a Finite Impulse Response filter.
+    Finite Impulse Response (FIR) filter class for signal processing.
 
-    Parameters
-    ----------
-    fp : list or float
-        The pass frequencies
-    fs : list or float
-        The stop frequencies
+    Parameters:
+    -----------
+    fp : float or array_like
+        Cutoff frequency or frequencies for the filter. For a lowpass or highpass
+        filter, a single value should be provided. For a bandpass or bandstop filter,
+        a list or array of two values should be provided.
+    fs : float or array_like, optional
+        Stop frequency or frequencies for the filter. If not specified, a lowpass or
+        highpass filter is created. For a bandpass or bandstop filter, a list or array
+        of two values should be provided.
+    order : int, optional
+        Order of the filter. Default is 5.
+    btype : str, optional
+        Type of filter. Possible values are 'lowpass', 'highpass', 'bandpass', and
+        'bandstop'. Default is 'lowpass'.
+    att : float, optional
+        Attenuation value in decibels (dB). Default is 40.
+    wtype : str, optional
+        Type of window to use in filter design. Currently, only 'hamming' window is
+        supported. Default is 'hamming'.
+    safe : bool, optional
+        If True, check if the filter parameters allow a valid solution. If not, return
+        the original signal. If False, no check is performed and the filter is applied
+        regardless of the parameters. Default is True.
     
-    Optional parameters
-    -------------------
-    loss : float, >0, default = 0.1
-        Loss tolerance in the pass band
-    att : float, >0, default = 40
-        Minimum attenuation required in the stop band.
-    wtype : str, default = 'hamming'
-        Type of filter. Available types: 'hamming'
-
-    Returns
-    -------
-    signal : EvenlySignal
-        Filtered signal
-
-    Notes
+    Note:
     -----
-    This is a wrapper of *scipy.signal.firwin*. Refer to `scipy.signal.firwin`
-    for additional information
+    This class inherits from the _Algorithm class.
+
     """
 
     def __init__(self, fp, fs=None, order=5, btype='lowpass', att=40, wtype='hamming', safe=True):
@@ -293,6 +289,24 @@ class FIRFilter(_Algorithm):
         return sig_out
 
 class KalmanFilter(_Algorithm):
+    """
+    Implements a Kalman Filter algorithm for signal processing.
+
+    This class applies the Kalman Filter algorithm to a given signal. The Kalman Filter is an optimal estimation algorithm that combines measurements and a prediction model to estimate the state of a system. It is commonly used in signal processing and control systems.
+
+    Parameters
+    ----------
+    R : float
+        The measurement noise covariance. Must be a positive value.
+    ratio : float
+        The ratio used to calculate the process noise covariance. Must be greater than 1.
+    win_len : float, optional
+        The length of the sliding window used to estimate the process noise covariance. Must be a positive value. Defaults to 1.
+    win_step : float, optional
+        The step size of the sliding window used to estimate the process noise covariance. Must be a positive value. Defaults to 0.5.
+
+    """
+
     def __init__(self, R, ratio, win_len=1, win_step=0.5):
         assert R > 0, "R should be positive"
         assert ratio > 1, "ratio should be >1"
@@ -328,74 +342,8 @@ class KalmanFilter(_Algorithm):
 
         return(x_out)
 
-class ImputeNAN(_Algorithm):
-    def __init__(self, win_len=5, allnan='nan'):
-        assert win_len>0, "win_len should be >0"
-        _Algorithm.__init__(self, win_len = win_len)
-        self.dimensions = {'time' : 0}
-        
-    def algorithm(self, signal):
-        def group_consecutives(vals, step=1):
-            """Return list of consecutive lists of numbers from vals (number list)."""
-            run = []
-            result = [run]
-            expect = None
-            for v in vals:
-                if (v == expect) or (expect is None):
-                    run.append(v)
-                else:
-                    run = [v]
-                    result.append(run)
-                expect = v + step
-            return result
-
-        #%
-        params = self._params
-        win_len = params['win_len']*signal.p.get_sampling_freq()
-                
-        s = signal.values.ravel()
-        if _np.isnan(s).all():
-            return(signal.values)
-            
-        idx_nan = _np.where(_np.isnan(s))[0]
-        segments = group_consecutives(idx_nan)
-
-        #%
-        if len(segments[0])>=1:
-            for i_seg, SEG in enumerate(segments):
-                idx_st = SEG[0]
-                idx_sp = SEG[-1]
-                idx_win_pre = _np.arange(-int(win_len/2), 0, 1)+idx_st
-                idx_win_pre = idx_win_pre[_np.where(idx_win_pre>0)[0]] #not before signal start
-
-                STD = []
-                if len(idx_win_pre)>=3:
-                    STD.append(_np.nanstd(s[idx_win_pre]))
-                
-                idx_win_post = _np.arange(0, int(win_len/2))+idx_sp+1
-                idx_win_post = idx_win_post[_np.where(idx_win_post<len(s))[0]]
-                
-                if len(idx_win_post)>=3:
-                    STD.append(_np.nanstd(s[idx_win_post]))
-                
-                if len(STD)>0 and not (_np.isnan(STD).all()):
-                    STD = _np.nanmin(STD)
-                else:
-                    STD = 0
-                    
-                idx_win = _np.hstack([idx_win_pre, idx_win_post]).astype(int)
-                idx_win = idx_win[_np.where(~_np.isnan(s[idx_win]))[0]] # remove nans
-                
-                if len(idx_win)>3:
-                    R = _stats.linregress(idx_win, s[idx_win])
-                    s_nan = _np.array(SEG)*R[0]+R[1] + _np.random.normal(scale=STD, size = len(SEG))
-                else:
-                    s_nan = _np.nanmean(s)*_np.ones(len(SEG))
-                s[SEG] = s_nan
-        
-        return(s)
-
 class RemoveSpikes(_Algorithm):
+    #TODO: see MA removal using spline in fnirs specialized
     def __init__(self, K=2, N=1, dilate=0, D=0.95, method='step'):
         assert K > 0, "K should be positive"
         assert isinstance(N, int) and N>0, "N value not valid"
@@ -452,29 +400,20 @@ class RemoveSpikes(_Algorithm):
 
 class ConvolutionalFilter(_Algorithm):
     """
-    Filter a signal by convolution with a given impulse response function (IRF).
+    A class representing a convolutional filter algorithm.
 
-    Parameters
-    ----------
+    Parameters:
+    -----------
     irftype : str
-        Type of IRF to be generated. 'gauss', 'rect', 'triang', 'dgauss', 'custom'.
-    win_len : float, >0 (> 8/fsamp for 'gaussian')
-        Duration of the generated IRF in seconds (if irftype is not 'custom')
-    
-    Optional parameters
-    -------------------
-    irf : numpy.array
-        IRF to be used if irftype is 'custom'
-    normalize : boolean, default = True
-        Whether to normalizes the IRF to have unitary area
-    
-    Returns
-    -------
-    signal : EvenlySignal
-        Filtered signal
+        The type of impulse response function (IRF) to use. Must be one of ['gauss', 'rect', 'triang', 'dgauss', 'custom'].
+    win_len : int, optional
+        The window length value for the IRF. Required when `irftype` is not 'custom'. Default is 0.
+    irf : array-like, optional
+        The custom impulse response function to use. Required when `irftype` is 'custom'. Default is None.
+    normalize : bool, optional
+        Flag indicating whether to normalize the impulse response function. Default is True.
 
     """
-
     def __init__(self, irftype, win_len=0, irf=None, normalize=True):
         assert irftype in ['gauss', 'rect', 'triang', 'dgauss', 'custom'],\
             "IRF type must be in ['gauss', 'rect', 'triang', 'dgauss', 'custom']"
@@ -534,29 +473,19 @@ class ConvolutionalFilter(_Algorithm):
 
 class DeConvolutionalFilter(_Algorithm):
     """
-    Filter a signal by deconvolution with a given impulse response function (IRF).
+    Class for performing deconvolution using different methods.
 
     Parameters
     ----------
-    irf : numpy.array
-        IRF used to deconvolve the signal
-    
-    Optional parameters
-    -------------------
-    
-    normalize : boolean, default = True
-        Whether to normalize the IRF to have unitary area
-    deconv_method : str, default = 'sps'
-        Available methods: 'fft', 'sps'. 'fft' uses the fourier transform, 'sps' uses the scipy.signal.deconvolve
-         function
-        
-    Returns
-    -------
-    signal : EvenlySignal
-        Filtered signal
-
+    irf : array_like
+        The Impulse Response Function (IRF) to be used for deconvolution.
+    normalize : bool, optional
+        Flag indicating whether to normalize the IRF before deconvolution.
+        Defaults to True.
+    deconv_method : {'fft', 'sps'}, optional
+        The deconvolution method to be used. 'fft' is based on the computation of the Fast Fourier
+        Transform; 'sps' uses the implementation in scipy.signal.    
     """
-
     def __init__(self, irf, normalize=True, deconv_method='sps'):
         assert deconv_method in ['fft', 'sps'], "Deconvolution method not valid"
         _Algorithm.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)

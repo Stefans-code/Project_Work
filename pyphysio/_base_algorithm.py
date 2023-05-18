@@ -5,6 +5,43 @@ _xr.set_options(keep_attrs=True)
 from . import scheduler
     
 class _Algorithm(object):
+    """
+    Base class for all algorithms in pyphysio.
+
+    Parameters
+    ----------
+    **kwargs : dict
+        Dictionary of parameters to be set for the algorithm.
+
+    Attributes
+    ----------
+    _params : dict
+        Dictionary of parameters set for the algorithm.
+    dimensions : dict
+        Dictionary of dimensions to be used for the algorithm.
+    name : str
+        Name of the algorithm.
+
+    Methods
+    -------
+    __get_template__(self, signal)
+        Obtain the template of the output.
+    __call__(self, signal_in, add_signal=True, dimensions=None, scheduler=scheduler, **kwargs)
+        Apply the algorithm on the input signal.
+    __mapper_func__(self, signal_in, **kwargs)
+        Function called by __call__ to parallelize the execution.
+    __finalize__(self, result, signal_in, dimensions='none')
+        Obtain a coherent output from the calls to self.algorithm.
+    set_params(self, **kwargs)
+        Set parameters for the algorithm.
+    set(self, **kwargs)
+        Set parameters for the algorithm and reinitialize the object.
+    get(self, param=None)
+        Get the parameters set for the algorithm.
+    algorithm(cls, signal)
+        Placeholder for the subclasses.
+    """
+
     def __init__(self, **kwargs):
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
@@ -16,28 +53,28 @@ class _Algorithm(object):
         return(self.__class__.__name__)
     
     def __get_template__(self, signal):
-        '''
+        """
         Obtain the template of the output.
         Should be overwritten by algorithms that have a special output format
         (e.g. add a coordinate like frequency or change substantially the
         shape).
-        
+
         Used by __call__ to know how to create chunks and compose the results
         on the different chunks
 
         Parameters
         ----------
-        signal : TYPE
-            DESCRIPTION.
+        signal : xarray.DataArray
+            Input signal.
 
         Returns
         -------
-        chunk_dict : dictionary
-            dictionary with information on how to perform the rolling
-        template : xarray.DataArrat
-            template of the output
+        chunk_dict : dict
+            Dictionary with information on how to perform the rolling.
+        template : xarray.DataArray
+            Template of the output.
+        """
 
-        '''
         dimensions = self.dimensions
         
         chunk_dict = {}
@@ -261,11 +298,49 @@ class _Algorithm(object):
         return(result_out)
 
     def __finalize__(self, result, signal_in, dimensions='none'):
-        '''
-        General function to obtain a coherent output 
-        from the calls to self.algorithm.
-        The output should be a dataaarry or dataset
-        '''
+        """
+        General function to obtain a coherent output from the calls to self.algorithm.
+
+        Parameters
+        ----------
+        result : numpy.ndarray
+            The output result returned by the self.algorithm function.
+        signal_in : xarray.DataArray
+            The input signal on which the algorithm is called.
+        dimensions : str or dict, optional
+            The dimensions to be used for the output. If 'none', no dimensions are used.
+            If a dictionary is provided, it contains the dimensions to be used and their
+            corresponding sizes. The default is 'none'.
+
+        Returns
+        -------
+        signal_out : xarray.DataArray
+            The output of the algorithm applied on the input signal, formatted as a
+            xarray.DataArray.
+
+        Notes
+        -----
+        This function takes the output result returned by the self.algorithm function,
+        which is typically a numpy array, and formats it into a xarray.DataArray.
+        The dimensions and coordinates of the output are determined based on the input
+        signal and the provided dimensions.
+
+        If the result has a dimensionality of 1, it is expanded to have dimensions of
+        size 1 along 'time', 'channel', and 'component' dimensions. The resulting
+        xarray.DataArray is assigned the name of the input signal.
+
+        The dimensions of the output signal are determined as follows:
+        - If the size of a dimension in the input signal matches the size of the
+        corresponding dimension in the result, the coordinates of that dimension
+        are preserved.
+        - If the size of a dimension in the result is 1, indicating an indicator or
+        windowed algorithm, the coordinate of the start of that dimension in the
+        input signal is preserved.
+        - Otherwise, a default coordinate range is created for that dimension.
+
+        The resulting xarray.DataArray is assigned the attributes of the input signal.
+
+        """
 
         if result.ndim == 1:
             result = _np.expand_dims(result, [1,2])
@@ -305,7 +380,6 @@ class _Algorithm(object):
     def get(self, param=None):
         """
         Placeholder for the subclasses
-        @return
         """
         if param is None:
             return self._params
@@ -315,8 +389,5 @@ class _Algorithm(object):
     def algorithm(cls, signal):
         """
         Placeholder for the subclasses
-        @raise NotImplementedError: Ever
-        :param params:
-        :param data:
         """
         pass

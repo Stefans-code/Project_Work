@@ -33,37 +33,54 @@ def load(file):
     
 def create_signal(data, times=None, sampling_freq=None,
                   start_time=0, name='signal', info={}):
-    '''
-    Create an xarray object where the coordinates are (time, channel, component)
-    representing a signal.
+    """
+    Create a signal from data and temporal information.
 
     Parameters
     ----------
-    data : numpy.array (or list)
-        Values of the signal
-    times : TYPE, optional
-        DESCRIPTION. The default is None.
-    sampling_freq : TYPE, optional
-        DESCRIPTION. The default is None.
-    start_time : TYPE, optional
-        Ignored if times are provided. The default is 0.
-    name : 'str', optional
-        Name of the signal. The default is 'signal'.
+    data : array_like
+        The data for the signal. Can be 1D, 2D or 3D.
+    times : array_like, optional
+        The time values for the signal. If not provided, the time values
+        will be generated based on the sampling frequency and start time.
+    sampling_freq : float, optional
+        The sampling frequency of the signal. If not provided, the signal
+        will be assumed to be unevenly sampled.
+    start_time : float, optional
+        The start time of the signal. Default is 0.
+    name : str, optional
+        The name of the signal. Default is 'signal'.
     info : dict, optional
-        Dictionary where to store custom information. The default is {}.
+        Additional information to be stored as attributes of the signal.
 
     Returns
     -------
-    signal : TYPE
-        DESCRIPTION.
-        
-    If 'sampling_freq' is provided, a signal with evenly (temporally) spaced samples is created;
-    times are created accordingly (also considering the 'start_time')
-    If 'times' is provided (meaning the sampling frequency is unknown and/or not the same across the signal),
-    a signal with unevenly (temporally) spaced samples is created, 
-    and the 'sampling_freq' is set to 'unevenly'; 'start_time' is ignored.
-    '''    
-    
+    signal : xarray.Dataset
+        The signal as an xarray dataset.
+
+    Raises
+    ------
+    AssertionError
+        If both times and sampling_freq are provided or if data has more than
+        3 dimensions.
+
+    Notes
+    -----
+    If times are provided, the sampling frequency will be calculated based on
+    the time values. If sampling frequency is provided, the time values will
+    be generated based on the sampling frequency and start time.
+
+    The signal will have three dimensions: 'time', 'channel', and 'component'.
+    The 'time' dimension will be determined by the temporal information
+    provided. The 'channel' and 'component' dimensions will be determined by
+    the shape of the data.
+
+    Additional information can be stored as attributes of the signal using the
+    `info` parameter. The sampling frequency and start time will also be stored
+    as attributes of the signal.
+
+    """
+
     #TODO: names for channels/components?
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
     assert data.ndim <= 3, "data should have maximum 3 dimensions"
@@ -133,6 +150,60 @@ def create_signal(data, times=None, sampling_freq=None,
 
 @_xr.register_dataarray_accessor('p')
 class PyphysioDataArray(object):
+    """
+    A class representing physiological data as a multidimensional array.
+
+    Parameters
+    ----------
+    xdataarray : xarray.DataArray
+        The input xarray.DataArray containing the physiological data.
+
+    Attributes
+    ----------
+    da : xarray.DataArray
+        The underlying xarray.DataArray object that holds the physiological data.
+
+    Methods
+    -------
+    clone(values, name='signal'):
+        Clone the PyphysioDataArray object with new values.
+    get_values():
+        Get the values of the signal.
+    get_times():
+        Get the time values of the signal.
+    segment_time(t_start, t_stop=None):
+        Segment the signal given a time interval.
+    get_start_time():
+        Get the start time of the signal.
+    get_end_time():
+        Get the end time of the signal.
+    get_sampling_freq():
+        Get the sampling frequency of the signal.
+    get_duration():
+        Get the duration of the signal.
+    has_multi_channels():
+        Check if the signal has multiple channels.
+    get_nchannels():
+        Get the number of channels in the signal.
+    has_multi_components():
+        Check if the signal has multiple components.
+    get_ncomponents():
+        Get the number of components in the signal.
+    get_info():
+        Get the additional information associated with the signal.
+    resample(f_out):
+        Resample the signal to a specified sampling frequency.
+    process_na(na_action='keep'):
+        Process NaN values in the signal according to the specified action.
+    plot(marker=None, ncols=4, sharey=False):
+        Plot the signal(s) contained in the PyphysioDataArray object.
+
+    Notes
+    -----
+    The signal data is stored in a `xarray.DataArray` object, which provides powerful data manipulation capabilities.
+
+    """
+
     def __init__(self, xdataarray):
         self.da = xdataarray
     
@@ -148,6 +219,28 @@ class PyphysioDataArray(object):
     #++++++++++++++++++++++++++++++++++++
     
     def clone(self, values, name='signal'):
+        """
+        Clone the PyphysioDataArray object with new values.
+
+        Parameters
+        ----------
+        values : numpy.ndarray
+            The new values to be assigned to the cloned object.
+        name : str, optional
+            The name of the cloned object. The default is 'signal'.
+
+        Returns
+        -------
+        PyphysioDataArray
+            The cloned PyphysioDataArray object with the new values.
+
+        Raises
+        ------
+        AssertionError
+            If the shape of the new values array does not match the shape of the original values array.
+
+        """
+        
         #TODO: this is probably very rough. Do we need something more efficient?
         assert values.shape[0] == self.da.values.shape[0]
         signal_clone = create_signal(values, times = self.da.coords['time'].values,
@@ -155,9 +248,25 @@ class PyphysioDataArray(object):
         return(signal_clone)
     
     def get_values(self):
+        """
+        Get the values of the signal.
+
+        Returns
+        -------
+        numpy.ndarray
+            The values of the signal.
+        """
         return self.da.values
 
     def get_times(self):
+        """
+        Get the values of the signal.
+
+        Returns
+        -------
+        numpy.ndarray
+            The values of the signal.
+        """
         time = self.da.coords['time'].values
         # time = time/_np.timedelta64(1, 's')
         return time
@@ -170,13 +279,21 @@ class PyphysioDataArray(object):
         ----------
         t_start : float
             The instant of the start of the interval
-        t_stop : float 
+        t_stop : float, optional
             The instant of the end of the interval. By default is the end of the signal
 
         Returns
         -------
-        portion : UnvenlySignal
-            The selected portion
+        portion : PyphysioDataArray
+            The selected portion of the signal as a new PyphysioDataArray object
+
+        This function segments the signal by selecting a portion of it based on a time interval. 
+        The start time of the interval is given by the parameter t_start, 
+        while the end time is given by the optional parameter t_stop. 
+        If t_stop is not provided, the function selects the portion of the signal from t_start
+        to the end of the signal. 
+        
+        The function returns the selected portion of the signal as a new PyphysioDataArray object.
         """
         
         #TODO? t_stop - 1/fsamp
@@ -185,10 +302,28 @@ class PyphysioDataArray(object):
         return sub_dataset
     
     def get_start_time(self):
+        """
+        Get the start time of the signal.
+
+        Returns
+        -------
+        float
+            The start time of the signal.
+
+        """
         times= self.get_times()
         return(times[0])
     
     def get_end_time(self):
+        """
+        Get the end time of the signal.
+
+        Returns
+        -------
+        float
+            The end time of the signal.
+
+        """
         times= self.get_times()
         return(times[-1])
 
@@ -228,23 +363,29 @@ class PyphysioDataArray(object):
     
     def process_na(self, na_action = 'keep'):
         '''
-        Impute nans in the signal.
-        
+        Impute or remove NaN values in the signal.
+
         Parameters
         ----------
         na_action : str, optional
-            DESCRIPTION. The default is 'keep'.
+            The action to take when NaN values are present in the signal. 
+            Possible values are 'impute', 'keep', and 'remove'. 
+            If 'impute', NaN values will be interpolated using cubic interpolation. 
+            If 'keep', NaN values will be kept in the signal. 
+            If 'remove', timepoints with NaN values will be removed from the signal. 
+            The default value is 'keep'.
 
         Raises
         ------
         ValueError
-            DESCRIPTION.
+            If na_action is set to 'remove' and NaN values do not share the same timepoints across channels and components.
 
         Returns
         -------
-        None.
-
+        PyphysioDataArray
+            A new PyphysioDataArray object with NaN values processed according to the specified action.
         '''
+        
         assert na_action in ['impute', 'keep', 'remove']
         data = self.da.values
         
@@ -299,6 +440,23 @@ class PyphysioDataArray(object):
             return(self.da)
     
     def plot(self, marker=None, ncols=4, sharey=False):
+        """
+        The plot function of the PyphysioDataArray class is used to plot the signal(s) contained in the 
+        PyphysioDataArray object. The function can handle signals with multiple channels and components.
+
+        Parameters
+        ----------
+        marker : str, optional
+            The marker to use for the plot. If None, a line plot is used. If '|' a vertical line is plotted at each timepoint. Otherwise, the provided string is used as a marker.
+        ncols : int, optional
+            The number of columns to use in the subplot grid. Default is 4.
+        sharey : bool, optional
+            Whether to share the y-axis between subplots. Default is False.
+
+        Returns
+            None
+        """
+        
         fig = _gcf()
         t_ = self.get_times()
         v_ = self.get_values()

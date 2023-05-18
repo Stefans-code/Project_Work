@@ -12,9 +12,32 @@ from scipy.stats import median_abs_deviation as _mad, iqr as _iqr
 # see Di Lorenzo et al: https://www.sciencedirect.com/science/article/pii/S1053811919305531?via%3Dihub
 
 class DetectMA(_Algorithm):
-    '''
-    F Scholkmann et al 2010 Physiol. Meas. 31 649
-    '''
+    """
+    Motion Artifact Detection Algorithm based on F. Scholkmann et al. 2010 Physiol. Meas. 31 649.
+
+    Parameters
+    ----------
+    win_len : float, optional
+        Length of the window in seconds.
+    win_mask : float, optional
+        Length of the mask window in seconds.
+    method : {'iqr', 'mad', 'fixed'}, optional
+        Method for threshold computation.
+    iqr : float, optional
+        Interquartile range coefficient for threshold computation when method is 'iqr'.
+    th_std : float, optional
+        Standard deviation threshold when method is 'fixed'.
+    th_std_coeff : float, optional
+        Standard deviation coefficient for threshold computation when method is 'mad'.
+    th_amp : float, optional
+        Amplitude threshold when method is 'fixed'.
+    fuse : bool, optional
+        Flag indicating whether to detect motion artifacts by channel or globally.
+    **kwargs : dict, optional
+        Additional keyword arguments.
+
+    """
+
     def __init__(self, win_len=1, win_mask=1, method='iqr',
                  iqr=1.5,
                  th_std = None, th_std_coeff=None, 
@@ -120,9 +143,30 @@ class DetectMA(_Algorithm):
         
         
 class MARA(_Algorithm):
-    '''
-    F Scholkmann et al 2010 Physiol. Meas. 31 649
-    '''
+    """
+    This class implements the MARA algorithm, which is used for signal processing based on the method described in the paper "F Scholkmann et al 2010 Physiol. Meas. 31 649".
+
+    MARA performs the following steps on a given signal:
+
+    1. Identifies segments with periodic or oscillatory motion.
+    2. Divides the signal into segments with motion (bad segments) and segments without motion (good segments).
+    3. Performs spline interpolation on each bad segment and subtracts the interpolated values from the original signal.
+    4. Reconstructs the signal by combining the good and corrected segments.
+
+    Parameters
+    ----------
+    MA : xarray.core.dataarray.DataArray
+        Motion artifact (MA) signal.
+    
+    Note
+    ----
+    This implementation requires the "csaps" package for spline interpolation.
+
+    References
+    ----------
+    - F. Scholkmann et al. "How to detect and reduce movement artifacts in near-infrared imaging using moving standard deviation and spline interpolation." Physiological Measurement, 2010.
+    """
+
     def __init__(self, MA, **kwargs):
         _Algorithm.__init__(self, MA=MA, **kwargs)
         self.dimensions = {'time' : 0}
@@ -201,9 +245,34 @@ class MARA(_Algorithm):
     
 class WaveletFilter(_Algorithm):
     """
-    See Molavi 2012
+    WaveletFilter is a class that performs wavelet filtering on a given signal.
 
-    """    
+    This class applies a wavelet filter based on the algorithm described in Molavi 2012.
+
+    Parameters
+    ----------
+    iqr : float, optional
+        The interquartile range factor used for outlier filtering. Default is 1.5.
+    **kwargs : dict, optional
+        Additional keyword arguments to be passed to the parent class.
+
+    Attributes
+    ----------
+    dimensions : dict
+        A dictionary specifying the dimensions of the signal. Default is {'time': 0}.
+
+    Methods
+    -------
+    _normalization_noise(y)
+        Normalizes the input signal by mean absolute deviation.
+
+    algorithm(signal)
+        Applies the wavelet filtering algorithm to the given signal.
+
+    References
+    ----------
+
+    """ 
     def __init__(self, iqr=1.5, **kwargs):
         _Algorithm.__init__(self, iqr=iqr, **kwargs)
         self.dimensions = {'time' : 0}

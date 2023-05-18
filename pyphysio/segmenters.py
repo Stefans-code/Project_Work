@@ -4,33 +4,97 @@ import xarray as _xr
 
 class _Segment(object):
     """
-    Base Segment, a time begin-end pair with a reference to the base signal and a name.
+    Represents a segment of data defined by a begin and end time.
+
+    Parameters:
+        begin (float): The begin time of the segment.
+        end (float): The end time of the segment.
+        label (optional): The label associated with the segment. Defaults to None.
+        signal (optional): The signal associated with the segment. Defaults to None.
+
+    Attributes:
+        _begin (float): The begin time of the segment.
+        _end (float): The end time of the segment.
+        _label: The label associated with the segment.
+    
+    Methods:
+        get_begin_time():
+            Returns the begin time of the segment.
+
+        get_end_time():
+            Returns the end time of the segment.
+
+        get_label():
+            Returns the label associated with the segment.
+
+        __call__(data=None):
+            Returns a segment of data based on the begin and end times.
+
+        __repr__():
+            Returns a string representation of the segment object.
     """
 
     def __init__(self, begin, end, label=None, signal=None):
         """
-        Creates a base Window
-        @param begin: Begin sample index
-        @param end: End sample index
+        Initialize a _Segment object with the specified begin and end times.
+
+        Parameters:
+            begin (float): The begin time of the segment.
+            end (float): The end time of the segment.
+            label (optional): The label associated with the segment. Defaults to None.
+            signal (optional): The signal associated with the segment. Defaults to None.
         """
         self._begin = begin
         self._end = end
         self._label = label
 
     def get_begin_time(self):
+        """
+        Returns the begin time of the segment.
+
+        Returns:
+            float: The begin time of the segment.
+        """
         return self._begin
 
     def get_end_time(self):
+        """
+        Returns the end time of the segment.
+
+        Returns:
+            float: The end time of the segment.
+        """
         return self._end
 
     def get_label(self):
+        """
+        Returns the label associated with the segment.
+
+        Returns:
+            float: The label associated with the segment.
+        """
         return float(self._label)
 
     def __call__(self, data=None):
+        """
+        Returns a segment of data based on the begin and end times.
+
+        Parameters:
+            data (optional): The data to segment. Defaults to None.
+
+        Returns:
+            object: A segment of data defined by the begin and end times.
+        """
         data_segment = data.p.segment_time(self.get_begin_time(), self.get_end_time())
         return data_segment
 
     def __repr__(self):
+        """
+        Returns a string representation of the segment object.
+
+        Returns:
+            str: A string representation of the segment object.
+        """
         return '[%s:%s' % (str(self.get_begin_time()), str(self.get_end_time())) + (
             ":%s]" % self._label if self._label is not None else "]")
 
@@ -128,32 +192,37 @@ class _Segmenter(object):
 
 class FixedSegments(_Segmenter):
     """
-    Fixed length segments iterator, specifying step and width in seconds.
+    Segmenter that divides a signal into fixed-width segments.
 
-    A label signal from which to
-    take labels can be specified.
+    This class is a subclass of `_Segmenter` and implements a segmentation algorithm
+    that divides a signal into fixed-width segments. The width of the segments is
+    determined by the `width` parameter, or if not specified, it is set equal to the
+    `step` parameter. The `step` parameter determines the distance between the
+    starting points of consecutive segments.
 
     Parameters
     ----------
-    step : float, >0
-        time distance between subsequent segments.
-
-    Optional parameters
-    -------------------
-    width : float, >0, default=step
-        time distance between subsequent segments.
-    start : float
-        start time of the first segment
-    labels : array
-        Signal of the labels
-    drop_mixed : bool, default=True
-        In case labels is specified, whether to drop segments with more than one label, if False the label of such
-         segments is set to None.
-    drop_cut : bool, default=True
-        Whether to drop segments that are shorter due to the crossing of the signal end.
+    step : float
+        The distance between the starting points of consecutive segments.
+        Must be greater than 0.
+    width : float, optional
+        The width of each segment. If not specified, it is set equal to `step`.
+        Must be greater than 0 if provided.
+    timeline : signal, optional
+        The signal used to obtain the information about the timeline of the experiment. 
+        If not provided, the reference timeline of the
+        `_Segmenter` base class will be used.
+    drop_mixed : bool, optional
+        Whether to drop segments that contain mixed annotations.
+        Default is True.
+    drop_cut : bool, optional
+        Whether to drop segments that have been manually cut by a user.
+        Default is True.
+    **kwargs : dict
+        Additional keyword arguments to be passed to the base `_Segmenter` class.
     """
 
-    def __init__(self, step, width=None, timeline=None, drop_mixed=True, drop_cut=False, **kwargs):
+    def __init__(self, step, width=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
         super(FixedSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         assert step > 0
         assert width is None or width > 0
@@ -177,27 +246,34 @@ class FixedSegments(_Segmenter):
 
 class CustomSegments(_Segmenter):
     """
-    Custom segments iterator, specifying an array of begin times and an array of end times.
+    A class for segmenting data based on custom segment boundaries.
+
+    This class extends the `_Segmenter` base class and allows segmentation of data based on specified segment boundaries.
+    Each segment is defined by a beginning and an end index.
 
     Parameters
     ----------
-    begins : array or list
-        Array of the begin times of the segments to return.
-    ends : array or list
-        Array of the end times of the segments to return, of the same length of 'begins'.
+    begins : list
+        A list of integers representing the beginning indices of each segment.
+    ends : list
+        A list of integers representing the end indices of each segment.
+    timeline : list, optional
+        A list of labels for each segment. If provided, should have the same length as begins and ends.
+    drop_mixed : bool, optional
+        A boolean value indicating whether to drop mixed segments. Default is True.
+    drop_cut : bool, optional
+        A boolean value indicating whether to drop cut segments. Default is True.
+    **kwargs
+        Additional keyword arguments to be passed to the base class constructor.
 
-    Optional parameters
-    -------------------
-    labels : array or list
-        Signal of the labels
-    drop_mixed : bool, default=True
-        In case labels is specified, weather to drop segments with more than one label, if False the label of such
-         segments is set to None.
-    drop_cut : bool, default=True
-        Weather to drop segments that are shorter due to the crossing of the signal end.
+    Raises
+    ------
+    AssertionError
+        If the length of begins is not equal to the length of ends.
+
     """
 
-    def __init__(self, begins, ends, timeline=None, drop_mixed=True, drop_cut=False, **kwargs):
+    def __init__(self, begins, ends, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
         #TODO: timeline can also be a list with labels of each segment
         super(CustomSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         
@@ -217,23 +293,21 @@ class CustomSegments(_Segmenter):
 
 class LabelSegments(_Segmenter):
     """
-    Generates a list of segments from a label signal, allowing to collapse subsequent equal samples.
+    Segmenter class for creating custom segments frmo a signal.
 
     Parameters
     ----------
-    labels : array or list
-        Signal of the labels
+    timeline : signal
+        A signal that represents the experimental timeline.
+    drop_mixed : bool, optional
+        Whether to drop segments with mixed values. Defaults to True.
+    drop_cut : bool, optional
+        Whether to drop segments that have been cut by previous segmenters. Defaults to True.
+    **kwargs
+        Additional keyword arguments to be passed to the base class.
 
-    Optional parameters
-    -------------------
-    drop_mixed : bool, default=True
-        In case labels is specified, weather to drop segments with more than one label, if False the label of such
-         segments is set to None.
-    drop_cut : bool, default=True
-        Weather to drop segments that are shorter due to the crossing of the signal end.
     """
-
-    def __init__(self, timeline, drop_mixed=True, drop_cut=False, **kwargs):
+    def __init__(self, timeline, drop_mixed=True, drop_cut=True, **kwargs):
         super(LabelSegments, self).__init__(timeline=timeline, drop_mixed=drop_mixed, drop_cut=drop_cut, **kwargs)
         self._i = 0
         
@@ -253,27 +327,31 @@ class LabelSegments(_Segmenter):
 
 class RandomFixedSegments(_Segmenter):
     """
-    Fixed length segments iterator, at random start timestamps, specifying step and width in seconds.
+    A class that generates random fixed-width segments from a reference signal or a timeline.
 
-    A label signal from which to
-    take labels can be specified.
-
-    Parameters
-    ----------
-    width : float, >0
-        time distance between subsequent segments.
-    N : int, >0
-        number of segments to be extracted.
-
-    Optional parameters
-    -------------------
-    labels : array
-        Signal of the labels
+    Parameters:
+    -----------
+    N : int
+        The number of segments to generate.
+    width : float
+        The width of each segment in time units.
+    reference : signal, optional
+        The reference signal from which to generate segments. Either `reference` or `timeline` should be provided.
+    timeline : signal, optional
+        A signal that represents the experimental timeline. Either `reference` or `timeline` should be provided.
     drop_mixed : bool, default=True
-        In case labels is specified, whether to drop segments with more than one label, if False the label of such
-         segments is set to None.
+        Specifies whether to drop mixed segments that overlap with multiple labels.
     drop_cut : bool, default=True
-        Whether to drop segments that are shorter due to the crossing of the signal end.
+        Specifies whether to drop cut segments that overlap with cut annotations.
+    **kwargs : dict, optional
+        Additional keyword arguments to be passed to the base `_Segmenter` class.
+
+    Raises:
+    -------
+    AssertionError:
+        - If `N` is not greater than 0.
+        - If `width` is not greater than 0.
+        - If neither `reference` nor `timeline` is provided.
     """
 
     def __init__(self, N, width, reference=None, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
@@ -313,7 +391,50 @@ class RandomFixedSegments(_Segmenter):
             raise StopIteration()
             
 def fmap(segmenter, algorithms, signal):
-   
+    """
+    Apply a series of algorithms to segments of a signal using a segmenter.
+
+    Parameters
+    ----------
+    segmenter : Segmenter object
+        An object responsible for segmenting the signal into segments.
+        It should have a `reference` attribute that indicates whether the
+        segmenter has been initialized or not. If `reference` is None,
+        the segmenter will be applied to the signal to generate segments.
+        The segmenter should support iteration, where each iteration
+        generates a segment of the signal.
+
+    algorithms : list
+        A list of algorithm objects to be applied to each segment of the signal.
+        Each algorithm should have a callable `__call__` method that takes
+        a signal segment as input and returns a result.
+
+    signal : Signal object
+        The input signal to be segmented and processed.
+
+    Returns
+    -------
+    result : xarray Dataset
+        A merged xarray Dataset containing the results of applying the algorithms
+        to the segments of the signal. Each algorithm's results are stored as
+        separate variables in the Dataset. The time dimension is defined by the
+        segments, and each segment is labeled with a unique identifier.
+
+    Notes
+    -----
+    This function applies a series of algorithms to segments of a signal. It
+    first checks if the segmenter has been initialized by examining the
+    `reference` attribute. If `reference` is None, the segmenter is applied
+    to the signal to generate segments.
+
+    For each algorithm and segment combination, the function applies the algorithm
+    to the corresponding segment of the signal. The resulting xarray Dataset
+    is modified to remove the original signal variable, drop NaN values along
+    the time dimension, assign segment labels, and store the result in a list.
+
+    Finally, the function merges the results of all algorithms into a single
+    xarray Dataset and returns it.
+    """
     if segmenter.reference is None:
         segmenter(signal)
     

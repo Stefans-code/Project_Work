@@ -31,27 +31,26 @@ signal = flt.ConvolutionalFilter('rect', 2)(signal)
 #%%
 fsamp = 8
 signal = signal.p.resample(fsamp)
-driver = eda_tools.DriverEstim(t1=0.25, t2=10)(signal)
-
-driver = flt.ConvolutionalFilter('rect', 1, normalize=True)(driver)
 # driver.p.plot()
 
-# driver_.p.plot()
+#%%
+driver = eda_tools.DriverEstim(t1=0.75, t2=2, optim=True, amplitude=0.01)(signal)
+driver = flt.ConvolutionalFilter('rect', 1, normalize=True)(driver)
 
 #%%
 # driver.p.segment_time(5, 7).p.plot('.')
-phasic = eda_tools.PhasicEstim(1, win_pre=2, win_post=2)(driver)#.p.segment_time(5, 7))
+phasic = eda_tools.PhasicEstim(0.01, win_pre=5, win_post=5, polyfit=True)(driver)#.p.segment_time(5, 7))
 
 # phasic.p.plot('.')
 
 #%%
-tonic = eda_tools.PhasicEstim(1, win_pre=2, win_post=2, return_phasic=False)(driver)
+tonic = eda_tools.PhasicEstim(0.01, win_pre=2, win_post=2, polyfit=True, return_phasic=False)(driver)
 
 #%%
-# driver.p.plot()
-# tonic.p.plot()
-# phasic.p.plot()
-# plt.show()
+driver.p.plot()
+tonic.p.plot()
+phasic.p.plot()
+plt.show()
 
 
 #%%

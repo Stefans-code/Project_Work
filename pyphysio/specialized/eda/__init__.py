@@ -1,4 +1,5 @@
 import numpy as _np
+import scipy.optimize as _opt
 from ... import create_signal
 from ..._base_algorithm import _Algorithm
 # from ...signal import create_signal
@@ -8,6 +9,31 @@ from ...utils import PeakDetection as _PeakDetection, PeakSelection as _PeakSele
 
 from ._presets import *
 
+
+def optimize_T1_T2(signal, amplitude):
+
+    def loss(pars):
+        t1 = pars[0]
+        t2 = pars[1]
+        driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal)
+        driver = _ConvolutionalFilter('rect', 1, normalize=True)(driver)
+        tonic = PhasicEstim(amplitude, win_pre=5, win_post=5, polyfit=True, return_phasic=False)(driver)
+        
+        driver_val = driver.p.get_values().ravel()
+        tonic_val = tonic.p.get_values().ravel()
+        
+        driver_f_neg = driver_val - tonic_val
+        driver_f_neg[driver_f_neg>0] = 0
+        loss_out = -_np.nansum(driver_f_neg)
+        # print(loss_out)
+        return(loss_out)
+
+
+    # res = opt.brute(loss, ranges=[(0.1, 0.99), (1, 10)], Ns=50, full_output=True)
+    res = _opt.differential_evolution(loss, bounds=[(0.5, 0.9), (1, 10)], polish=True, x0=(0.75, 5))
+    print(res)
+    return(res)
+    
 # PHASIC ESTIMATION
 class DriverEstim(_Algorithm):
     """
@@ -37,16 +63,25 @@ class DriverEstim(_Algorithm):
     """
     #TODO: add citation
 
-    def __init__(self, t1=.75, t2=2, rescale_driver=True):
+    def __init__(self, t1=.75, t2=2, optim=False, amplitude=0.01, rescale_driver=True):
         assert t1 > 0, "t1 value has to be positive"
         assert t2 > 0, "t2 value has to be positive"
-        _Algorithm.__init__(self, t1=t1, t2=t2, rescale=rescale_driver)
+        _Algorithm.__init__(self, t1=t1, t2=t2, optim=optim, amplitude=amplitude, rescale=rescale_driver)
         self.dimensions = {'time': 0}
-
+        
     def algorithm(self, signal):
+        optim = self._params['optim']
+        if optim:
+            amplitude = self._params['amplitude']
+            pars = optimize_T1_T2(signal, amplitude)
+            self._params['t1'] = pars['x'][0]
+            self._params['t2'] = pars['x'][1]
+            
         fsamp = signal.p.get_sampling_freq()
         bateman = self._gen_bateman(fsamp)
         rescale = self._params['rescale']
+        
+            
         driver = _DeConvolutionalFilter(irf=bateman, normalize=False, deconv_method='fft')(signal)
 
         driver_values = driver.p.get_values()
@@ -124,11 +159,11 @@ class PhasicEstim(_Algorithm):
     """
     #TODO: add citation
 
-    def __init__(self, amplitude=0.01, win_pre=2, win_post=2, return_phasic=True):
+    def __init__(self, amplitude=0.01, win_pre=2, win_post=2, polyfit=True, return_phasic=True):
         assert amplitude > 0, "Amplitude value has to be positive"
         assert win_pre > 0,  "Window pre peak value has to be positive"
         assert win_post > 0, "Window post peak value has to be positive"
-        _Algorithm.__init__(self, amplitude=amplitude, win_pre=win_pre, win_post=win_post, return_phasic=return_phasic)
+        _Algorithm.__init__(self, amplitude=amplitude, win_pre=win_pre, win_post=win_post, polyfit=polyfit, return_phasic=return_phasic)
         self.dimensions = {'time': 0}
 
     def algorithm(self, signal):
@@ -137,6 +172,7 @@ class PhasicEstim(_Algorithm):
         # grid_size = params["grid_size"]
         win_pre = params['win_pre']
         win_post = params['win_post']
+        polyfit = params['polyfit']
         return_phasic = params['return_phasic']
 
         fsamp = signal.p.get_sampling_freq()
@@ -163,6 +199,11 @@ class PhasicEstim(_Algorithm):
         
         tonic_interp = signal_values[idx_tonic]
 
+        if polyfit:
+            z = _np.polyfit(_np.arange(len(tonic_interp)), tonic_interp, 10)
+            p = _np.poly1d(z)
+            tonic_interp = p(_np.arange(len(tonic_interp)))
+            
         tonic = create_signal(tonic_interp, times = idx_tonic/fsamp + signal.p.get_start_time())
         tonic = tonic.interp({'time': signal.p.get_times()}, 'cubic')
         tonic_values = tonic.p.get_values().ravel()

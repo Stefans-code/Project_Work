@@ -210,11 +210,15 @@ def _OD2Conc(nirs, SD, channel, ppf=[6,6]):
     srcPos = SD['SrcPos']
     detPos = SD['DetPos']
     
-    SDkey = SD['SDkey']
-    src_idx = SDkey[:,0]
-    det_idx = SDkey[:,1]
+    if 'Channels' in SD:
+        rho = SD['Channels'][channel, 3]
+    else:
+        SDkey = SD['SDkey']
+        src_idx = SDkey[channel,0]
+        det_idx = SDkey[channel,1]
         
-    rho = _np.linalg.norm(srcPos[src_idx,:] - detPos[det_idx,:])
+        rho = _np.linalg.norm(srcPos[src_idx,:] - detPos[det_idx,:])
+
     current_dod = _np.stack([nirs[:,0, 0], nirs[:,0,1]], axis=1)
     concentration[:,0,:] =  _np.dot(einv, ( current_dod / (rho*ppf)).T).T
 

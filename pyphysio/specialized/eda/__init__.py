@@ -4,7 +4,7 @@ from ... import create_signal
 from ..._base_algorithm import _Algorithm
 # from ...signal import create_signal
 from ...filters import DeConvolutionalFilter as _DeConvolutionalFilter, \
-    ConvolutionalFilter as _ConvolutionalFilter
+    ConvolutionalFilter as _ConvolutionalFilter, IIRFilter as _IIRFilter
 from ...utils import PeakDetection as _PeakDetection, PeakSelection as _PeakSelection
 
 from ._presets import *
@@ -16,22 +16,29 @@ def optimize_T1_T2(signal, amplitude):
         t1 = pars[0]
         t2 = pars[1]
         driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal)
-        driver = _ConvolutionalFilter('rect', 1, normalize=True)(driver)
-        tonic = PhasicEstim(amplitude, win_pre=5, win_post=5, polyfit=True, return_phasic=False)(driver)
+        # driver = _ConvolutionalFilter('rect', 30, normalize=True)(driver)
+        driver = _IIRFilter(0.01, btype='lowpass', order=5)(driver)
         
-        driver_val = driver.p.get_values().ravel()
-        tonic_val = tonic.p.get_values().ravel()
+        driver_v = driver.p.get_values().ravel()
+        # z = _np.polyfit(_np.arange(len(driver_v)), driver_v, 5)
+        # p = _np.poly1d(z)
+        # driver_v_interp = p(_np.arange(len(driver_v)))
         
-        driver_f_neg = driver_val - tonic_val
-        driver_f_neg[driver_f_neg>0] = 0
-        loss_out = -_np.nansum(driver_f_neg)
+        # tonic = PhasicEstim(amplitude, win_pre=5, win_post=5, polyfit=True, return_phasic=False)(driver)
+        
+        # driver_val = driver.p.get_values().ravel()
+        # tonic_val = tonic.p.get_values().ravel()
+        
+        # driver_f_neg = driver_v - driver_v_interp
+        # driver_f_neg[driver_f_neg>0] = 0
+        loss_out = _np.nansum(abs(_np.diff(driver_v)))
         # print(loss_out)
         return(loss_out)
 
-
     # res = opt.brute(loss, ranges=[(0.1, 0.99), (1, 10)], Ns=50, full_output=True)
-    res = _opt.differential_evolution(loss, bounds=[(0.5, 0.9), (1, 10)], polish=True, x0=(0.75, 5))
-    print(res)
+    res = _opt.differential_evolution(loss, bounds=[(0.1, 0.99), (1, 30)], maxiter=500,
+                                      polish=True, x0=(0.5, 15))
+    # print(res)
     return(res)
     
 # PHASIC ESTIMATION

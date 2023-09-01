@@ -4,7 +4,7 @@ from copy import deepcopy as copy
 from .filters import IIRFilter as _IIRFilter, Normalize as _Normalize
 import pywt
 from scipy.stats import median_abs_deviation as _mad, iqr as _iqr
-
+from statsmodels.tsa.ar_model import AutoReg as _AutoReg
 #TODO: There could be three types of classes:
 # - DetectNAME (to detect artefacts), 
 # - CorrectNAME (to correct detected artefacts), and
@@ -55,13 +55,13 @@ class DetectMA(_Algorithm):
         _Algorithm.__init__(self, win_len=win_len, win_mask=win_mask,
                             method=method, iqr=iqr,
                             th_std=th_std, th_std_coeff=th_std_coeff, 
-                            th_amp=th_amp, **kwargs)
+                            th_amp=th_amp, fuse=fuse, **kwargs)
         
         #IDEA for the MA detection, we can do that by channel or globally
         #(using fused channels)
         #and adapt the behaviour of the algorithm on the different dimensions:
         if fuse:
-            self.dimensions = {'time' : 0, 'channels':1, 'components':1}
+            self.dimensions = {'time' : 0, 'channel':1, 'component':1}
         else:
             self.dimensions = {'time' : 0}
    
@@ -76,11 +76,16 @@ class DetectMA(_Algorithm):
         th_amp = params['th_amp']
         iqr = params['iqr']
         
+        fuse = params['fuse']
+        
         fsamp = signal.p.get_sampling_freq()
                 
         signal_norm = _Normalize()(signal)
-        signal_values = signal_norm.values.ravel()
-        
+        signal_values = signal_norm.values
+        if fuse:
+            signal_values = _np.mean(_np.mean(signal_values, axis=1), axis=1)
+        else:
+            signal_values = signal_values.ravel()
         
         # compute moving standard deviation (MSD) and range (AMP)
         idx_len = int(win_len*fsamp)
@@ -141,6 +146,90 @@ class DetectMA(_Algorithm):
         signal_out[idx_MA] = 1
         return(signal_out)
         
+class DetectMA_AR(_Algorithm):
+    """
+    Motion Artifact Detection Algorithm based on AR models
+
+    Parameters
+    ----------
+    order : int, default 0
+        Order of the AR model. 
+        Set order = 0  to use the order that minimizes the BIC.
+    th_std_coeff : float, optional, default 2
+        Standard deviation threshold when method is 'fixed'.
+    fuse : bool, optional
+        Flag indicating whether to detect motion artifacts by channel or globally.
+    **kwargs : dict, optional
+        Additional keyword arguments.
+
+    """
+
+    def __init__(self, order=0, 
+                 # th_std_coeff=2, 
+                 fuse='none',
+                 **kwargs):
+        
+        _Algorithm.__init__(self, order=order, 
+                            # th_std_coeff=th_std_coeff, 
+                            fuse=fuse, 
+                            **kwargs)
+        
+        if fuse == 'all':
+            self.dimensions = {'time' : 0, 'channel' : 1, 'component' : 1}
+        elif fuse == 'component':
+            self.dimensions = {'time' : 0, 'component' : 1}
+        else:
+            self.dimensions = {'time' : 0}
+            
+   
+    
+    def algorithm(self, signal):
+        params = self._params
+        order = params['order']
+        # th_std_coeff = params['th_std_coeff']
+        fuse = params['fuse']
+        
+        fsamp = signal.p.get_sampling_freq()
+                
+        signal_norm = _Normalize()(signal)
+        signal_values = signal_norm.values
+        
+        if fuse == 'all':
+            signal_values = _np.mean(_np.mean(signal_values, axis=1), axis=1)
+        elif fuse == 'component':
+            signal_values = _np.mean(signal_values, axis=2).ravel()
+        else:
+            signal_values = signal_values.ravel()
+            
+        if order == 0:
+            order = 1
+            BIC = []
+            while order<=30:
+                ar_model = _AutoReg(signal_values, trend='ct', lags=order)
+                res = ar_model.fit()
+                bic = res.bic
+                BIC.append(bic)
+                order +=1
+            order = _np.argmin(BIC) + 1
+            
+        ar_model = _AutoReg(signal_values, trend='ct', lags=order)
+        res = ar_model.fit()
+        
+        resid = res.resid
+        resid = resid - _np.mean(resid)
+        # resid = _np.convolve(_np.ones(fsamp)/fsamp, resid, 'same')
+        
+        signal_out = _np.zeros(len(signal_values))
+        
+        quants = _np.quantile(resid, [.25, .50, .75])
+        IQR = quants[2]-quants[0]
+        th_ = quants[2]+IQR*1.5
+        
+        # idx_MA = _np.where(abs(resid)>th_std_coeff*_np.std(resid))[0] + order
+        idx_MA = _np.where(abs(resid)>th_)[0] + order
+        # print(th_std_coeff*_np.std(resid), th_)
+        signal_out[idx_MA] = 1
+        return(signal_out)
         
 class MARA(_Algorithm):
     """
@@ -181,13 +270,12 @@ class MARA(_Algorithm):
         MA = params['MA']
         
         ch = signal.channel.values[0]
-        cp = signal.component.values[0]
+        cp = 0#signal.component.values[0]
         MA_signal = MA.isel(channel=[ch], component=[cp])
         MA_signal_values = MA_signal.p.main_signal.values.ravel()
         MA_signal_diff = _np.diff(MA_signal_values)
         idx_st = _np.where(MA_signal_diff > 0)[0]
         idx_sp = _np.where(MA_signal_diff < 0)[0]
-        
         #manage special cases with MA at beginning or end
         #TODO: check
         if len(idx_sp)>0:
@@ -204,11 +292,10 @@ class MARA(_Algorithm):
         x_bad = []
         idx_start = 0
         for id_MA, (idx_st_MA, idx_sp_MA) in enumerate(zip(idx_st,idx_sp)):
-            # if (idx_sp_MA - idx_st_MA) < 2:
-            #     plt.plot(signal.values.ravel())
-            x_good.append(signal_values[idx_start: idx_st_MA])
-            x_bad.append(signal_values[idx_st_MA : idx_sp_MA])
-            idx_start = idx_sp_MA
+            if (idx_sp_MA - idx_st_MA) > 2:
+                x_good.append(signal_values[idx_start: idx_st_MA])
+                x_bad.append(signal_values[idx_st_MA : idx_sp_MA])
+                idx_start = idx_sp_MA
         x_good.append(signal_values[idx_start:])
         
         # 4 spline interpolation (X_MA_s) of each segment in X_MA
@@ -240,7 +327,6 @@ class MARA(_Algorithm):
                 x_prev_mean = _np.mean(x_segment_demean[-n_samples:])
                 
         x = _np.concatenate(x_reconstructed, axis=0)
-
         return(x)
     
 class WaveletFilter(_Algorithm):

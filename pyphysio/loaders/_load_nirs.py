@@ -32,9 +32,116 @@ stim = ph.EvenlySignal(stim, sampling_freq=fsamp, start_time = 0)
 nirs = nirs.assign_coords(stim=('time', stim))
 '''    
 
+def load_xrnirs(file):
+    nirs = _xr.load_dataset(file)
+    attrs = nirs.p.main_signal.attrs
+    todel=[]
+    for k in attrs.keys():
+        if k.endswith('_shape'):
+            attr_name = k.split('_shape')[0]
+            attr_numpy = attrs[attr_name]
+            attr_numpy = attr_numpy.reshape(attrs[k])
+            attrs[attr_name] = attr_numpy
+            todel.append(k)
+    for k in todel:
+        del attrs[k]
+    
+    nirs.p.main_signal.attrs = attrs
+    nirs.attrs['history'] = [nirs.attrs['history']]
+    return(nirs)
+
+def SDto1darray(nirs):
+    for k in nirs.keys():
+        SD = nirs[k].p.main_signal.attrs
+        for attribute in ['SDkey', 'SDmask', 
+                          'SrcPos', 'SrcPos2D', 
+                          'DetPos', 'DetPos2D', 
+                          'ChnPos', 'ChnPos2D',
+                          'Channels']:
+            if attribute in SD.keys():
+                attr_np = _np.array(SD[attribute])
+                attr_shape = attr_np.shape
+                attr_np = attr_np.ravel()
+                SD[attribute] = attr_np
+                SD[f'{attribute}_shape'] = attr_shape
+        nirs[k].p.main_signal.attrs = SD
+        
+    return(nirs)
+
+def load_snirf(datafile):
+    from snirf import Snirf
+    
+    snirf = Snirf(datafile, 'r+')
+
+    nirs = snirf.nirs[0]
+    data = nirs.data[0]
+    probe = nirs.probe
+
+    nirs_values = data.dataTimeSeries
+    n_ch = nirs_values.shape[1]//2
+    
+    nirs_out = _np.zeros(shape=(nirs_values.shape[0], n_ch, 2))
+    nirs_out[:,:,0] = nirs_values[:, :n_ch]
+    nirs_out[:,:,1] = nirs_values[:, n_ch:]
+
+    time = data.time
+    fsamp = 1/(time[1] - time[0])
+
+    SD = {}
+    SD['SpatialUnit'] = 'cm' #TODO; check
+    
+    SD['Lambda'] = probe.wavelengths
+    
+    info_channels = []
+    for i_ch in range(n_ch):
+        idx_src = data.measurementList[i_ch].sourceIndex - 1
+        idx_det = data.measurementList[i_ch].detectorIndex - 1
+        
+        srcPos = probe.sourcePos3D[idx_src]/10
+        srcPos2D = probe.sourcePos2D[idx_src]/10
+    
+        detPos = probe.detectorPos3D[idx_det]/10
+        detPos2D = probe.detectorPos2D[idx_det]/10
+        
+        # chnPos = (srcPos + detPos) /2
+        # chnPos2D = (srcPos2D + detPos2D) /2
+        
+        distance = _np.linalg.norm(srcPos - detPos)
+        distance2D = _np.linalg.norm(srcPos2D - detPos2D)
+        
+        # ch_dict = {'id': i_ch,
+        #            'source_id': idx_src, 'detector_id': idx_det,
+        #            'srcPos': srcPos, 'srcPos2D': srcPos2D,
+        #            'detPos': detPos, 'detPos2D': detPos2D,
+        #            'chnPos': chnPos, 'chnPos2D': chnPos2D,
+        #            'distance': distance, 'distance2D': distance2D}
+        
+        ch_dict = [i_ch, idx_src, idx_det, distance, distance2D]
+        
+        info_channels.append(ch_dict)
+    
+    info_channels = _np.array(info_channels)
+    SD['Channels'] = info_channels
+    SD['SpatialUnit'] = 'cm' #TODO; check
+    SD['Lambda'] = probe.wavelengths
+    SD['SrcPos'] = probe.sourcePos3D/10
+    SD['SrcPos2D'] = probe.sourcePos2D/10
+    
+    SD['DetPos'] = probe.detectorPos3D/10
+    SD['DetPos2D'] = probe.detectorPos2D/10
+    
+    nirs = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
+    return(nirs)
+        
+
 def load_nirx2(DATADIR):
     filelist = os.listdir(DATADIR)
     
+    idx_snirf = _np.where([x.endswith('snirf') for x in filelist])[0]
+    if len(idx_snirf) == 1:
+        FILE_SNIRF = filelist[idx_snirf[0]]
+        return(load_snirf(f'{DATADIR}/{FILE_SNIRF}'))
+               
     # LOAD HDR
     idx_hdr = _np.where([x.endswith('hdr') for x in filelist])[0][0]
     FILE_HDR = filelist[idx_hdr]
@@ -69,102 +176,43 @@ def load_nirx2(DATADIR):
     SD['SDmask'] = content_dict['Channel Mask']
     SD['SDkey'] = _np.array(content_dict['Channel indices'])
     
-    idx_snirf = _np.where([x.endswith('snirf') for x in filelist])[0]
-    
-    if len(idx_snirf) == 1:
-        SD['SpatialUnit'] = 'cm' #TODO; check
-        FILE_SNIRF = filelist[idx_snirf[0]]
-    
-        # LOAD snirf
-        f = _h5py.File(f'{DATADIR}/{FILE_SNIRF}', 'r')
-    
-        # formatVersion = f['formatVersion'][()][0]
-        nirs_data = f['nirs']['data1']['dataTimeSeries'][()]
-        
-        n_channels = int(nirs_data.shape[1] / 2)
-        nirs_data_out = []
-        for i in range(n_channels):
-            ch_data = nirs_data[:, [i, i+n_channels]]
-            # ch_data = ch_data[:, _np.newaxis, :]
-            nirs_data_out.append(ch_data)
-        
-        nirs_data = _np.stack(nirs_data_out, 1)
-        time = f['nirs']['data1']['time'][()]
-        fsamp = 1/(time[1] - time[0])
-        
-        nirs_probe_metadata = {}
-        for k in f['nirs']['probe'].keys():
-            nirs_probe_metadata[k] = f['nirs']['probe'][k][()]
-            
-        SD['Lambda'] = nirs_probe_metadata['wavelengths']
-        SD['SrcPos'] = nirs_probe_metadata['sourcePos3D']/10
-        SD['SrcPos2D'] = nirs_probe_metadata['sourcePos2D']/10
-        
-        SD['DetPos'] = nirs_probe_metadata['detectorPos3D']/10
-        SD['DetPos2D'] = nirs_probe_metadata['detectorPos2D']/10
-        
-        SD['ChnPos'] = _np.array(compute_channelsPos(SD['SDkey'],
-                                                     SD['SrcPos'], 
-                                                     SD['DetPos']))
-        
-        SD['ChnPos2D'] = _np.array(compute_channelsPos(SD['SDkey'],
-                                                       SD['SrcPos2D'], 
-                                                       SD['DetPos2D']))
-    else:
-        SD['SpatialUnit'] = 'cm' #TODO; check
-        n_channels = 2
-        Lambda = [760., 850.]
-        SD['Lambda'] = Lambda #
-        SD['SrcPos'] = None
-        SD['SrcPos2D'] = None
-        
-        SD['DetPos'] = None
-        SD['DetPos2D'] = None
-        
-        SD['ChnPos'] = None
-        
-        SD['ChnPos2D'] = None
 
-        fsamp = float(content_dict['Sampling rate'][0])
+    SD['SpatialUnit'] = 'cm' #TODO; check
+    n_channels = 2
+    Lambda = [760., 850.]
+    SD['Lambda'] = Lambda #
+    SD['SrcPos'] = None
+    SD['SrcPos2D'] = None
+    
+    SD['DetPos'] = None
+    SD['DetPos2D'] = None
+    
+    SD['ChnPos'] = None
+    
+    SD['ChnPos2D'] = None
 
-        nirs_data = []
-        for i_wl in range(len(Lambda)):
-            idx_data = _np.where([x.endswith(f'wl{i_wl+1}') for x in filelist])[0][0]
-            FILE_DATA  = filelist[idx_data]
-            data_ = _np.loadtxt(f'{DATADIR}/{FILE_DATA}')
-            nirs_data.append(data_)
-        
-        nirs_data = _np.stack(nirs_data, axis=2)
-        
-        idx_pi = _np.where([x.endswith('probeInfo.mat') for x in filelist])[0][0]
-        FILE_PI = filelist[idx_pi]
-        
-        srcPos, detPos = load_probeInfo(f'{DATADIR}/{FILE_PI}')
-        
-        SD['SrcPos'] = srcPos
-        SD['DetPos'] = detPos
-        
-        ChnPos = _np.array(compute_channelsPos(SD['SDkey'], SD['SrcPos'], SD['DetPos']))
-        SD['ChnPos'] = ChnPos
+    fsamp = float(content_dict['Sampling rate'][0])
+
+    nirs_data = []
+    for i_wl in range(len(Lambda)):
+        idx_data = _np.where([x.endswith(f'wl{i_wl+1}') for x in filelist])[0][0]
+        FILE_DATA  = filelist[idx_data]
+        data_ = _np.loadtxt(f'{DATADIR}/{FILE_DATA}')
+        nirs_data.append(data_)
     
-    # if full: #no urgent
-    #     ids =[]
-    #     for k in f['nirs']['data1'].keys():
-    #         if k.startswith('measurementList'):
-    #             ids.append(k.split('measurementList')[1])
+    nirs_data = _np.stack(nirs_data, axis=2)
     
-    #     nirs_signal_metadata = {}
-    #     for m in ids:
-    #         d = {}
-    #         for k in f['nirs']['data1'][f'measurementList{m}'].keys():
-    #             d[k] = f['nirs']['data1'][f'measurementList{m}'][k][()]
-    #         nirs_signal_metadata[m] = d
+    idx_pi = _np.where([x.endswith('probeInfo.mat') for x in filelist])[0][0]
+    FILE_PI = filelist[idx_pi]
     
-    #     nirs_acquisition_metadata = {}
+    srcPos, detPos = load_probeInfo(f'{DATADIR}/{FILE_PI}')
     
-    #     for k in f['nirs']['metaDataTags'].keys():
-    #         nirs_acquisition_metadata[k] = f['nirs']['metaDataTags'][k][()][0]
-        
+    SD['SrcPos'] = srcPos
+    SD['DetPos'] = detPos
+    
+    ChnPos = _np.array(compute_channelsPos(SD['SDkey'], SD['SrcPos'], SD['DetPos']))
+    SD['ChnPos'] = ChnPos
+    
     nirs = create_signal(nirs_data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
 
     return(nirs)

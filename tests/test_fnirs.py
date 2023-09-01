@@ -3,9 +3,10 @@ import numpy as _np
 import pyphysio.artefacts as artefacts
 from pyphysio.specialized.fnirs import Raw2Oxy, NegativeCorrelationFilter, SDto1darray
 import pyphysio.filters as filters
-from pynirs.plot_probe import plot_probe
+# from pynirs.plot_probe import plot_probe
 from pyphysio.specialized.fnirs import Raw2Oxy
 
+#%%
 #%
 # nirs = load_nirx('/home/bizzego/UniTn/data/fnirs_sexism/original/F02_2')
 # nirs = nirs.p.process_na('impute')

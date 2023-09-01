@@ -91,16 +91,16 @@ class PeakDetection(_Algorithm): #xarray done
         Array containing values of the minima
     """
 
-    def __init__(self, delta, refractory=0, start_max=True, return_peaks = True):
+    def __init__(self, delta, refractory=0, return_peaks = True):
         delta = _np.array(delta)
         assert delta.ndim <= 1, "Delta value should be 1 or 0-dimensional"
         assert delta.all() > 0, "Delta value/s should be positive"
         assert refractory >= 0, "Refractory value should be non negative"
-        _Algorithm.__init__(self, delta=delta, refractory=refractory, start_max=start_max, return_peaks=return_peaks)
+        _Algorithm.__init__(self, delta=delta, refractory=refractory, return_peaks=return_peaks)
         self.dimensions = {'time' : 0}
 
-    def __finalize__(self, res_sig, arr_windows):
-        return __finalize_special__(res_sig)
+    # def __finalize__(self, res_sig, arr_windows):
+    #     return __finalize_special__(res_sig)
         
     
     def algorithm(self, signal):
@@ -110,73 +110,78 @@ class PeakDetection(_Algorithm): #xarray done
             refractory = 1
         else:  # else transform the refractory from seconds to samples
             refractory = refractory * signal.p.get_sampling_freq()
-        look_for_max = params['start_max']
+        # look_for_max = params['start_max']
         delta = params['delta']
-
         return_peaks = params['return_peaks']
-        minp = []
-        maxp = []
-
-        minv = []
-        maxv = []
+        
+        signal_values = signal.p.get_values().ravel()
+        
+        if return_peaks == False: #looking for valleys
+            signal_values = -signal_values
+            
+        max_idxs = []
+        max_vals = []
 
         scalar = delta.ndim == 0
         if scalar:
             d = delta
-
-        s = signal.values.ravel()
-        if not scalar and len(delta) != len(signal):
-            print("delta vector's length differs from signal's one, returning empty.")
         else:
-            mn_pos_candidate = mx_pos_candidate = 0
-            mn_candidate = mx_candidate = s[0]
-
-            i_activation_min = 0
-            i_activation_max = 0
-
-            for i in range(1, len(s)):
-                sample = s[i]
-                if not scalar:
-                    d = delta[i]
-
-                if sample > mx_candidate:
-                    mx_candidate = sample
-                    mx_pos_candidate = i
-                if sample < mn_candidate:
-                    mn_candidate = sample
-                    mn_pos_candidate = i
-
-                if look_for_max:
-                    if i >= i_activation_max and sample < mx_candidate - d:  # new max
-                        maxp.append(mx_pos_candidate)
-                        maxv.append(mx_candidate)
-                        i_activation_max = i + refractory
-
-                        mn_candidate = sample
-                        mn_pos_candidate = i
-
-                        look_for_max = False
-                else:
-                    if i >= i_activation_min and sample > mn_candidate + d:  # new min
-                        minp.append(mn_pos_candidate)
-                        minv.append(mn_candidate)
-                        i_activation_min = i + refractory
-
-                        mx_candidate = sample
-                        mx_pos_candidate = i
-
-                        look_for_max = True
+            assert len(delta) == len(signal), "delta vector's length differs from signal's one, returning empty."
         
-        out = _np.ones_like(signal.values)*_np.nan
+        
+        mx_candidate_idx = 0
+        mx_candidate_val = signal_values[mx_candidate_idx]
+        i_activation_max = mx_candidate_idx
+
+        mn_candidate_idx = 0
+        mn_candidate_val = signal_values[mn_candidate_idx]
+        
+        look_max = True
+        
+        for i in range(1, len(signal_values)):
+            sample = signal_values[i]
+            if not scalar:
+                d = delta[i]
+
+            #if value is greater, then update the candidate max
+            if sample > mx_candidate_val:
+                mx_candidate_val = sample
+                mx_candidate_idx = i
+            if sample < mn_candidate_val:
+                mn_candidate_val = sample
+                mn_candidate_idx = i
+            
+            #if we are looking for the max,
+            #and we are outside the refractory period,
+            #and current value is lower than (candidate max - d)
+            #we validate the candidate maximum and store it
+            #and we update the candidate minimum
+            if look_max:
+                if i >= i_activation_max and sample < mx_candidate_val - d:  
+                    max_idxs.append(mx_candidate_idx)
+                    max_vals.append(mx_candidate_val)
+                    i_activation_max = i + refractory
+    
+                    mn_candidate_val = sample
+                    mx_candidate_idx = i
+    
+                    look_max = False
+            
+            else: #we are looking for a min
+                if sample > mn_candidate_val + d:  # new min
+                    mx_candidate_val = sample
+                    mx_candidate_idx = i
+
+                    look_max = True
+    
+        out = _np.ones_like(signal_values)*_np.nan
         
         if return_peaks:
-            out[maxp] = signal.values[maxp]
+            out[max_idxs] = _np.array(max_vals)
         else:
-            out[minp] = signal.values[minp]
+            out[max_idxs] = -1*_np.array(max_vals)
         
-        out_xarray = signal.copy(data = out)
-
-        return out_xarray
+        return out
 
 class SignalRange(_Algorithm): #xarray done
     """

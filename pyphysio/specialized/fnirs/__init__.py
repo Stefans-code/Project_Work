@@ -4,48 +4,84 @@ from ..._base_algorithm import _Algorithm
 from ._convert import Raw2Oxy
 from ._dl_sqi import SignalQualityDeepLearning
 import xarray as _xr
+from sklearn.decomposition import PCA as _PCA
+from sklearn.preprocessing import StandardScaler as _StandardScaler
+import statsmodels.api as _sm
 
 from ... import scheduler
 
-def load_xrnirs(file):
-    nirs = _xr.load_dataset(file)
-    attrs = nirs.p.main_signal.attrs
-    todel=[]
-    for k in attrs.keys():
-        if k.endswith('_shape'):
-            attr_name = k.split('_shape')[0]
-            attr_numpy = attrs[attr_name]
-            attr_numpy = attr_numpy.reshape(attrs[k])
-            attrs[attr_name] = attr_numpy
-            todel.append(k)
-    for k in todel:
-        del attrs[k]
-    
-    nirs.p.main_signal.attrs = attrs
-    nirs.attrs['history'] = [nirs.attrs['history']]
-    return(nirs)
-
-def SDto1darray(nirs):
-    for k in nirs.keys():
-        SD = nirs[k].p.main_signal.attrs
-        for attribute in ['SDkey', 'SDmask', 
-                          'SrcPos', 'SrcPos2D', 
-                          'DetPos', 'DetPos2D', 
-                          'ChnPos', 'ChnPos2D']:
-            if attribute in SD.keys():
-                attr_np = _np.array(SD[attribute])
-                attr_shape = attr_np.shape
-                attr_np = attr_np.ravel()
-                SD[attribute] = attr_np
-                SD[f'{attribute}_shape'] = attr_shape
-        nirs[k].p.main_signal.attrs = SD
+import matplotlib.pyplot as plt
+import matplotlib as _mpl
+import matplotlib.cm as _cm
         
-    return(nirs)
+#%%
+def plot_probe(nirs, values=None):
+    if values is not None:
+        norm = _mpl.colors.Normalize(vmin=_np.min(values), 
+                                     vmax=_np.max(values))
+        cmap = plt.get_cmap('bwr')
+        m = _cm.ScalarMappable(norm=norm, cmap=cmap)
 
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.axis('equal')
+ 
+    for idx_ch in nirs.channel.values:
+        ch_pos = get_ch_pos(nirs, idx_ch)
+        
+        ax.text(ch_pos[0], ch_pos[1], ch_pos[2], idx_ch, color='k', fontsize=14)
+        if values is not None:
+            color = m.to_rgba(values[idx_ch])
+        else:
+            color = 'y'
+        ax.scatter(ch_pos[0], ch_pos[1], ch_pos[2], color=color, marker='o')
+   
+    plt.show()
 
+#%%
+def get_ss_ls_channels(nirs, max_dist=1.5):
+    idx_ss = []
+    idx_ls = []
+    distances = []
+    for idx_ch, ch in enumerate(nirs.p.main_signal.attrs['Channels']):
+        distances.append(ch[3])
+        if ch[3]<=max_dist:
+            idx_ss.append(idx_ch)
+        else:
+            idx_ls.append(idx_ch)
+    return(idx_ss, idx_ls)
+
+def get_ch_pos(nirs, ch_target):
+    src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos'])
+    det_pos = _np.array(nirs.p.main_signal.attrs['DetPos'])
+
+    ch_target_info = nirs.p.main_signal.attrs['Channels'][ch_target]
+    ch_src = int(ch_target_info[1])
+    ch_det = int(ch_target_info[2])
+
+    ch_src_pos = src_pos[ch_src]
+    ch_det_pos = det_pos[ch_det]
+    
+    ch_pos = (ch_src_pos + ch_det_pos)/2
+    return(ch_pos)
+
+def get_near_channels(nirs, ch_target, n_near=3):
+    ch_target_pos = get_ch_pos(nirs, ch_target)
+    
+    distances = []
+    for idx_ch in nirs.channel.values:
+        ch_curr_pos = get_ch_pos(nirs, idx_ch)
+        distances.append(_np.linalg.norm(ch_target_pos - ch_curr_pos))
+
+    sorted_channels = _np.argsort(distances)
+    near_channels = sorted_channels[:n_near]
+    return(near_channels)
+
+#%%
 class PCAFilter(_Algorithm):
     """
     See Molavi 2012
+    TODO: use sklearn
 
     """    
     def __init__(self, nSV=0.8, **kwargs):
@@ -88,7 +124,63 @@ class PCAFilter(_Algorithm):
         
         y = _np.stack([y[:, :n_channels], y[:, n_channels:]], axis=2)
         return(y)
-    
+
+class RegressShortSeparation(_Algorithm):
+    '''
+    T. Sato et al., “Reduction of global interference of scalp-hemodynamics 
+    in functional near-infrared spectroscopy using short distance probes,” 
+    NeuroImage 141, 120–132 (2016).
+    '''
+    def __init__(self, var_explained=0.9, max_dist=1.5, **kwargs):
+        _Algorithm.__init__(self, var_explained=var_explained, 
+                            max_dist=max_dist, **kwargs)
+        self.dimensions = {'time':0, 'component':0, 'channel':0}
+        
+            
+    def algorithm(self, signal):
+        params = self._params
+        max_dist = params['max_dist']
+        var_explained = params['var_explained']
+        idx_ss = []
+        idx_ls = []
+        
+        idx_ss, idx_ls = get_ss_ls_channels(signal, max_dist)
+                
+        nirs_ss = signal.isel({'channel':idx_ss})
+        
+        #normalize SS channels
+        nirs_ss_ = nirs_ss.p.get_values()
+        nirs_ss_[:,:,0] = _StandardScaler().fit_transform(nirs_ss_[:,:,0])
+        nirs_ss_[:,:,1] = _StandardScaler().fit_transform(nirs_ss_[:,:,1])
+        
+        #separately for oxy and deoxy?
+        pca = _PCA()
+        oxy_components = pca.fit_transform(nirs_ss_[:,:, 0])
+        variance = _np.cumsum(pca.explained_variance_ratio_)
+        idx_keep = _np.where(variance<=var_explained)[0]
+        oxy_components = oxy_components[:,idx_keep]
+
+        deoxy_components = pca.fit_transform(nirs_ss_[:,:, 1])
+        variance = _np.cumsum(pca.explained_variance_ratio_)
+        idx_keep = _np.where(variance<=var_explained)[0]
+        deoxy_components = deoxy_components[:,idx_keep]
+        
+        nirs_filtered = signal.p.get_values().copy()
+
+        for idx_ch in idx_ls:
+            nirs_ch_ = nirs_filtered[:,idx_ch]
+            
+            model_ar = _sm.GLS(nirs_ch_[:,0], oxy_components)
+            results_ar = model_ar.fit()
+            nirs_filtered[:, idx_ch, 0] = results_ar.resid
+                
+            model_ar = _sm.GLS(nirs_ch_[:,1], deoxy_components)
+            results_ar = model_ar.fit()
+            nirs_filtered[:, idx_ch, 1] = results_ar.resid
+                    
+        return(nirs_filtered)
+
+
 class NegativeCorrelationFilter(_Algorithm):
     '''
     Functional near infrared spectroscopy (NIRS) signal improvement based on negative correlation between oxygenated and deoxygenated hemoglobin dynamics

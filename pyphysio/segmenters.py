@@ -451,12 +451,19 @@ def fmap(segmenter, algorithms, signal):
             if signal_segment.p.get_values().shape[0] > 0:
                 res = alg(signal_segment, add_signal=True)
                 res = res.drop(signal_name)
-                res = res.dropna(dim='time', 
-                                 how='all', 
-                                 subset=[f'{signal_name}_{alg.__repr__()}'])
-                res = res.assign_coords(label=('time', [seg.get_label()]))
                 
-                result_algorithm.append(res)
+                res_out = res.copy()
+                
+                res_out = res_out.dropna(dim='time', 
+                                         how='all', 
+                                         subset=[f'{signal_name}_{alg.__repr__()}'])
+                
+                #if the result of the computation of the indicator is na
+                if res_out.dims['time'] == 0:
+                    res_out = res.isel({'time':[0]})
+                    
+            res_out = res_out.assign_coords(label=('time', [seg.get_label()]))
+            result_algorithm.append(res_out)
 
         result.append(_xr.concat(result_algorithm, dim='time'))
 

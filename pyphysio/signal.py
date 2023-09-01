@@ -439,7 +439,7 @@ class PyphysioDataArray(object):
             print('No nans in the signal, no action performed')
             return(self.da)
     
-    def plot(self, marker=None, ncols=4, sharey=False):
+    def plot(self, marker=None, color = None, ncols=4, sharey=False):
         """
         The plot function of the PyphysioDataArray class is used to plot the signal(s) contained in the 
         PyphysioDataArray object. The function can handle signals with multiple channels and components.
@@ -487,13 +487,13 @@ class PyphysioDataArray(object):
                 marker = '.'
 
             if marker is None:
-                ax.plot(t_, _np.squeeze(v_), linestyle = linestyle)
+                ax.plot(t_, _np.squeeze(v_), linestyle = linestyle, color=color)
             elif marker == '|':
                 ymin = ax.get_ylim()[0]
                 ymax = ax.get_ylim()[1]
-                ax.vlines(t_, ymin, ymax, linestyle = linestyle)
+                ax.vlines(t_, ymin, ymax, linestyle = linestyle, color=color)
             else:
-                ax.plot(t_, _np.squeeze(v_), marker, linestyle = linestyle)
+                ax.plot(t_, _np.squeeze(v_), marker, linestyle = linestyle, color=color)
             _grid(True)
         
         else:
@@ -526,14 +526,14 @@ class PyphysioDataArray(object):
                 if n_comp>1:
                     for i_comp in range(n_comp):
                         if marker is None:                
-                            ax.plot(t_, v_[:,i_ch, i_comp], linestyle = linestyle)
+                            ax.plot(t_, v_[:,i_ch, i_comp], linestyle = linestyle, color=color)
                         else:
-                            ax.plot(t_, v_[:,i_ch, i_comp], marker, linestyle = linestyle)
+                            ax.plot(t_, v_[:,i_ch, i_comp], marker, linestyle = linestyle, color=color)
                 else:
                     if marker is None:                
-                        ax.plot(t_, v_[:,i_ch], linestyle = linestyle)
+                        ax.plot(t_, v_[:,i_ch], linestyle = linestyle, color=color)
                     else:
-                        ax.plot(t_, v_[:,i_ch], marker, linestyle = linestyle)
+                        ax.plot(t_, v_[:,i_ch], marker, linestyle = linestyle, color=color)
 
                 _ylabel(i_ch)
                 _grid(True)
@@ -630,7 +630,8 @@ class PyPhysioDataset(object):
             processed_dataset = processed_dataset.dropna('time')
         return(processed_dataset)
         
-    def plot(self, marker=None, ncols=4, sharey=False):
+    def plot(self, marker=None, color = None, ncols=4, sharey=False):
         self.main_signal.p.plot(marker=marker,
+                                color = color,
                                 ncols=ncols,
                                 sharey=sharey)

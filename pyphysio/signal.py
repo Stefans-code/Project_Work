@@ -361,7 +361,8 @@ class PyphysioDataArray(object):
         resampled_dataarray.attrs['sampling_freq'] = f_out
         return(resampled_dataarray)
     
-    def process_na(self, na_action = 'keep'):
+    def process_na(self, na_action = 'keep', na_remaining='keep', 
+                   method='cubic', max_gap=None):
         '''
         Impute or remove NaN values in the signal.
 
@@ -398,20 +399,27 @@ class PyphysioDataArray(object):
         if _np.sum(_np.isnan(data)) > 0:
             nans_in_dataset = True
             
-            #try to understand if nans across channels and components 
-            #share the same timepoints
+            #manage special cases
             n_nans_foreach_timepoint = _np.sum(_np.sum(_np.isnan(data), axis = 1), axis=1)
             tp_with_nans = _np.where(n_nans_foreach_timepoint > 0)[0]
             n_ch = data.shape[1]
             n_cp = data.shape[2]
             
-            #if they do not:
-            if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp:
-                #we cannot remove timepoints with nans, as not all ch / cp have nans
-                #at the same timepoints
-                if na_action == 'remove':
+            #nans at different timepoints across channels           
+            if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp and \
+                na_action == 'remove':
+                    #we cannot remove timepoints with nans, as not all ch / cp have nans
+                    #at the same timepoints
                     raise ValueError('Nans in the signal, but impossible to remove timepoints as nan values do not share the same timepoints')
             
+            # #nans at the beginning / end
+            # if ((tp_with_nans[0] == 0) or (tp_with_nans[-1] == data.shape[0])) and \
+            #     na_action == 'impute':
+                    
+            #         print('Nans at the beginning / end')
+
+                
+                    
         #now we can manage the nans 
         #using the xarray.DataArray.interpolate_na or dropna
         if nans_in_dataset:
@@ -419,11 +427,14 @@ class PyphysioDataArray(object):
                 print('Nans in the output signal, please check the results')
                 return(self.da)
             elif na_action == 'impute':
-                signal = self.da.interpolate_na('time', method='cubic')
-                #TODO check initial and final nans
-                #now we drop them, should we alert the user?
-                signal = signal.dropna(dim='time')
+                signal = self.da.interpolate_na('time', method=method,
+                                                max_gap=max_gap)
+
+                if na_remaining != 'keep':
+                    signal = signal.dropna(dim='time')
+                    print('Nans in the output signal, please check the results')
                 return(signal)
+            
             elif na_action == 'remove':
                 #!ATTENTION!
                 #if we remove timepoints, then the signal should be considered
@@ -620,13 +631,18 @@ class PyPhysioDataset(object):
     #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
     #should we remove all the other signals ('variables')
     #before computing?
-    def process_na(self, na_action = 'keep'):
+    def process_na(self, na_action = 'keep', na_remaining='keep', 
+                   method='cubic',
+                   max_gap=None):
         main_signal = self.ds.attrs['MAIN']
         da = self.ds[main_signal]
-        processed_da = da.p.process_na(na_action)
+        processed_da = da.p.process_na(na_action, 
+                                       na_remaining=na_remaining, 
+                                       method=method,
+                                       max_gap=max_gap)
         processed_dataset = self.ds
         processed_dataset[main_signal] = processed_da
-        if na_action != 'keep':
+        if na_remaining != 'keep':
             processed_dataset = processed_dataset.dropna('time')
         return(processed_dataset)
         

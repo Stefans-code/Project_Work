@@ -42,6 +42,7 @@ setup(
         'netcdf4',
         'xarray',
         'pywavelets',
+        'bottleneck'
     ],
     requires=[
         'h5py'

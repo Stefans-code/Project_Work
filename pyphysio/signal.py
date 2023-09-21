@@ -640,6 +640,7 @@ class PyPhysioDataset(object):
                                        na_remaining=na_remaining, 
                                        method=method,
                                        max_gap=max_gap)
+
         processed_dataset = self.ds
         processed_dataset[main_signal] = processed_da
         if na_remaining != 'keep':

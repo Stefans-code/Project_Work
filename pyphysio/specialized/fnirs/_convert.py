@@ -168,7 +168,7 @@ def _intensity2OD(x):
     return(x_out)
 
 #%%
-def _OD2Conc(nirs, SD, channel, ppf=[6,6]):
+def _OD2Conc(nirs, SD, channel, ppf=[6,6], force_max_dist=True):
     '''
     dc = hmrOD2Conc( dod, SD, ppf )
    
@@ -219,6 +219,8 @@ def _OD2Conc(nirs, SD, channel, ppf=[6,6]):
         
         rho = _np.linalg.norm(srcPos[src_idx,:] - detPos[det_idx,:])
 
+    if force_max_dist and rho>3:
+        rho=3
     current_dod = _np.stack([nirs[:,0, 0], nirs[:,0,1]], axis=1)
     concentration[:,0,:] =  _np.dot(einv, ( current_dod / (rho*ppf)).T).T
 
@@ -244,7 +246,7 @@ class Raw2Oxy(_Algorithm):
         ppf = _np.array(ppf)
         
         signal_values = signal.values
-        
+        # print(ppf)
         OD = _intensity2OD(signal_values)
         
         channel = int(signal.coords['channel'])

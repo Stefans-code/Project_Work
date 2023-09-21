@@ -336,7 +336,7 @@ class BeatFromECG(_Algorithm):
 
         # find beats
         maxp = _PeakDetection(
-            delta=delta, refractory=refractory, start_max=True)(signal)
+            delta=delta, refractory=refractory)(signal)
         maxp = _np.array(maxp).ravel()
 
         if maxp[0] == 0:

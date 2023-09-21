@@ -230,7 +230,7 @@ class Annotate(object):
         ibi_ok = create_signal(self.v_ibi, 
                                times=self.t_ibi, 
                                info = self.ibi.p.get_info())
-        ibi_ok = ibi_ok.p.process_na('remove')
+        ibi_ok = ibi_ok.p.process_na('remove', na_remaining='remove')
         self.ibi_ok =  ibi_ok
         
     def __call__(self):

@@ -223,13 +223,16 @@ class SignalRange(_Algorithm): #xarray done
         idx_step = int(win_step * fsamp)
         
         signal_values = signal.values
+
         # print('>>> signalrange')
+        deltas = _np.zeros(len(signal_values))
+        
         if len(signal) < idx_len:
             print("Input signal is shorter than the window length.")
-            return _np.max(signal) - _np.min(signal)
+            deltas = deltas + (_np.max(signal_values) - _np.min(signal_values))
         else:
             windows = _np.arange(0, len(signal_values) - idx_len + 1, idx_step)
-            deltas = _np.zeros(len(signal_values))
+            
 
             curr_delta = 0
             for start in windows:
@@ -238,12 +241,14 @@ class SignalRange(_Algorithm): #xarray done
                 deltas[start:start + idx_len] = curr_delta
 
             deltas[windows[-1] + idx_len:] = curr_delta
-
+            
             if smooth:
                 win_len = int(win_len*2*fsamp)
                 deltas = _np.convolve(deltas, _np.ones(win_len)/win_len, mode='same')
+                deltas = deltas[:len(signal_values)]
             # print('<<< signalrange')
-            return deltas
+            
+        return deltas
 
 class PSD(_Algorithm): #xarray done
     """

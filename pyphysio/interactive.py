@@ -76,6 +76,7 @@ class Annotate(object):
         self.ibi = ibi
         
         self.t_ibi = ibi.p.get_times()
+        self.t0 = self.t_ibi[0]
         self.v_ibi = ibi.p.get_values().ravel()
         self.idx_beats = _np.where(~_np.isnan(self.v_ibi))[0]
         self.idx_outliers = _np.array([self.idx_beats[0]])
@@ -178,7 +179,7 @@ class Annotate(object):
         def add(time, y, pos):
             fsamp = self.ecg.p.get_sampling_freq()
             
-            self.idx_beats = _np.insert(self.idx_beats, pos, time*fsamp)
+            self.idx_beats = _np.insert(self.idx_beats, pos, (time - self.t0)*fsamp)
             self.replot()
 
         def delete(item):

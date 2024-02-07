@@ -521,6 +521,44 @@ class DeConvolutionalFilter(_Algorithm):
             out = s
         return out
 
+
+
+
+class Prewhitening(_Algorithm):
+    """
+    """
+
+    def __init__(self, order=50, optimize=True, **kwargs):
+        _Algorithm.__init__(self, order=order, optimize=optimize, **kwargs)
+        self.dimensions = {'time' : 0}
+
+    def algorithm(self, signal, **kwargs):
+        from statsmodels.tsa.ar_model import AutoReg as _AutoReg
+        
+        params = self._params
+        order = params['order']
+        optimize = params['optimize']
+        
+        signal_values = signal.p.get_values().ravel()
+        
+        if optimize:
+            bic_ = []
+            for i in _np.arange(1, order+1):
+                model = _AutoReg(signal_values, lags=i)
+                model_fit = model.fit()
+                bic_.append(model_fit.bic)
+            order_final = _np.argmin(bic_)+1
+        else:
+            order_final = order
+            
+        model = _AutoReg(signal_values, lags=order_final)
+        model_fit = model.fit()
+        
+        prewhit_signal = signal_values
+        prewhit_signal[order_final:] = model_fit.resid
+        
+        return(prewhit_signal)
+
 '''
 # TODO: check and convert to xarray
 

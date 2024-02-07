@@ -139,7 +139,8 @@ class DetectMA(_Algorithm):
         MA = (AMP | MSD).astype(int)
         
         idxlen_smooth = int(win_mask*fsamp)
-        MA = _np.convolve(MA, _np.ones(idxlen_smooth)/idxlen_smooth, 'same')
+        if idxlen_smooth > 0:
+            MA = _np.convolve(MA, _np.ones(idxlen_smooth)/idxlen_smooth, 'same')
         
         signal_out = _np.zeros(len(signal_values))
         idx_MA = _np.where(MA>0)[0] + half
@@ -155,8 +156,6 @@ class DetectMA_AR(_Algorithm):
     order : int, default 0
         Order of the AR model. 
         Set order = 0  to use the order that minimizes the BIC.
-    th_std_coeff : float, optional, default 2
-        Standard deviation threshold when method is 'fixed'.
     fuse : bool, optional
         Flag indicating whether to detect motion artifacts by channel or globally.
     **kwargs : dict, optional

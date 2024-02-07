@@ -71,7 +71,7 @@ def SDto1darray(nirs):
 def load_snirf(datafile):
     from snirf import Snirf
     
-    snirf = Snirf(datafile, 'r+')
+    snirf = Snirf(datafile, 'r')
 
     nirs = snirf.nirs[0]
     data = nirs.data[0]

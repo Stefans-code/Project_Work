@@ -273,21 +273,29 @@ class CustomSegments(_Segmenter):
 
     """
 
-    def __init__(self, begins, ends, timeline=None, drop_mixed=True, drop_cut=True, **kwargs):
+    def __init__(self, begins, ends, labels=None, drop_mixed=True, drop_cut=True, **kwargs):
         #TODO: timeline can also be a list with labels of each segment
-        super(CustomSegments, self).__init__(timeline=timeline, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
+        super(CustomSegments, self).__init__(labels=labels, drop_cut=drop_cut, drop_mixed=drop_mixed, **kwargs)
         
         assert len(begins) == len(ends), "The number of begins has to be equal to the number of ends :)"
+        if (labels is not None):
+            assert len(labels) == len(begins)
         self._i = -1
         self._b = begins
         self._e = ends
+        self._labels = labels
 
     def _next_segment(self):
         self._i += 1
         if self._i < len(self._b):
             b = self._b[self._i]
             e = self._e[self._i]
-            return self.manage_drops(b, e)
+            l = self._labels[self._i]
+            # b, e, _ = self.manage_drops(b, e)
+            # if (self._labels is not None):
+            #     l = self._labels[self._i]
+            return(b, e, l)
+                
         else:
             raise StopIteration()
 
@@ -323,6 +331,7 @@ class LabelSegments(_Segmenter):
         b = self.timeline.p.get_times()[self._i]
         e = self.timeline.p.get_times()[end-1]
         self._i = end
+        print(b, e)
         return b, e, timeline_values[end-1]
 
 class RandomFixedSegments(_Segmenter):

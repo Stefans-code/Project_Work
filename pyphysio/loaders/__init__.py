@@ -9,15 +9,26 @@ def info_biopac(datafile):
     names = [ch.name for ch in data.channels]
     print(names)
 
-def load_biopac(datafile, channel):
+def load_biopac(datafile, channel, trigger = False):
     import bioread
     data = bioread.read_file(datafile)
-    channels = data.channels
-    channel = channels[channel]
-    values = channel.data
+    if (trigger):
+        channels = data.channels
+
+        trigger = _np.zeros(data.channels[0].data.shape[0])
+        for i, ch in enumerate(channel):
+            digital_channel = channels[ch].data
+            trigger = trigger + (2**i)*digital_channel
+        
+        values = trigger/5
+        
+    else:
+        channels = data.channels
+        channel = channels[channel]
+        values = channel.data
     fsamp = data.samples_per_second
     
-    signal = _create_signal(values, sampling_freq=fsamp, info = {'name':channel.name})
+    signal = _create_signal(values, sampling_freq=fsamp)
     return(signal)
 
 def load_text(datafile, data_col=0, sampling_freq=None, time_col=None, 

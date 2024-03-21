@@ -331,7 +331,6 @@ class LabelSegments(_Segmenter):
         b = self.timeline.p.get_times()[self._i]
         e = self.timeline.p.get_times()[end-1]
         self._i = end
-        print(b, e)
         return b, e, timeline_values[end-1]
 
 class RandomFixedSegments(_Segmenter):
@@ -479,23 +478,19 @@ def fmap(segmenter, algorithms, signal):
     result = _xr.merge(result,compat='override')
     return result
 
-#TODO: needed? if yes, fix--->
-'''
 def indicators2df(fmap_results):
     import pandas as _pd
 
-    k = list(fmap_results.keys())[0]
-    
-    for k,v in fmap_results.items():
-        assert isinstance(v, _Signal), 'Provided fmap_results should be all Signals'
+    k = list(fmap_results.keys())
+
         
-    ind_sample = fmap_results[k]
+    ind_sample = fmap_results[k[0]]
     assert ind_sample.ndim <=3, "computed results have more than three dimensions"
-    n_channels = ind_sample.get_nchannels()
-    n_components = ind_sample.get_ncomponents()
+    n_channels = ind_sample.p.get_nchannels()
+    n_components = ind_sample.p.get_ncomponents()
     
-    t = ind_sample.get_times()
-    label = ind_sample.get_info()['label'].get_values().ravel()
+    t = ind_sample.p.get_times()
+    label = ind_sample['label'].p.get_values().ravel()
     
     df_all = []
     for i_comp in range(n_components):
@@ -509,13 +504,13 @@ def indicators2df(fmap_results):
                 result_key = fmap_results[key]
                 
                 if ind_sample.ndim == 3:
-                    indicator_df[key] = result_key.get_values()[:, i_chan, i_comp].ravel()
+                    indicator_df[key] = result_key.p.get_values()[:, i_chan, i_comp].ravel()
                     indicator_df['component'] = _np.repeat(i_comp+1, len(t))
                     indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
                     
                 else:
                     if ind_sample.ndim == 2:
-                        indicator_df[key] = result_key[:, i_chan].get_values().ravel()
+                        indicator_df[key] = result_key[:, i_chan].p.get_values().ravel()
                         indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
                     else:
                         indicator_df[key] =  result_key
@@ -525,4 +520,3 @@ def indicators2df(fmap_results):
     
     df_all = _pd.concat(df_all, axis = 0)
     return(df_all)
-'''

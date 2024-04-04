@@ -186,7 +186,7 @@ class PhasicEstim(_Algorithm):
         signal_values = signal.p.get_values().ravel()
         
         # find peaks in the driver
-        maxima = _PeakDetection(delta=amplitude, refractory=1, start_max=True, return_peaks=True)(signal)
+        maxima = _PeakDetection(delta=amplitude, refractory=1, return_peaks=True)(signal)
         idx_maxp = _np.where(~_np.isnan(maxima.p.main_signal.values))[0].ravel()
         # print(idx_maxp)
         

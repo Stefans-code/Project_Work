@@ -1,6 +1,11 @@
 import numpy as _np
 import scipy.stats as _stats
-from scipy.signal import gaussian as _gaussian, filtfilt as _filtfilt, \
+try:
+    from scipy.signal import gaussian as _gaussian
+except:
+    from scipy.signal.windows import gaussian as _gaussian
+
+from scipy.signal import filtfilt as _filtfilt, \
     filter_design as _filter_design, iirfilter as _iirfilter, \
         deconvolve as _deconvolve, firwin as _firwin, \
             iirnotch as _iirnotch, lfilter as _lfilter

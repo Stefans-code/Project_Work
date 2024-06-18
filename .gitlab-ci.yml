@@ -3,7 +3,7 @@ stages:
 
 deploy-job:
   stage: deploy
-  image: docker.km3net.de/base/python:3
+  image: python:3
   script:
     - pip install -U twine
     - python setup.py sdist

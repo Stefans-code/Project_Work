@@ -1,0 +1,40 @@
+include:
+    -   remote: 'https://gitlab.com/swepy/cicd-templates/venv/-/raw/venv@1.0.0/venv.yml'
+    -   remote: 'https://gitlab.com/swepy/cicd-templates/build-sdist-n-wheel/-/raw/build-sdist-n-wheel@0.1.3/build-sdist-n-wheel.yml'
+
+twine_venv:
+    extends: venv
+    stage: build
+    variables:
+        PYTHON_SETUP: 'pip install --upgrade twine'
+        VENV_ARTIFACT_NAME: 'twine_venv'
+        VENV_NAME: '.venv'
+    rules:
+        -   if: "$CI_COMMIT_TAG"
+
+venv:
+    rules:
+        -   when: never
+
+twine:
+    stage: deploy
+    image: $IMAGE
+    variables:
+        IMAGE_NAME: python
+        IMAGE_TAG: latest
+        IMAGE: $IMAGE_NAME:$IMAGE_TAG
+        DIST_DIR: dist
+        TWINE_USERNAME: __token__
+        TWINE_CMD: twine upload --disable-progress-bar --password $TWINE_PASSWORD --non-interactive $DIST_DIR/*
+        VENV_NAME: .venv
+    before_script:
+        - source $VENV_NAME/bin/activate
+    script:
+        - python -m $TWINE_CMD
+    needs:
+        -   job: twine_venv
+            artifacts: true
+        -   job: build-sdist-n-wheel
+            artifacts: true
+    rules:
+        -   if: "$CI_COMMIT_TAG"

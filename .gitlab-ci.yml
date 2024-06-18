@@ -5,6 +5,7 @@ deploy-job:
   stage: deploy
   image: python:3
   script:
+    - echo "TEST"
     - pip install -U twine
     - python setup.py sdist
     - twine upload dist/*  

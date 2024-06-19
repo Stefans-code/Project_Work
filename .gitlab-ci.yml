@@ -1,8 +1,6 @@
 deploy:
     image: python:3.10
     stage: deploy
-    only:
-    - tags
     variables:
         TWINE_USERNAME: $TWINE_USERNAME
         TWINE_PASSWORD: $TWINE_PASSWORD

@@ -5,6 +5,7 @@ deploy:
         TWINE_USERNAME: $TWINE_USERNAME
         TWINE_PASSWORD: $TWINE_PASSWORD
     script:
+        - rm -rf dist
         - pip install twine build
         - python -m build
         - python -m twine upload dist/*

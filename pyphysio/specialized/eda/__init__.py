@@ -10,37 +10,56 @@ from ...utils import PeakDetection as _PeakDetection, PeakSelection as _PeakSele
 from ._presets import *
 
 
-def optimize_T1_T2(signal, amplitude):
-
-    def loss(pars):
-        t1 = pars[0]
-        t2 = pars[1]
-        driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal)
-        # driver = _ConvolutionalFilter('rect', 30, normalize=True)(driver)
-        driver = _IIRFilter(0.01, btype='lowpass', order=5)(driver)
-        
-        driver_v = driver.p.get_values().ravel()
-        # z = _np.polyfit(_np.arange(len(driver_v)), driver_v, 5)
-        # p = _np.poly1d(z)
-        # driver_v_interp = p(_np.arange(len(driver_v)))
-        
-        # tonic = PhasicEstim(amplitude, win_pre=5, win_post=5, polyfit=True, return_phasic=False)(driver)
-        
-        # driver_val = driver.p.get_values().ravel()
-        # tonic_val = tonic.p.get_values().ravel()
-        
-        # driver_f_neg = driver_v - driver_v_interp
-        # driver_f_neg[driver_f_neg>0] = 0
-        loss_out = _np.nansum(abs(_np.diff(driver_v)))
-        # print(loss_out)
-        return(loss_out)
-
-    # res = opt.brute(loss, ranges=[(0.1, 0.99), (1, 10)], Ns=50, full_output=True)
-    res = _opt.differential_evolution(loss, bounds=[(0.1, 0.99), (1, 30)], maxiter=500,
-                                      polish=True, x0=(0.5, 15))
-    # print(res)
-    return(res)
+def _loss(t1, t2, signal):
+    if t2<=t1:
+        return(1000000)
     
+    driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal)
+    # driver = _ConvolutionalFilter('rect', 1)(driver, add_signal=False)
+    
+    driver_f = _IIRFilter([0.01, 0.05], btype='bandpass')(driver).p.get_values().ravel()
+    
+    # driver_diff = driver_v - driver_f_v
+    driver_f[_np.where(driver_f>0)[0]] = _np.nan
+    loss_out = abs(_np.nanmean(driver_f))
+    
+    return(loss_out)
+
+def optimize_T1_T2(signal, bayesian, optim_bounds):
+    minT1 = optim_bounds[0]
+    maxT1 = optim_bounds[1]
+    minT2 = optim_bounds[2]
+    maxT2 = optim_bounds[3]
+    
+    if bayesian:
+        from bayes_opt import BayesianOptimization
+        
+        def loss(t1, t2):
+            loss_out = _loss(t1, t2, signal)
+            return(-loss_out)
+    
+        optimizer = BayesianOptimization(loss, 
+                                         pbounds = {'t1': (minT1, maxT1), 
+                                                    't2': (minT2, maxT2)},
+                                         verbose=False,
+                                         allow_duplicate_points=True)
+        optimizer.maximize(init_points=100, n_iter=100)
+        
+        t1 = optimizer.max['params']['t1']
+        t2 = optimizer.max['params']['t2']
+        res = {'x': [t1, t2]}
+    else:
+        def loss(pars):
+            t1 = pars[0]
+            t2 = pars[1]
+            loss_out = _loss(t1, t2, signal)
+            return(loss_out)
+
+        res = _opt.differential_evolution(loss, bounds=[(minT1, maxT1), (minT2, maxT2)],
+                                          maxiter=100,
+                                          polish=True)
+    return(res)
+
 # PHASIC ESTIMATION
 class DriverEstim(_Algorithm):
     """
@@ -70,17 +89,24 @@ class DriverEstim(_Algorithm):
     """
     #TODO: add citation
 
-    def __init__(self, t1=.75, t2=2, optim=False, amplitude=0.01, rescale_driver=True):
+    def __init__(self, t1=.75, t2=2, optim=False, rescale_driver=True, optim_bayes=True, optim_bounds = (0.01, 1.99, 0.01, 20)):
         assert t1 > 0, "t1 value has to be positive"
         assert t2 > 0, "t2 value has to be positive"
-        _Algorithm.__init__(self, t1=t1, t2=t2, optim=optim, amplitude=amplitude, rescale=rescale_driver)
+        _Algorithm.__init__(self, t1=t1, t2=t2, optim=optim, 
+                            rescale=rescale_driver,
+                            optim_bayes=optim_bayes,
+                            optim_bounds = optim_bounds)
         self.dimensions = {'time': 0}
         
     def algorithm(self, signal):
         optim = self._params['optim']
         if optim:
-            amplitude = self._params['amplitude']
-            pars = optimize_T1_T2(signal, amplitude)
+            optim_bayes = self._params['optim_bayes']
+            optim_bounds = self._params['optim_bounds']
+            pars = optimize_T1_T2(signal, 
+                                  optim_bayes, 
+                                  optim_bounds)
+            
             self._params['t1'] = pars['x'][0]
             self._params['t2'] = pars['x'][1]
             

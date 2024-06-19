@@ -108,9 +108,8 @@ class PCAFilter(_Algorithm):
         c = _np.dot(y.T, y)
         V, St, _ = _sal.svd(c)
         svs = St / _np.sum(St)
-        
         ev = _np.zeros(len(svs))
-        if nSV>1:
+        if nSV>=1:
             ev[:nSV] = 1
         else:
             svsc = svs

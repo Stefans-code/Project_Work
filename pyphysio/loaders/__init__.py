@@ -47,4 +47,26 @@ def load_text(datafile, data_col=0, sampling_freq=None, time_col=None,
     
     return(signal)
     
+
+def info_lsl(datafile):
+    import pyxdf
+    data, header = pyxdf.load_xdf(datafile, verbose=True)
+    names = _np.array([d['info']['name'][0] for d in data])
+    print(names)
+    
+def load_lsl(datafile, idx_stream, fresamp=None):
+    import pyxdf
+    lsl_data, _ = pyxdf.load_xdf(datafile, verbose=True)
+    stream_data = lsl_data[idx_stream]
+    t = stream_data['time_stamps']
+    signal_values = stream_data['time_series']
+    try:
+        signal = _create_signal(signal_values, times=t)
+        
+        if fresamp is not None:
+            signal = signal.p.resample(fresamp)
+        return(signal)
+    except Exception as e:
+        print(e)
+        return(t, signal_values)
     

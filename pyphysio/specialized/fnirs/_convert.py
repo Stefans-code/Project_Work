@@ -27,7 +27,7 @@ def create_SD(nirs):
 
 
 #%%
-def _get_dfp(wavelengths, AGE):
+def _get_dpf(wavelengths, AGE):
     # see: Scholkmann. F. et al: "General equation for the differential pathlength factor of the frontal human head depending on wavelength and age" (2013)
     alpha = 223.3
     beta = 0.05624
@@ -39,12 +39,12 @@ def _get_dfp(wavelengths, AGE):
     DPF_LA = _np.array([alpha + beta*AGE**gamma + delta*(LAMBDA**3) + epsilon*(LAMBDA**2) + zeta*LAMBDA for LAMBDA in wavelengths])
     return(DPF_LA)
 
-def _get_ppf(LAMBDA, AGE):
-    #http://support.nirx.de/question/how-should-we-choose-the-value-for-partial-pathlength-factor/
-    PVC = 1/50
-    dpf = _get_dfp(LAMBDA, AGE)
-    ppf = dpf*PVC
-    return(ppf)
+# def _get_ppf(LAMBDA, AGE):
+#     #http://support.nirx.de/question/how-should-we-choose-the-value-for-partial-pathlength-factor/
+#     PVC = 1/50
+#     dpf = _get_dpf(LAMBDA, AGE)
+#     ppf = dpf*PVC
+#     return(ppf)
     
 def _getExtinctions(L, spectrum=1):
     '''
@@ -242,7 +242,7 @@ class Raw2Oxy(_Algorithm):
         Lambda = SD['Lambda']
         age = self._params['age']
         
-        ppf = [6.,6.] if age is None else _get_ppf(Lambda, age)
+        ppf = [6.,6.] if age is None else _get_dpf(Lambda, age)
         ppf = _np.array(ppf)
         
         signal_values = signal.values

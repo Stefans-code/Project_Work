@@ -1,5 +1,4 @@
 import numpy as _np
-import scipy.stats as _stats
 try:
     from scipy.signal import gaussian as _gaussian
 except:
@@ -525,9 +524,6 @@ class DeConvolutionalFilter(_Algorithm):
             print('Deconvolution method not implemented. Returning original signal.')
             out = s
         return out
-
-
-
 
 class Prewhitening(_Algorithm):
     """

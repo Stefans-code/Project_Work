@@ -4,28 +4,30 @@ from ... import create_signal
 from ..._base_algorithm import _Algorithm
 # from ...signal import create_signal
 from ...filters import DeConvolutionalFilter as _DeConvolutionalFilter, \
-    ConvolutionalFilter as _ConvolutionalFilter, IIRFilter as _IIRFilter
+    ConvolutionalFilter as _ConvolutionalFilter, IIRFilter as _IIRFilter, \
+    KalmanFilter as _KalmanFilter
 from ...utils import PeakDetection as _PeakDetection, PeakSelection as _PeakSelection
 
 from ._presets import *
 
 
-def _loss(t1, t2, signal):
+def _loss(t1, t2, signal, amplitude):
     if t2<=t1:
-        return(1000000)
+        return(_np.sum(abs(signal.p.get_values().ravel())))
     
-    driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal)
-    # driver = _ConvolutionalFilter('rect', 1)(driver, add_signal=False)
+    driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal, add_signal=False)
+    driver_f = _IIRFilter(0.05, btype='lowpass')(driver, add_signal=False)
     
-    driver_f = _IIRFilter([0.01, 0.05], btype='bandpass')(driver).p.get_values().ravel()
+    driver_diff = driver.p.get_values() - signal_f
     
-    # driver_diff = driver_v - driver_f_v
-    driver_f[_np.where(driver_f>0)[0]] = _np.nan
-    loss_out = abs(_np.nanmean(driver_f))
+    phasic_values = PhasicEstimKalman(amplitude=amplitude)(driver, add_signal=False)
+
+    phasic_values[_np.where(phasic_values>0)[0]] = _np.nan
+    loss_out = abs(_np.nanmean(phasic_values))
     
     return(loss_out)
 
-def optimize_T1_T2(signal, bayesian, optim_bounds):
+def optimize_T1_T2(signal, bayesian, optim_bounds, amplitude):
     minT1 = optim_bounds[0]
     maxT1 = optim_bounds[1]
     minT2 = optim_bounds[2]
@@ -33,11 +35,11 @@ def optimize_T1_T2(signal, bayesian, optim_bounds):
     
     if bayesian:
         from bayes_opt import BayesianOptimization
-        
+        _np.random.seed(1234)
         def loss(t1, t2):
-            loss_out = _loss(t1, t2, signal)
+            loss_out = _loss(t1, t2, signal, amplitude)
             return(-loss_out)
-    
+        print(loss(0.75, 2))
         optimizer = BayesianOptimization(loss, 
                                          pbounds = {'t1': (minT1, maxT1), 
                                                     't2': (minT2, maxT2)},
@@ -47,6 +49,7 @@ def optimize_T1_T2(signal, bayesian, optim_bounds):
         
         t1 = optimizer.max['params']['t1']
         t2 = optimizer.max['params']['t2']
+        print(optimizer.max['target'])
         res = {'x': [t1, t2]}
     else:
         def loss(pars):
@@ -72,10 +75,12 @@ class DriverEstim(_Algorithm):
 
     Optional parameters
     -------------------
-    t1 : float, >0, default = 0.75
-        Value of the T1 parameter of the bateman function
-    t2 : float, >0, default = 2
+    t1 : float, >0, default = 0.96 
+        Value of the T1 parameter of the bateman function. 
+        The default value is the average value found in Benedek and Kaernback, 2010)
+    t2 : float, >0, default = 3.76
         Value of the T2 parameter of the bateman function
+        The default value is the average value found in Benedek and Kaernback, 2010)
 
     Returns
     -------
@@ -89,13 +94,17 @@ class DriverEstim(_Algorithm):
     """
     #TODO: add citation
 
-    def __init__(self, t1=.75, t2=2, optim=False, rescale_driver=True, optim_bayes=True, optim_bounds = (0.01, 1.99, 0.01, 20)):
+    def __init__(self, t1=.96, t2=3.76, rescale_driver=True,
+                 optim=False, optim_bayes=True, optim_bounds = (0.05, 3, 0.3, 15),
+                 amplitude=0.01):
         assert t1 > 0, "t1 value has to be positive"
         assert t2 > 0, "t2 value has to be positive"
-        _Algorithm.__init__(self, t1=t1, t2=t2, optim=optim, 
+        _Algorithm.__init__(self, t1=t1, t2=t2,
                             rescale=rescale_driver,
+                            optim=optim, 
                             optim_bayes=optim_bayes,
-                            optim_bounds = optim_bounds)
+                            optim_bounds = optim_bounds,
+                            amplitude=amplitude)
         self.dimensions = {'time': 0}
         
     def algorithm(self, signal):
@@ -103,9 +112,11 @@ class DriverEstim(_Algorithm):
         if optim:
             optim_bayes = self._params['optim_bayes']
             optim_bounds = self._params['optim_bounds']
+            amplitude = self._params['amplitude']
             pars = optimize_T1_T2(signal, 
                                   optim_bayes, 
-                                  optim_bounds)
+                                  optim_bounds,
+                                  amplitude)
             
             self._params['t1'] = pars['x'][0]
             self._params['t2'] = pars['x'][1]
@@ -274,8 +285,59 @@ class PhasicEstim(_Algorithm):
 
         # phasic = signal - tonic
     
+class PhasicEstimKalman(_Algorithm):
+    """
+    """
+    
+    def __init__(self, amplitude=0.01, 
+                 return_phasic=True):
+        assert amplitude > 0, "Amplitude value has to be positive"
+        _Algorithm.__init__(self, amplitude=amplitude,
+                            return_phasic=return_phasic)
+        self.dimensions = {'time': 0}
 
+    def algorithm(self, signal):
+        params = self._params
+        amplitude = params["amplitude"]
+        
+        return_phasic = params['return_phasic']
 
+        signal_values = signal.p.get_values().ravel()
 
+        R = _np.var(signal_values)
+        
+        signal_f = _IIRFilter(0.01, btype='highpass')(signal, add_signal=False).p.get_values().ravel()
+        Q = _np.var(_np.diff(signal_f))
+
+        signal_k = _KalmanFilter(R, Q)(signal)
+        
+        driver_diff = abs(signal.p.get_values().ravel() - signal_k.p.get_values().ravel())
+        
+        idx_10 = create_signal((driver_diff < amplitude/2).astype(int), sampling_freq=signal.p.get_sampling_freq())
+        idx_tonic = _np.where(idx_10.p.get_values().ravel() == 1)[0]
+        
+        if idx_tonic[0] != 0:
+            idx_tonic = _np.insert(idx_tonic, 0, 0)
+        
+        if idx_tonic[-1] != (len(driver_diff) - 1):
+            idx_tonic = _np.insert(idx_tonic, len(idx_tonic), len(driver_diff)-1)
+        
+        tonic = create_signal(signal_k.p.get_values().ravel()[idx_tonic], 
+                              times = signal_k.p.get_times()[idx_tonic])
+        
+        tonic = tonic.interp({'time': signal.p.get_times()},
+                             method='linear')
+        
+        tonic_values = tonic.p.get_values().ravel()
+        
+        # fitter = _np.poly1d(_np.polyfit(idx_tonic, driver_interp, 10))
+        # tonic = fitter(_np.arange(len(signal_values)))
+
+        if not return_phasic:
+            return tonic_values
+        
+        phasic_values = signal_values - tonic_values
+       
+        return phasic_values
 
 #%%    

@@ -311,26 +311,19 @@ class KalmanFilter(_Algorithm):
 
     """
 
-    def __init__(self, R, ratio, win_len=1, win_step=0.5):
+    def __init__(self, R, Q):
         assert R > 0, "R should be positive"
-        assert ratio > 1, "ratio should be >1"
-        assert win_len > 0, "Window length value should be positive"
-        assert win_step > 0, "Window step value should be positive"
+        assert Q > 0, "Q should be positive"
         
-        _Algorithm.__init__(self, R=R, ratio=ratio, win_len=win_len, win_step=win_step)
+        _Algorithm.__init__(self, R=R, Q=Q)
         self.dimensions = {'time' : 0}
         
     def algorithm(self, signal):
         params = self._params
         R = params['R']
-        ratio = params['ratio']
-        win_len = params['win_len']
-        win_step = params['win_step']
+        Q = params['Q']
         
         sz = len(signal)
-        
-        rr = _SignalRange(win_len, win_step)(signal).values
-        Q = _np.nanmedian(rr)/ratio
             
         P = 1
         
@@ -526,39 +519,68 @@ class DeConvolutionalFilter(_Algorithm):
         return out
 
 class Prewhitening(_Algorithm):
-    """
-    """
+    """Prewhitening algorithm for time series data.
 
-    def __init__(self, order=50, optimize=True, **kwargs):
-        _Algorithm.__init__(self, order=order, optimize=optimize, **kwargs)
+     This class performs prewhitening on a time series signal to remove
+     autocorrelation. It achieves this by fitting an autoregressive (AR) model
+     to the data and then using the estimated AR coefficients to filter the
+     signal.
+    
+     Attributes:
+       dimensions (dict): Dictionary specifying on which dimensions of the
+         input signal to perform the filtering.
+       f (numpy.ndarray): The estimated AR filter coefficients after pre-fitting
+         the model (available after calling the `algorithm` method).
+     """
+
+    def __init__(self, p=1, optimize=True, pmin=1, pmax=10, **kwargs):
+        """
+        Initialize a Prewhitening object.
+    
+        Args:
+          p (int, optional): The initial order (number of lags) for the AR model.
+            Defaults to 1.
+          optimize (bool, optional): Whether to optimize the AR model order using
+            the Bayesian Information Criterion (BIC). Defaults to True.
+          pmin (int, optional): Minimum allowed order for the AR model during
+            optimization. Defaults to 1.
+          pmax (int, optional): Maximum allowed order for the AR model during
+            optimization. Defaults to 10.
+          **kwargs: Additional keyword arguments passed to the base class.
+        """
+        _Algorithm.__init__(self, p=p, optimize=optimize,
+                            pmin=pmin, pmax=pmax, **kwargs)
         self.dimensions = {'time' : 0}
 
     def algorithm(self, signal, **kwargs):
         from statsmodels.tsa.ar_model import AutoReg as _AutoReg
         
         params = self._params
-        order = params['order']
         optimize = params['optimize']
         
         signal_values = signal.p.get_values().ravel()
         
         if optimize:
+            pmin = params['pmin']
+            pmax = params['pmax']
             bic_ = []
-            for i in _np.arange(1, order+1):
-                model = _AutoReg(signal_values, lags=i)
+            for i in _np.arange(pmin, pmax+1):
+                model = _AutoReg(signal_values, lags=i, trend='n')
                 model_fit = model.fit()
                 bic_.append(model_fit.bic)
-            order_final = _np.argmin(bic_)+1
+            order_final = _np.argmin(bic_) + pmin
         else:
-            order_final = order
-            
-        model = _AutoReg(signal_values, lags=order_final)
+            order_final = params['p']
+        
+        model = _AutoReg(signal_values, lags=order_final, trend='n')
         model_fit = model.fit()
         
-        prewhit_signal = signal_values
-        prewhit_signal[order_final:] = model_fit.resid
+        f = _np.insert(-model_fit.params, 0, 1)
+        self.f = f
         
-        return(prewhit_signal)
+        sig_out = model_fit.resid
+        signal_w = _np.insert(sig_out, 0, sig_out[0]*_np.ones(order_final))
+        return(signal_w)
 
 '''
 # TODO: check and convert to xarray

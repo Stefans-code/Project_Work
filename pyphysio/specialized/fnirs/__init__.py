@@ -84,8 +84,10 @@ class PCAFilter(_Algorithm):
     TODO: use sklearn
 
     """    
-    def __init__(self, nSV=0.8, **kwargs):
-        _Algorithm.__init__(self, nSV=nSV, **kwargs)
+    def __init__(self, nSV=0.8, return_systemic=False, **kwargs):
+        _Algorithm.__init__(self, nSV=nSV, 
+                            return_systemic=return_systemic,
+                            **kwargs)
         self.dimensions = {'time':0, 
                            'channel': 0, 
                            'component':0}
@@ -98,6 +100,7 @@ class PCAFilter(_Algorithm):
     def algorithm(self, signal): #TODO: correct syntax for **kwargs
 
         nSV = self._params['nSV']
+        return_systemic = self._params['return_systemic']
         n_channels = signal.p.get_nchannels()
         y = signal.p.get_values()
         # idx_good_channels = signal.get_good_channels()
@@ -119,9 +122,15 @@ class PCAFilter(_Algorithm):
         #%
         ev = _np.diag(ev)
         
-        y = y - _np.linalg.multi_dot([y, V, ev, V.T])
+        y_systemic = _np.linalg.multi_dot([y, V, ev, V.T])
+        if return_systemic:
+            y_systemic = _np.stack([y_systemic[:, :n_channels], y_systemic[:, n_channels:]], axis=2)
+            return y_systemic
+            
         
-        y = _np.stack([y[:, :n_channels], y[:, n_channels:]], axis=2)
+        y_filt = y - y_systemic
+        y_filt = _np.stack([y_filt[:, :n_channels], y_filt[:, n_channels:]], axis=2)
+        
         return(y)
 
 class RegressShortSeparation(_Algorithm):

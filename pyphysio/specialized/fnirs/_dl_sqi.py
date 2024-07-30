@@ -65,12 +65,19 @@ class SignalQualityDeepLearning(_SignalQualityIndicator):
         signal = signal.p.resample(10)
         signal_values = signal.p.get_values()[:,0,:]
         signal_values = _normalize(signal_values)
+        import matplotlib.pyplot as plt
+        plt.plot(signal_values)
         
         signal_in = signal_values[[-1],:] * _np.ones((200, 2))
         signal_in[:len(signal_values)] = signal_values
         signal_in = _torch.tensor(signal_in.T).float()
         
         output = self.model.forward(signal_in.unsqueeze(0).to(device))
+        # print(output)
         _, quality = _torch.max(output,1)
         quality = quality.cpu().numpy()
         return(_np.array([[quality]]))
+
+        # confidence_good = output.cpu().detach().numpy()[0][1]
+        # print(confidence_good)
+        # return(_np.array([[[confidence_good]]]))

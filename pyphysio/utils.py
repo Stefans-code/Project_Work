@@ -451,21 +451,20 @@ class PSD(_Algorithm): #xarray done
         # print(out)
         return {'channel': 1, 'component':1}, out
     
-class Wavelet(_Algorithm): #xarray dones
+class Wavelet(_Algorithm):
     """
-    TODO
+    Seems it is working fine
     """
     def __init__(self, wtype = 'cmor_1.15-1.0',
-                 scales = None,
                  freqs = None,
-                 minScale = None,
+                 minScale = 2,
                  nNotes = 12,
                  detrend=True,
                  normalize=False,
                  compute_coi=False):
             
         
-        _Algorithm.__init__(self, wtype = wtype, scales = scales, freqs = freqs,
+        _Algorithm.__init__(self, wtype = wtype, freqs = freqs,
                             minScale = minScale, nNotes = nNotes,
                             detrend=detrend, normalize=normalize,
                             compute_coi=compute_coi)
@@ -474,9 +473,9 @@ class Wavelet(_Algorithm): #xarray dones
     def __finalize__(self, res_sig, arr_window):
         return __finalize_special__(res_sig)
     
-    def _get_coi(self, signal):
-        signal_values = signal.p.get_values()
-        N = signal_values.shape[0]
+    def _compute_coi(self, W):
+        N = W.shape[1]
+        freqs_nyq = self._params['freqs_nyq']
         coif_ = 1/(2*_np.arange(1, N//2))
 
         # coif_ = fsamp/(2*np.arange(1, N//2))
@@ -484,97 +483,84 @@ class Wavelet(_Algorithm): #xarray dones
         coif = _np.zeros(N) + min_coif
         coif[:len(coif_)] = coif_
         coif[-len(coif_):] = coif_[::-1]
-        return(coif)
+        
+        for i in range(W.shape[1]):
+            idx_na = _np.where(freqs_nyq < coif[i])[0]
+            W[idx_na, i] = _np.nan
+        return(W)
+            
     
-    def _get_scales(self, signal):
-        
-        #set own parameters to allow the computation of the coi
-        
-        #use nsamp and nyq_freq instead of t, fsamp
-        
+    def _compute_scales(self, signal):
         params = self._params
-        wtype = params['wtype']
-        scales = params['scales']
         freqs = params['freqs']
+        wtype = params['wtype']
         
         signal_values = signal.p.get_values()
         fsamp = signal.p.get_sampling_freq()
         
-        if (freqs is None) and (scales is None):
-            #users want the algoritm to compute the scales
+        if freqs is None: #users want the algoritm to compute the scales
             minScale = params['minScale']
             nNotes = params['nNotes']
-            if minScale is None:
-                minScale_idx = 2
-            else:
-                minScale_idx = int(_np.round(minScale*fsamp))
+            
             # The scales as of Mallat 1999
             # minScale = 2 # / wavelet.flambda()
             N = signal_values.shape[0]
             nOctaves = int(_np.round(_np.log2(N/2) / (1/nNotes)))
-            scales_idx = minScale_idx * 2 ** (_np.arange(0, nOctaves + 1) * (1/nNotes))
+            scales = minScale * 2 ** (_np.arange(0, nOctaves + 1) * (1/nNotes))
+            freqs_nyq = _pywt.scale2frequency(wtype, scales)
             
-        elif (freqs is None):
-            #user provided the scales
-            scales = _np.array(scales)
-            
-            #check correct order of scales
-            assert scales[0]<scales[-1]
-            assert (_np.diff(scales)>0).all()
-            scales_idx = scales*fsamp
-            
-        else:
-            #user provided the frequencies
+        else: #user provided the frequencies
             freqs = _np.array(freqs)
             #check correct order of frequencies
             assert freqs[0]>freqs[-1]
             assert (_np.diff(freqs)<0).all()
-            scales_idx = _pywt.frequency2scale(wtype, freqs/fsamp)
-        scales_idx = _np.sort(scales_idx)
-        return(scales_idx)
+            freqs_nyq = freqs/fsamp
+            scales = _pywt.frequency2scale(wtype, freqs_nyq)
+            
+        scales = _np.sort(scales)
+        
+        self._params['freqs_nyq'] = freqs_nyq
+        self._params['scales'] = scales
+        
     
     def algorithm(self, signal):
-        params = self._params
-        wtype = params['wtype']
-        # scales = params['scales']
-        # nNotes = params['nNotes']
-        detrend = params['detrend']
-        normalize = params['normalize']
-        compute_coi = params['compute_coi']
+        if 'scales' not in self._params:
+            self._compute_scales(signal)
         
+        params = self._params
+        
+        #get signal values and info
         signal_values = signal.p.get_values().ravel()
         fsamp = signal.p.get_sampling_freq()
         N = len(signal_values)
-        scales_idx = self._get_scales(signal)
-
-        if (_np.isnan(signal_values).any()):
-            #cannot compute wavelets if nans are present
-            W = _np.nan*_np.zeros((len(scales_idx), N, 1, 1))
-            out = signal.copy(deep=True)
-            freqs = _pywt.scale2frequency(wtype, scales_idx)*fsamp
-            out = out.expand_dims({'freq':freqs}, axis=0)
-            # out.name = signal.name+'_'#+self.name
-            out.values = W
-            return(out)
         
+        #remove linear drift
+        detrend = params['detrend']
         if detrend:
             signal_values = _detrend(signal_values, type='linear')
-                    
-        W, freqs = _pywt.cwt(signal_values, scales_idx, wavelet=wtype)
-       
-        if compute_coi:
-            coif = self._get_coi(signal)
-            for i in range(W.shape[1]):
-                idx_na = _np.where(freqs < coif[i])[0]
-                W[idx_na, i] = _np.nan
         
+        #compute wavelet
+        wtype = params['wtype']
+        scales = params['scales']
+        
+        W, freqs_nyq = _pywt.cwt(signal_values, scales, wavelet=wtype)
+        
+        freqs=freqs_nyq*fsamp
+        self._params['freqs_nyq'] = freqs_nyq
+        
+        #normalize computed W
+        normalize = params['normalize']
         if normalize:
-            scaleMatrix = _np.ones([1, N]) * scales_idx[:, None]
+            scaleMatrix = _np.ones([1, N]) * scales[:, None]
             W = W**2 / scaleMatrix
         
+        #compute coi and assign na outside
+        compute_coi = params['compute_coi']
+        if compute_coi:
+            W = self._compute_coi(W)
+                
         W = _np.expand_dims(W,[2,3])
         
-        freqs = freqs*fsamp #convert to original frequencies
         out = signal.copy(deep=True)
         out = out.expand_dims({'freq':freqs}, axis=0)
         # out.name = signal.name+'_'#+self.name
@@ -583,20 +569,19 @@ class Wavelet(_Algorithm): #xarray dones
         return out
     
     def __get_template__(self, signal):
-        params = self._params
-        wtype = params['wtype']
+        self._compute_scales(signal)
         
-        scales_idx = self._get_scales(signal)
-
         signal_values = signal.p.get_values()
-        fsamp = signal.p.get_sampling_freq()
         N = signal_values.shape[0]
+        fsamp = signal.p.get_sampling_freq()
+        
+        scales = self._params['scales']
+        freqs = self._params['freqs_nyq']*fsamp
 
-        out = _np.zeros(shape=(len(scales_idx), N,
+        out = _np.zeros(shape=(len(scales), N,
                                signal.sizes['channel'], 
                                signal.sizes['component']))
 
-        freqs = _pywt.scale2frequency(wtype, scales_idx)*fsamp
         # print(len(freqs))
         
         out = _xr.DataArray(out, dims=('freq', 'time', 'channel', 'component'),

@@ -7,6 +7,7 @@ from scipy.signal import welch as _welch, periodogram as _periodogram, \
 # import pycwt.wavelet as wave
 import pywt as _pywt
 #TODO replace with pywavelets
+from sklearn.decomposition import PCA as _PCA
 from ._base_algorithm import _Algorithm
 
 
@@ -736,6 +737,26 @@ class Minima(_Algorithm): #xarray done
         max_alg = Maxima(**params) 
         result = -1*max_alg.algorithm(-signal)
         return(result)
+
+
+
+class PCA(_Algorithm): #xarray done
+    """
+    """
+
+    def __init__(self, n_out_channels=1):
+        _Algorithm.__init__(self, n_out_channels=n_out_channels)
+        self.dimensions = {'time' : 0,
+                           'channel': n_out_channels,
+                           'component': 0}
+        
+    
+    
+    def algorithm(self, signal):
+        pca = _PCA(n_components=self._params['n_out_channels'])
+        orig_channels = signal.p.get_values()[:,:,0]
+        out_channels = pca.fit_transform(orig_channels)
+        return(out_channels)
 
 #TODO from here
 # class BootstrapEstimation(_Algorithm):

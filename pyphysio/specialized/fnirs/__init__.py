@@ -4,7 +4,7 @@ from ..._base_algorithm import _Algorithm
 from ._convert import Raw2Oxy
 from ._dl_sqi import SignalQualityDeepLearning
 import xarray as _xr
-from sklearn.decomposition import PCA as _PCA
+from sklearn.decomposition import PCA as _PCA, FastICA as _ICA
 from sklearn.preprocessing import StandardScaler as _StandardScaler
 import statsmodels.api as _sm
 
@@ -51,9 +51,13 @@ def get_ss_ls_channels(nirs, max_dist=1.5):
             idx_ls.append(idx_ch)
     return(idx_ss, idx_ls)
 
-def get_ch_pos(nirs, ch_target):
-    src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos'])
-    det_pos = _np.array(nirs.p.main_signal.attrs['DetPos'])
+def get_ch_pos(nirs, ch_target, twoD=False):
+    if twoD:
+        src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos2D'])
+        det_pos = _np.array(nirs.p.main_signal.attrs['DetPos2D'])
+    else:
+        src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos'])
+        det_pos = _np.array(nirs.p.main_signal.attrs['DetPos'])
 
     ch_target_info = nirs.p.main_signal.attrs['Channels'][ch_target]
     ch_src = int(ch_target_info[1])
@@ -223,14 +227,14 @@ class NegativeCorrelationFilter(_Algorithm):
 
 
 class ComputeClusters(_Algorithm):
-    def __init__(self, clusters, n_min_good=3, normalize=True, **kwargs):
+    def __init__(self, clusters, n_min_good=3, mode='mean', **kwargs):
         _Algorithm.__init__(self, clusters = clusters, 
-                            n_min_good = n_min_good, 
-                            normalize=normalize, **kwargs)
+                            n_min_good = n_min_good,
+                            mode=mode,
+                            **kwargs)
         
         self.dimensions = {'time':0, 
-                           'channel': len(clusters), 
-                           'component':0}
+                           'channel': len(clusters)}
     
     def __call__(self, signal_in, **kwargs):
         if 'good_channels' in signal_in.attrs:
@@ -246,13 +250,12 @@ class ComputeClusters(_Algorithm):
             return( (x-_np.mean(x))/_np.std(x))
         clusters = self._params['clusters']
         n_min_good = self._params['n_min_good']
-        normalize = self._params['normalize']
-        
+        mode = self._params['mode']
         signal_values = signal.p.get_values()
         
         good_channels = self.good_channels
         
-        out_signal = _np.nan*_np.zeros((len(signal_values), len(clusters), 2))
+        out_signal = _np.nan*_np.zeros((len(signal_values), len(clusters), 1))
         for i_cluster, cluster_channels in enumerate(clusters):
             
             cluster_good_channels = []
@@ -261,13 +264,31 @@ class ComputeClusters(_Algorithm):
                     cluster_good_channels.append(ch)
             
             if len(cluster_good_channels)>= n_min_good:
-                signals_cluster = signal_values[:, cluster_good_channels, :]
-                    
-                if normalize:
-                    signals_cluster = _np.apply_along_axis(normalize_signal, 0,  signals_cluster)
+                signals_cluster = signal_values[:, cluster_good_channels, 0]
                 
-                cluster_mean = _np.mean(signals_cluster, axis=1, keepdims=True)
-                out_signal[:,i_cluster, :] = cluster_mean[:,0,:]
+                if mode == 'pca':
+                    cluster_signal = _PCA(1).fit_transform(signals_cluster.copy())
+                                       
+                    corr=[]
+                    for i in range(len(cluster_good_channels)):
+                        corr.append(_np.corrcoef(cluster_signal.ravel(), 
+                                                 signals_cluster[:,i].ravel())[1,0])
+                    if _np.mean(corr)<0:
+                        cluster_signal = -cluster_signal
+                    
+                elif mode == 'ica':
+                    cluster_signal = _ICA(1).fit_transform(signals_cluster.copy())
+                    corr=[]
+                    for i in range(len(cluster_good_channels)):
+                        corr.append(_np.corrcoef(cluster_signal.ravel(), 
+                                                 signals_cluster[:,i].ravel())[1,0])
+                    if _np.mean(corr)<0:
+                        cluster_signal = -cluster_signal
+                else:
+                    
+                    cluster_signal = _np.mean(signals_cluster, axis=1, keepdims=True)
+                    
+                out_signal[:,i_cluster, :] = cluster_signal
         
         return(out_signal)
         

@@ -12,6 +12,176 @@ from scipy.signal import correlate as _correlate
 from sklearn.metrics import normalized_mutual_info_score as _normalized_mutual_info_score
 from .utils import Wavelet as _Wavelet
 
+import statsmodels.tsa.api as _smt
+
+#%%%
+# IAAFT surrogates
+#from : https://github.com/manu-mannattil/nolitsa/blob/master/nolitsa/surrogates.py
+
+def _ft(x):
+    """Return simple Fourier transform surrogates.
+
+    Returns phase randomized (FT) surrogates that preserve the power
+    spectrum (or equivalently the linear correlations), but completely
+    destroy the probability distribution.
+
+    Parameters
+    ----------
+    x : array
+        Real input array containg the time series.
+
+    Returns
+    -------
+    y : array
+        Surrogates with the same power spectrum as x.
+    """
+    y = _np.fft.rfft(x, axis = 0)
+
+    phi = 2 * _np.pi * _np.random.random(y.shape[0])
+
+    phi[0] = 0.0
+    if x.shape[0] % 2 == 0:
+        phi[-1] = 0.0
+
+    y = y * _np.exp(1j * phi)
+    
+    return _np.fft.irfft(y, n=x.shape[0], axis=0)
+
+def surrogate_AAFT(x):
+    """Return amplitude adjusted Fourier transform surrogates.
+
+    Returns phase randomized, amplitude adjusted (AAFT) surrogates with
+    crudely the same power spectrum and distribution as the original
+    data (Theiler et al. 1992).  AAFT surrogates are used in testing
+    the null hypothesis that the input series is correlated Gaussian
+    noise transformed by a monotonic time-independent measuring
+    function.
+
+    Parameters
+    ----------
+    x : array
+        1-D input array containg the time series.
+
+    Returns
+    -------
+    y : array
+        Surrogate series with (crudely) the same power spectrum and
+        distribution.
+    """
+    # Generate uncorrelated Gaussian random numbers.
+    y = _np.random.normal(size=x.shape[0])
+
+    # Introduce correlations in the random numbers by rank ordering.
+    y = _np.sort(y)[_np.argsort(_np.argsort(x, axis=0), axis=0)]
+    
+    y = _ft(y)
+
+    return _np.sort(x, axis=0)[_np.argsort(_np.argsort(y, axis = 0), axis=0)]
+
+def surrogate_IAAFT(x, maxiter=1000, atol=1e-8, rtol=1e-10):
+    """Return iterative amplitude adjusted Fourier transform surrogates.
+
+    Returns phase randomized, amplitude adjusted (IAAFT) surrogates with
+    the same power spectrum (to a very high accuracy) and distribution
+    as the original data using an iterative scheme (Schreiber & Schmitz
+    1996).
+
+    Parameters
+    ----------
+    x : array
+        1-D real input array of length N containing the time series.
+    maxiter : int, optional (default = 1000)
+        Maximum iterations to be performed while checking for
+        convergence.  The scheme may converge before this number as
+        well (see Notes).
+    atol : float, optional (default = 1e-8)
+        Absolute tolerance for checking convergence (see Notes).
+    rtol : float, optional (default = 1e-10)
+        Relative tolerance for checking convergence (see Notes).
+
+    Returns
+    -------
+    y : array
+        Surrogate series with (almost) the same power spectrum and
+        distribution.
+    i : int
+        Number of iterations that have been performed.
+    e : float
+        Root-mean-square deviation (RMSD) between the absolute squares
+        of the Fourier amplitudes of the surrogate series and that of
+        the original series.
+
+    Notes
+    -----
+    To check if the power spectrum has converged, we see if the absolute
+    difference between the current (cerr) and previous (perr) RMSDs is
+    within the limits set by the tolerance levels, i.e., if abs(cerr -
+    perr) <= atol + rtol*perr.  This follows the convention used in
+    the NumPy function numpy.allclose().
+
+    Additionally, atol and rtol can be both set to zero in which
+    case the iterations end only when the RMSD stops changing or when
+    maxiter is reached.
+    """
+    # Calculate "true" Fourier amplitudes and sort the series.
+    ampl = _np.abs(_np.fft.rfft(x, axis = 0))
+    sort = _np.sort(x, axis = 0)
+
+    # Previous and current error.
+    perr, cerr = (-1, 1)
+
+    # Start with a random permutation.
+    t = _np.fft.rfft(_np.random.permutation(x))
+
+    for i in range(maxiter):
+        # Match power spectrum.
+        s = _np.real(_np.fft.irfft(ampl * t / _np.abs(t), n=x.shape[0]))
+
+        # Match distribution by rank ordering.
+        y = sort[_np.argsort(_np.argsort(s, axis=0))]
+
+        t = _np.fft.rfft(y)
+        cerr = _np.sqrt(_np.mean((ampl ** 2 - _np.abs(t) ** 2) ** 2))
+
+        # Check convergence.
+        if abs(cerr - perr) <= atol + rtol * abs(perr):
+            break
+        else:
+            perr = cerr
+
+    # Normalize error w.r.t. mean of the "true" power spectrum.
+    return y, i, cerr / _np.mean(ampl ** 2)
+
+#%%%
+# AR process
+def _fit_AR(x, maxlag=10):
+    mdl = _smt.AR(x).fit(maxlag=maxlag, ic='aic', trend='nc')
+    return(mdl.params)
+
+def _sim_AR(alpha, n, ndisc):
+    ar = _np.r_[1, -alpha]
+    ma = _np.r_[1,0]
+    x = _smt.arma_generate_sample(ar=ar, ma=ma, nsample=n, burnin = ndisc) 
+    return(x)
+
+def surrogate_ARMA(x, maxlag = 30, ndisc = 1000, estimate=True):
+    if estimate:
+        est_lag = _smt.AR(x).select_order(maxlag=maxlag, ic='aic', trend='c')
+        print(est_lag)
+    else:
+        est_lag = maxlag
+    
+    mean_x = _np.mean(x)
+    std_x = _np.std(x)
+    x = (x- mean_x)/std_x
+    
+    alpha = _fit_AR(x, est_lag)
+    n = len(x)
+    x_surr = _sim_AR(alpha, n, ndisc=ndisc)
+    x_surr = (x_surr - _np.mean(x_surr))/_np.std(x_surr)
+    x_surr = x_surr*std_x + mean_x
+    return(x_surr)
+
 def _get_lagged(data1, data2, idx_lag):
     #idx_lag is the difference between 
     #the start of data1 and the start of data 2
@@ -59,12 +229,42 @@ def _IRLS(y, X, max_iter=50):
         iterations +=1
     return(beta_new)
 
+def compare_channels(function, signal_1, signal_2=None, channels=None, 
+                     diag_only=False, gen_surrogates=False, **kwargs):
+    """
+    Computes a matrix of a signal comparison metric between the 
+    channel pairs of two signals.
 
-def compute_between_channel_pairs(function, signal_1, signal_2=None, channels=None, idx_offset=None, **kwargs):
+    Parameters
+    ----------
+    function : callable
+        Function to compute the comparison metric between two signals.
+        Should accept two signals and optional keyword arguments.
+    signal_1 : xarray.DataArray
+        First input signal with dimensions 'channel' and 'component'.
+    signal_2 : xarray.DataArray, optional
+        Second input signal. If not provided, `signal_1` is used twice.
+    channels : array-like, optional
+        Channels to compare. If not provided, all channels are used.
+    diag_only : boolean, optional
+        Whether to only compute the metric between the same channels.
+        Default: False
+    **kwargs : dict
+        Additional keyword arguments passed to the `function`.
+
+    Returns
+    -------
+    numpy.ndarray
+        Correlation matrix with shape (len(channels), len(channels), n_components),
+        where n_components is the number of components in the signals.
+    """
     
     if signal_2 is None:
+        #TODO: implement surrogates
+        if gen_surrogates:
+            pass
         signal_2 = signal_1
-        idx_offset = 1 if idx_offset is None else idx_offset #if no signal_2, then do not compute the correlation for same channels
+        idx_offset = 1 #if no signal_2, do not compute the metric for same channels
     else:
         
         #check dims
@@ -74,20 +274,28 @@ def compute_between_channel_pairs(function, signal_1, signal_2=None, channels=No
         #TODO signal_1 and signal_2 might have a different number of channels
         for i,j in zip(shape_1, shape_2):
             assert i == j, "Sizes are not the same"
-        idx_offset = 0 if idx_offset is None else idx_offset
+        idx_offset = 0 #if signal_2 is given, compute the metric for same channels
     
     if channels is None:
-        channels = _np.arange(shape_1[1])
-        
-    n_components = shape_1[2]
-    corr_mat = _np.ones(shape=(len(channels), len(channels), n_components))
+        channels = _np.arange(signal_1.sizes['channel'])
+    
+    n_components = signal_1.sizes['component']
+    corr_mat = _np.nan*_np.ones(shape=(len(channels), len(channels), n_components))
     
     for i_comp in range(n_components):
+        
         for i_ch in _np.arange(len(channels)):
             ch_1 = channels[i_ch]
             s_1 = signal_1.isel({'channel': [ch_1], 'component': [i_comp]})
             
-            for j_ch in _np.arange(i_ch+idx_offset, len(channels)):
+            if diag_only:
+                inner_max = i_ch+1
+                idx_offset = 0
+            else:
+                inner_max = len(channels)
+            
+            for j_ch in _np.arange(i_ch+idx_offset, inner_max):
+                print(i_ch, j_ch)
                 ch_2 = channels[j_ch]
                 s_2 = signal_2.isel({'channel': [ch_2], 'component': [i_comp]})
                 
@@ -205,23 +413,8 @@ def mutual_info(s1, s2,
     mi = _normalized_mutual_info_score(s1_digit, s2_digit)
     return(mi)
 
-def wavelet_cohoerence(s1, s2, target_freqs=None, **kwargs):
+def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
     '''
-    Parameters
-    ----------
-    s1 : signal 1
-        pyphysio xarray
-    s2 : TYPE
-        pyphysio xarray
-    target_freqs : array-like, optional
-        The target frequencies (need to be in a decreasing order). 
-        If None the scales will be automatically computed and, thus, the frequencies.
-        The default is None.
-
-    Returns
-    -------
-    
-    
     '''
     import scipy.fftpack as _fft
     from scipy.signal import convolve2d as _convolve2d
@@ -258,30 +451,25 @@ def wavelet_cohoerence(s1, s2, target_freqs=None, **kwargs):
 
         return T
     
-    Wavelet = _Wavelet(freqs=target_freqs, detrend=True, normalize=False, **kwargs)
-    
-    W1 = Wavelet(s1)
-    W2 = Wavelet(s2)
-    
     coef1 = W1.p.main_signal.values[:,:,0,0]
     coef2 = W2.p.main_signal.values[:,:,0,0]
     coef12 = coef1 * coef2.conj()
     
-    scales = Wavelet._params['scales']
-    nNotes = Wavelet._params['nNotes']
+    scales = wavelet_object._params['scales']
+    nNotes = wavelet_object._params['nNotes']
     scaleMatrix = _np.ones([1, coef1.shape[1]]) * scales[:, None]
     
     coef1 = _np.abs(coef1)**2 / scaleMatrix
     coef2 = _np.abs(coef2)**2 / scaleMatrix
     coef12 = coef12    / scaleMatrix
-    #TODO see if we can se gaussian smooth: _ndimage.gaussian_filter(coef1, 8)
+    
     S1 = smooth( coef1, scales, nNotes)
     S2 = smooth( coef2, scales, nNotes)
     S12 = smooth(coef12, scales, nNotes)
     
     WC = abs(S12)**2 / (S1*S2)
     
-    WC = Wavelet._compute_coi(WC)
+    WC = wavelet_object._compute_coi(WC)
     WC_out = _np.nanmean(WC)
     return(WC_out)
     

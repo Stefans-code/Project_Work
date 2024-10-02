@@ -1,28 +1,102 @@
 import numpy as _np
 import scipy.linalg as _sal
 from ..._base_algorithm import _Algorithm
-from ._convert import Raw2Oxy
-from ._dl_sqi import SignalQualityDeepLearning
-import xarray as _xr
 from sklearn.decomposition import PCA as _PCA, FastICA as _ICA
 from sklearn.preprocessing import StandardScaler as _StandardScaler
 import statsmodels.api as _sm
 
-from ... import scheduler
-
-import matplotlib.pyplot as plt
+from ._dl_sqi import SignalQualityDeepLearning
+from ._convert import Raw2Oxy
+import matplotlib.pyplot as _plt
 import matplotlib as _mpl
 import matplotlib.cm as _cm
+
+def compute_betas_barker(nirs_signal, dm):
+    Y = nirs_signal
+    X = dm
+    
+    Y = Y.ravel()
+    assert X.shape[0] == len(Y)
+    # 1. Initialize beta via an OLS fit.
+    model_initial = _sm.OLS(Y, X)
+    results_initial = model_initial.fit()
+    beta_curr = results_initial.params
+    residuals = results_initial.resid
+
+    max_iter = 100
+
+    iteration_outer = 0
+    done_outer = False
+    while (not done_outer):
+        #. Fit the residual to an AR(P) model where P minimizes BIC (Eq. (5)).
+        bic = []
+        for p in range(8):
+            model = _sm.tsa.ARIMA(residuals, order=(p,0,0))
+            results = model.fit()
+            bic.append(results.bic)
+            
+        p_optim = _np.argmin(bic)+1
+        model_AR = _sm.tsa.ARIMA(residuals, order=(p_optim,0,0))
+        results_AR = model_AR.fit()
         
+        # Generate the whitening filter f:
+        f = [1]
+        for i in range(p_optim):
+            f.append(-results_AR.arparams[i])
+        f = _np.array(f)
+        
+        #. Apply the whitening filter to the data y and column-wise to the design matrix X
+        Y_w = _np.convolve(Y, f, 'same')
+        X_w = _np.apply_along_axis(_np.convolve, 0, X, *[f, 'same'])
+        
+        #. Perform iteratively reweighted least squares (IRLS)
+        done = False
+        iterations = 0
+        beta_old = beta_curr
+        #initialize weights to ones
+        weights = _np.ones(len(Y_w))
+        while(not done):
+            #a- solve beta by WLS
+            #fit weighted LS
+            model_WLS = _sm.WLS(Y_w, X_w, weights=weights)
+            results_WLS = model_WLS.fit()
+            #get new beta
+            beta_new = results_WLS.params
+            
+            #b- recalculate weights
+            residuals_WLS = results_WLS.resid
+            weights = _sm.robust.norms.TukeyBiweight(c=4.685).weights(residuals_WLS)
+            change = _np.min(abs((beta_new - beta_old)/beta_old))
+            
+            #c- repeat steps 5a-b until changes in beta are small (<1%)
+            if (change <0.01) or (iterations >= max_iter):
+                done = True
+            
+            beta_old = beta_new
+            
+            iterations +=1
+
+        change_outer = _np.min(abs((beta_curr - beta_new)/beta_curr))
+        
+        #Repeat steps 2-5 until changes in β are sufficiently small (e.g., < 1% change).  
+        if change_outer <0.01:
+            done_outer = True
+        
+        beta_curr = beta_new
+        iteration_outer +=1
+
+    beta = beta_curr
+    return(beta)
+
 #%%
 def plot_probe(nirs, values=None):
     if values is not None:
         norm = _mpl.colors.Normalize(vmin=_np.min(values), 
                                      vmax=_np.max(values))
-        cmap = plt.get_cmap('bwr')
+        cmap = _plt.get_cmap('bwr')
         m = _cm.ScalarMappable(norm=norm, cmap=cmap)
 
-    fig = plt.figure()
+    fig = _plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     ax.axis('equal')
  
@@ -36,7 +110,7 @@ def plot_probe(nirs, values=None):
             color = 'y'
         ax.scatter(ch_pos[0], ch_pos[1], ch_pos[2], color=color, marker='o')
    
-    plt.show()
+    _plt.show()
 
 #%%
 def get_ss_ls_channels(nirs, max_dist=1.5):
@@ -110,7 +184,6 @@ class PCAFilter(_Algorithm):
         # idx_good_channels = signal.get_good_channels()
         # y = y_[:, idx_good_channels]
         
-        
         y = _np.concatenate([y[:,:,0], y[:,:,1]], axis=1)
         c = _np.dot(y.T, y)
         V, St, _ = _sal.svd(c)
@@ -134,8 +207,7 @@ class PCAFilter(_Algorithm):
         
         y_filt = y - y_systemic
         y_filt = _np.stack([y_filt[:, :n_channels], y_filt[:, n_channels:]], axis=2)
-        
-        return(y)
+        return(y_filt)
 
 class RegressShortSeparation(_Algorithm):
     '''
@@ -285,7 +357,6 @@ class ComputeClusters(_Algorithm):
                     if _np.mean(corr)<0:
                         cluster_signal = -cluster_signal
                 else:
-                    
                     cluster_signal = _np.mean(signals_cluster, axis=1, keepdims=True)
                     
                 out_signal[:,i_cluster, :] = cluster_signal

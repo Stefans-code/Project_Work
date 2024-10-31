@@ -218,7 +218,7 @@ def _IRLS(y, X, max_iter=50):
         #b- recalculate weights
         residuals_WLS = results_WLS.resid
         weights = _sm.robust.norms.TukeyBiweight(c=4.685).weights(residuals_WLS)
-        change = abs(_np.min((beta_new - beta_old)/beta_old))
+        change = _np.min(abs((beta_new - beta_old)/beta_old))
         
         #c- repeat steps 5a-b until changes in beta are small (<1%)
         if (change <0.01) or (iterations >= max_iter):
@@ -369,7 +369,6 @@ def dtw_distance(s1, s2,
     
     return(dist)
     
-
 def lagged_cross_corr(s1, s2,
                       maxlag = 10, absolute=False):
     #get values

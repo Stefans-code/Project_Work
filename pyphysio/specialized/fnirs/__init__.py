@@ -83,6 +83,7 @@ def compute_betas_barker(nirs_signal, dm):
             done_outer = True
         
         beta_curr = beta_new
+        residuals = Y - _np.dot(X, beta_curr)
         iteration_outer +=1
 
     beta = beta_curr

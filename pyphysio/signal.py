@@ -352,6 +352,11 @@ class PyphysioDataArray(object):
     def get_info(self):
         return self.da.attrs
 
+
+    #TODO: check
+    def replace(self, new_vals):
+        return self.assign({'signal': (('time', 'channel', 'component'), new_vals)})
+        
     def resample(self, f_out):
         t_start = self.get_start_time()
         t_end = self.get_end_time()

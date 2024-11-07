@@ -57,7 +57,7 @@ class _Algorithm(object):
         Obtain the template of the output.
         Should be overwritten by algorithms that have a special output format
         (e.g. add a coordinate like frequency or change substantially the
-        shape).
+        shape or dimensions).
 
         Used by __call__ to know how to create chunks and compose the results
         on the different chunks
@@ -186,7 +186,7 @@ class _Algorithm(object):
         if dimensions == 'none': 
             #This is to allow special implementations, where the "rolling"
             #mechanism is avoided
-            signal_out = self.__mapper_func__(signal, kwargs)
+            signal_out = self.__mapper_func__(signal, **kwargs)
         
         #Typical behaviour
         #All dimensions except those specified in dimensions are rolled
@@ -196,16 +196,17 @@ class _Algorithm(object):
 
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
- 
+            
             #create the rolling mechanism
             #which calls self.__mapper_func__ on all chunks
             mapper =  _xr.map_blocks(self.__mapper_func__, 
-                                      signal_dask.copy(deep=True), 
-                                      kwargs = kwargs,
-                                      template = template_dask)
+                                     signal_dask.copy(deep=True), 
+                                     kwargs = kwargs,
+                                     template = template_dask)
+            
             #apply the rollink mechanism and compose the results
             signal_out = mapper.load(scheduler=scheduler) #distributed, single-threaded
-
+            
         #The user will mainly call Algorithms on a Dataset
         #so it will expect a Dataset as result
         if isinstance(signal_in, _xr.Dataset):

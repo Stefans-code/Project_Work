@@ -12,7 +12,6 @@ from ._base_algorithm import _Algorithm
 
 
 def __finalize_special__(res_sig):
-    # print('----->', self.name, 'finalize')
     original_coords = list(res_sig.coords)
     res_sig = res_sig.reset_coords()
     dimensions = list(res_sig.dims)
@@ -21,7 +20,6 @@ def __finalize_special__(res_sig):
             res_sig = res_sig.drop(c)
     res_sig = res_sig.to_array()
     res_sig = res_sig.squeeze(dim='variable').drop('variable')
-    # print('<-----', self.name, 'finalize')
     return res_sig
 
 class Diff(_Algorithm): #xarray done
@@ -454,7 +452,7 @@ class PSD(_Algorithm): #xarray done
     
 class Wavelet(_Algorithm):
     """
-    Seems it is working fine
+
     """
     def __init__(self, wtype = 'cmor_1.15-1.0',
                  freqs = None,
@@ -529,7 +527,6 @@ class Wavelet(_Algorithm):
             self._compute_scales(signal)
         
         params = self._params
-        
         #get signal values and info
         signal_values = signal.p.get_values().ravel()
         fsamp = signal.p.get_sampling_freq()
@@ -545,6 +542,7 @@ class Wavelet(_Algorithm):
         scales = params['scales']
         
         W, freqs_nyq = _pywt.cwt(signal_values, scales, wavelet=wtype)
+        
         
         freqs=freqs_nyq*fsamp
         self._params['freqs_nyq'] = freqs_nyq
@@ -563,6 +561,7 @@ class Wavelet(_Algorithm):
         W = _np.expand_dims(W,[2,3])
         
         out = signal.copy(deep=True)
+        
         out = out.expand_dims({'freq':freqs}, axis=0)
         # out.name = signal.name+'_'#+self.name
         
@@ -577,15 +576,17 @@ class Wavelet(_Algorithm):
         fsamp = signal.p.get_sampling_freq()
         
         scales = self._params['scales']
+        # if 'freqs' in self._params:
+        #     freqs = self._params['freqs']
+        # else:
         freqs = self._params['freqs_nyq']*fsamp
 
         out = _np.zeros(shape=(len(scales), N,
                                signal.sizes['channel'], 
                                signal.sizes['component']))
 
-        # print(len(freqs))
-        
-        out = _xr.DataArray(out, dims=('freq', 'time', 'channel', 'component'),
+        out = _xr.DataArray(out, 
+                            dims=('freq', 'time', 'channel', 'component'),
                             coords = {'freq': freqs,
                                       'time': signal.coords['time'].values,
                                       'channel': signal.coords['channel'],

@@ -562,7 +562,7 @@ class Wavelet(_Algorithm):
         
         out = signal.copy(deep=True)
         
-        out = out.expand_dims({'freq':freqs}, axis=0)
+        out = out.expand_dims({'freq':freqs.astype(_np.float64)}, axis=0)
         # out.name = signal.name+'_'#+self.name
         
         out.values = W

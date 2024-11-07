@@ -34,7 +34,7 @@ nirs = nirs.assign_coords(stim=('time', stim))
 
 def load_xrnirs(file):
     nirs = _xr.load_dataset(file)
-    attrs = nirs.p.main_signal.attrs
+    attrs = nirs.attrs
     todel=[]
     for k in attrs.keys():
         if k.endswith('_shape'):
@@ -46,8 +46,7 @@ def load_xrnirs(file):
     for k in todel:
         del attrs[k]
     
-    nirs.p.main_signal.attrs = attrs
-    nirs.attrs['history'] = [nirs.attrs['history']]
+    nirs.attrs = attrs
     return(nirs)
 
 def SDto1darray(nirs):

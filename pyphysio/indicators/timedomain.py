@@ -9,7 +9,11 @@ class Mean(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
         
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
@@ -75,7 +79,11 @@ class StDev(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time': 1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()

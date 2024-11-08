@@ -85,7 +85,11 @@ class Kurtosis(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.values.ravel()
@@ -96,7 +100,11 @@ class Kurtosis(_SignalQualityIndicator):
 class Entropy(_SignalQualityIndicator):
     def __init__(self, threshold, nbins=25, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, nbins=nbins, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         signal_values = signal.values.ravel()
@@ -115,7 +123,11 @@ class DerivativeEnergy(_SignalQualityIndicator):
     def __init__(self, threshold, dt=0.01, **kwargs):
         assert dt>0
         _SignalQualityIndicator.__init__(self, threshold, dt = dt, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         # signal_values = signal.values.ravel()
@@ -131,7 +143,11 @@ class SpectralPowerRatio(_SignalQualityIndicator):
     """
     def __init__(self, threshold, method='ar', bandN=[5,14], bandD=[5,50],**kwargs):
         _SignalQualityIndicator.__init__(self, threshold, method=method, bandN=bandN, bandD=bandD, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     
     def algorithm(self, signal):
@@ -153,7 +169,11 @@ class CVSignal(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.values.ravel()
@@ -170,7 +190,11 @@ class PercentageNAN(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.values

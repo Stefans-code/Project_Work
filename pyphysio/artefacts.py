@@ -61,11 +61,18 @@ class DetectMA(_Algorithm):
         #(using fused channels)
         #and adapt the behaviour of the algorithm on the different dimensions:
         if fuse:
-            self.dimensions = {'time' : 0, 'channel':1, 'component':1}
+            self.dimensions = {}
         else:
-            self.dimensions = {'time' : 0}
-   
-    
+            self.chunk_dict = {'channel': 1, 'component': 1}
+        
+        def __get_template__(self, signal):
+            if self._params['fuse']:
+                template = self.__compute_template__(signal, {'channel': 1,
+                                                              'component': 1})
+            else:
+                template = self.__compute_template__(signal)
+            return(self.chunk_dict, template)
+
     def algorithm(self, signal):
         params = self._params
         win_len = params['win_len']
@@ -174,12 +181,23 @@ class DetectMA_AR(_Algorithm):
                             **kwargs)
         
         if fuse == 'all':
-            self.dimensions = {'time' : 0, 'channel' : 1, 'component' : 1}
+            self.dimensions = {}
         elif fuse == 'component':
-            self.dimensions = {'time' : 0, 'component' : 1}
+            self.chunk_dict = {'channel': 1}
         else:
-            self.dimensions = {'time' : 0}
+            self.chunk_dict = {'channel': 1, 'component': 1}
+        
+    def __get_template__(self, signal):
+        
+        fuse = self._params['fuse']
+        if fuse == 'all':
+            template = self.__compute_template__(signal, {'channel': 1, 'component': 1})
+        elif fuse == 'component':
+            template = self.__compute_template__(signal, {'component': 1})
+        else:
+            template = self.__compute_template__(signal)
             
+        return(self.chunk_dict, template)
    
     
     def algorithm(self, signal):
@@ -257,7 +275,11 @@ class MARA(_Algorithm):
 
     def __init__(self, MA, **kwargs):
         _Algorithm.__init__(self, MA=MA, **kwargs)
-        self.dimensions = {'time' : 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         from csaps import csaps as _csaps
@@ -360,7 +382,11 @@ class WaveletFilter(_Algorithm):
     """ 
     def __init__(self, iqr=1.5, **kwargs):
         _Algorithm.__init__(self, iqr=iqr, **kwargs)
-        self.dimensions = {'time' : 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
         
     
     def _normalization_noise(self, y):

@@ -321,6 +321,7 @@ class _Algorithm(object):
         else:
             return self._params[param]
 
+    @abstractmethod
     def algorithm(cls, signal):
         """
         Placeholder for the subclasses

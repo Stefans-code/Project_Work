@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 import numpy as _np
 import xarray as _xr
 _xr.set_options(keep_attrs=True)
@@ -45,22 +46,23 @@ class _Algorithm(object):
     def __init__(self, **kwargs):
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
+        self.chunk_dict = {}
         
-        self.dimensions = {}#'time': 0}
-    
     @property
     def name(self):
         return(self.__class__.__name__)
     
+    @abstractmethod
     def __get_template__(self, signal):
         """
-        Obtain the template of the output.
-        Should be overwritten by algorithms that have a special output format
-        (e.g. add a coordinate like frequency or change substantially the
-        shape or dimensions).
-
         Used by __call__ to know how to create chunks and compose the results
-        on the different chunks
+        on the different chunks.
+        Should be implemented by each algorithm.
+        In most cases, the __get_template__ function will just be a call to
+        __compute_template__ with a specification of the output dimensions 
+        (out_dims parameter).
+        
+        For more complex cases it can be adapted as needed.
 
         Parameters
         ----------
@@ -74,93 +76,115 @@ class _Algorithm(object):
         template : xarray.DataArray
             Template of the output.
         """
+        pass
+        
+    
+    def __compute_template__(self, signal, out_dims = None):
+        """
+        Helper function to obtain the template of the output.
+        Should be overwritten by algorithms that have a special output format
+        
+        Used by __call__ to know how to create chunks and compose the results
+        on the different chunks
 
-        dimensions = self.dimensions
+        Parameters
+        ----------
+        signal : xarray.DataArray
+            Input signal.
+        out_dims: None or dict
+
+        Returns
+        -------
+        template : xarray.DataArray
+            Template of the output.
+        """
         
-        chunk_dict = {}
-        template_shape = []
-        template_coords = {}
         
-        for dim in ('time', 'channel', 'component'):
-            size_in_dim = signal.sizes[dim]
+        if out_dims is None: #no changes in dimensions or coordinates
+            return(signal)
+        
+        shape_out = []
+        coords_out = {}
+        
+        #first process required dimensions
+        for dim in ['time', 'channel', 'component']:
             
-            if dim not in dimensions.keys():
-                #the dimension is not used
-                chunk_dict[dim] = 1
-                size_out_dim = size_in_dim
-                coords = signal.coords[dim].values
-            else:
-                if dimensions[dim] == 0:
-                    size_out_dim = size_in_dim
-                    coords = signal.coords[dim].values
+            if dim in out_dims.keys(): #if dim is changed
+                out_coord = out_dims[dim]
+                #if only integer, that is the new size of the dimension
+                if isinstance(out_coord, int):
+                    shape_out.append(out_coord)
+                    coords_out[dim] = _np.arange(out_coord)
+                #otherwise assume it is an iterable with the coords values
                 else:
-                    size_out_dim = dimensions[dim]
-                    if size_out_dim <= size_in_dim:
-                        coords = signal.coords[dim].values[:size_out_dim]
-                    else:
-                        coords = _np.arange(len(size_out_dim))
-            template_coords[dim] = coords
-            template_shape.append(size_out_dim)
+                    shape_out.append(len(out_coord))
+                    coords_out[dim] = out_coord
+                
+                #delete info from out_dims
+                del out_dims[dim]
+                
+            else: #dim is not changed
+                #keep the information from the input signal
+                shape_out.append(signal.sizes[dim])
+                coords_out[dim] = signal.coords[dim].values
+            
         
-        #create template
-        output = _np.zeros(template_shape)
-        template = _xr.DataArray(output, dims = ('time', 'channel', 'component'),
-                                 coords=template_coords,
+        #add any other dimension 
+        for dim in out_dims.keys():
+            out_coord = out_dims[dim]
+            if isinstance(out_coord, int):
+                shape_out.append(out_coord)
+                coords_out[dim] = _np.arange(out_coord)
+            else:
+                shape_out.append(len(out_coord))
+                coords_out[dim] = out_coord
+        
+        out_data = _np.empty(shape_out)
+        
+        template = _xr.DataArray(out_data, 
+                                 dims = coords_out.keys(),
+                                 coords = coords_out,
                                  name=signal.name)
         
-        # template.name = signal
-        return(chunk_dict, template)
+        return(template)
+
     
-    def __call__(self, signal_in, add_signal=True, dimensions=None, scheduler=scheduler, **kwargs):
+    def __call__(self, signal_in, scheduler=scheduler, **kwargs):
         '''
         This function iteratively calls the self.algorithm on signal's chunks.
         If dask is installed and properly configured, this allows to parallelize
         the executon, for instance in cases of multi-channel/multi-components
         data.
-        
-        The workflow is the following:
-        __call__() will apply the function __mapper_func__() to each signal chunk
-        using the _xr.map_blocks function.
-        
-        __mapper_func__ will call the algorithm() function on each signal chunk
-        algorithm() will return a numpy array, which is properly formatted into
-        a DataArray by the subsequent call to __finalize__.
-        
-        the _xr.map_blocks function takes care of composing the results from 
-        different chunks into a DataArray.
-        
         This mechanism requires a dictionary to inform how to create the chunks
         and a template of the output of the parallelization (e.g. format of the 
         expected result). Both are obtained by the call to __get_template__(), 
-        which uses information in self.dimensions.
+        which uses information in self.chunk_dict.
         
-        Special cases can be managed as follows:
+        The typical workflow is the following:
+        1. __get_template__ is called to get information on how to split the signal
+          (chink_dict) and how the resulting xarray should look like (template).
+          Then chunks of the input signal and of the template are created
+          
+        2. _xr.map_blocks will call __mapper_func__ to process each chunk.
         
-        - self.dimensions = 'none'
-          For algorithms on which the parallelization should not be applied.
-          The user will properly implement the __mapper_func__ to return the
-          desired result
-         
-        - By properly overwriting the __finalize__() and/or __get_template__() 
-          functions, for algorithm with a special output shape.
+        3. __mapper_func__ will call the algorithm() function on each signal chunk.
+        algorithm() will return a numpy array, which is then properly formatted
+        into a DataArray based on the template.
         
-
+        4. the _xr.map_blocks function receives the results from all the chunks and
+        takes care of composing them into a unique DataArray.
+        
+        5. attributes of the origiinal signal are copied to the resulting xarray
+        
+        
         Parameters
         ----------
         signal_in : xarray.Dataset
             The input signal.
-        add_signal : boolean, optional
-            Whether to return a signal which also stores the input signal. 
-            The default is True.
-            
-        #TODO: remove dimensions
-        dimensions : 'none', None, dict
-            This is to allow fancy uses... 
-        
         
         scheduler : string, optional
             To allow changing the scheduler at runtime. Useful for debugging.
-            The default is scheduler.
+            The default is 'threads'.
 
         Returns
         -------
@@ -180,14 +204,19 @@ class _Algorithm(object):
         
         signal_name = signal.name
         
-        if dimensions is None: 
-            dimensions = self.dimensions
-
-        if dimensions == 'none': 
+        if len(self.chunk_dict) == 0:
             #This is to allow special implementations, where the "rolling"
             #mechanism is avoided
-            signal_out = self.__mapper_func__(signal, **kwargs)
-        
+            result_numpy = self.algorithm(signal, **kwargs)
+            
+            try:
+                #use __finalize__ if implemented
+                result_out = self.__finalize__(result_numpy, signal)
+                return(result_out)
+            except:
+                #just return whatever the algorithm method returns
+                return(result_numpy)
+            
         #Typical behaviour
         #All dimensions except those specified in dimensions are rolled
         else:
@@ -207,64 +236,17 @@ class _Algorithm(object):
             #apply the rollink mechanism and compose the results
             signal_out = mapper.load(scheduler=scheduler) #distributed, single-threaded
             
-        #The user will mainly call Algorithms on a Dataset
-        #so it will expect a Dataset as result
-        if isinstance(signal_in, _xr.Dataset):
-            output_name = f'{signal_name}_{self.__repr__()}'
-
-            #TODO: why are we repeating these? they are also in __mapper_func__?
-            # we should decide what happens to a dataset when an algorithm is applied!!!
-            # we could just transform to _xr.Dataset?
             
-            #add windowing info
-            strange_result = False
-            for dim in signal_out.dims:
-                if dim in list(signal_in.coords):
-                    if signal_out.sizes[dim] == 1 and signal_in.sizes[dim] != 1:
-                        #there has been a windowing operation
-                        coord_start = signal_in.coords[dim].values[0]
-                        coord_stop = signal_in.coords[dim].values[-1]
-                            
-                        signal_out = signal_out.assign_coords({f'{dim}_start': (dim, [coord_start])})
-                        signal_out = signal_out.assign_coords({f'{dim}_stop': (dim, [coord_stop])})
-                    
-                    elif signal_out.sizes[dim] != signal_in.sizes[dim]:
-                        #there has been a different type of change in the shape
-                        # we should just convert the result to a dataset and return it
-                        # so we flag this as strange_result
-                        strange_result = True
-            
-            
-            #TODO: ISSUE: if "expanding" a coordinate (e.g. see pyphysio.FunctionalSeparationFilter)
-            #these steps reset the original shape (e.g. from 4 to 2)
-            if strange_result:
-                signal_ds_out = signal_out.to_dataset(name = output_name)
-                signal_ds_out.attrs['MAIN'] = output_name
-                signal_ds_out.attrs['history'] = [output_name]
-                signal_ds_out.p.main_signal.attrs = signal_in.p.main_signal.attrs
-                return(signal_ds_out)
-
-
-            #TODO: if we are changing the size 
-            #(e.g. reducing components/channels, timepoints)            
-            #the next steps will recover the original dataset "shape"
-            #which might be an unwanted result
-            #create the output Dataset
-            signal_ds_out = signal_in.copy(deep=True)
-            signal_ds_out = signal_ds_out.assign({output_name:signal_out})
-            signal_ds_out.attrs['MAIN'] = output_name
-            
-            #whether to keep the previous versions of the signal
-            if add_signal:
-                signal_ds_out.attrs['history'].append(self.name)
-            else:
-                signal_ds_out = signal_ds_out.drop(signal_name)
-                signal_ds_out.attrs['history'] = [output_name]
-            
-            signal_ds_out.p.main_signal.attrs = signal_in.p.main_signal.attrs
-            return(signal_ds_out)
+        output_name = f'{signal_name}_{self.__repr__()}'
+        signal_out.name = output_name
         
-        signal_out.attrs = signal_in.attrs
+        #copy attributes of input dataset
+        for k,v in signal_in.attrs.items():
+            try:
+                signal_out.attrs[k] = v.copy()
+            except:
+                signal_out.attrs[k] = v
+        
         return(signal_out)        
         
     def __mapper_func__(self, signal_in, **kwargs):
@@ -275,8 +257,7 @@ class _Algorithm(object):
         from the composition of the output as a xarray.DataArray.
         In fact the output returned by the algorithm function is (typically)
         a numpy array.
-        This is formatted as a xarray.DataArray by the call to 
-        the __finalize__ function.
+        This is then formatted as a xarray.DataArray.
         
         Parameters
         ----------
@@ -293,80 +274,38 @@ class _Algorithm(object):
             to create the general outcome (returned to the user).
         '''
         
+        chunk_dict, template_out = self.__get_template__(signal_in)
+        for k,v in chunk_dict.items():
+            assert signal_in.sizes[k] == v
+            
         result_numpy = self.algorithm(signal_in, **kwargs)
-        result_out = self.__finalize__(result_numpy, signal_in)
         
-        return(result_out)
+        assert result_numpy.ndim == template_out.ndim, '{} vs {}'.format(result_numpy.ndim,
+                                                                         template_out.ndim)
 
-    def __finalize__(self, result, signal_in, dimensions='none'):
-        """
-        General function to obtain a coherent output from the calls to self.algorithm.
+        coords_out = {}
+        for dim in template_out.dims:
+            coords_out[dim] = []
+            
+        #coordinates of dimensions that are in chunk dict
+        #are taken from signal_in    
+        for dim in chunk_dict.keys():
+            coords_out[dim] = signal_in[dim].values
 
-        Parameters
-        ----------
-        result : numpy.ndarray
-            The output result returned by the self.algorithm function.
-        signal_in : xarray.DataArray
-            The input signal on which the algorithm is called.
-        dimensions : str or dict, optional
-            The dimensions to be used for the output. If 'none', no dimensions are used.
-            If a dictionary is provided, it contains the dimensions to be used and their
-            corresponding sizes. The default is 'none'.
-
-        Returns
-        -------
-        signal_out : xarray.DataArray
-            The output of the algorithm applied on the input signal, formatted as a
-            xarray.DataArray.
-
-        Notes
-        -----
-        This function takes the output result returned by the self.algorithm function,
-        which is typically a numpy array, and formats it into a xarray.DataArray.
-        The dimensions and coordinates of the output are determined based on the input
-        signal and the provided dimensions.
-
-        If the result has a dimensionality of 1, it is expanded to have dimensions of
-        size 1 along 'time', 'channel', and 'component' dimensions. The resulting
-        xarray.DataArray is assigned the name of the input signal.
-
-        The dimensions of the output signal are determined as follows:
-        - If the size of a dimension in the input signal matches the size of the
-        corresponding dimension in the result, the coordinates of that dimension
-        are preserved.
-        - If the size of a dimension in the result is 1, indicating an indicator or
-        windowed algorithm, the coordinate of the start of that dimension in the
-        input signal is preserved.
-        - Otherwise, a default coordinate range is created for that dimension.
-
-        The resulting xarray.DataArray is assigned the attributes of the input signal.
-
-        """
-
-        if result.ndim == 1:
-            result = _np.expand_dims(result, [1,2])
-
-        signal_out = _xr.DataArray(result, 
-                                   dims=('time', 'channel', 'component'), 
+        #coordinates of dimensions that are not in chunk dict
+        #are taken from template_out
+        for dim in template_out.dims:
+            if dim not in chunk_dict.keys():
+                coords_out[dim] = template_out[dim].values
+            
+        signal_out = _xr.DataArray(result_numpy,
+                                   coords = coords_out, 
                                    name=signal_in.name)
 
-        for dim in ('time', 'channel', 'component'):
-            
-            if signal_in.sizes[dim] == signal_out.sizes[dim]:
-                #same size --> same coords
-                signal_out = signal_out.assign_coords({dim:signal_in.coords[dim].values})
-                
-            elif signal_out.sizes[dim] == 1: 
-                #indicators or windowed algorithms
-                coord_start = signal_in.coords[dim].values[0]
-                signal_out = signal_out.assign_coords({dim:[coord_start]})
-                
-            else:
-                signal_out = signal_out.assign_coords({dim:_np.arange(signal_out.sizes[dim])})
-                    
         signal_out.attrs = signal_in.attrs.copy()
+        
         return(signal_out)
-    
+
     def __repr__(self):
         return self.__class__.__name__ if 'name' not in self._params else self._params['name']
 
@@ -387,6 +326,7 @@ class _Algorithm(object):
         else:
             return self._params[param]
 
+    @abstractmethod
     def algorithm(cls, signal):
         """
         Placeholder for the subclasses

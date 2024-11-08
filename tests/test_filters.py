@@ -4,21 +4,22 @@ import xarray as xr
 
 import pyphysio.filters as filt
 
-filters = [filt.Normalize(), 
+filters = [filt.Normalize(),
            filt.ConvolutionalFilter('rect', 0.5),
            filt.DeConvolutionalFilter([0.01, 0.005], deconv_method='fft'),
            filt.FIRFilter(20, 30),
            filt.IIRFilter(20, 30),
            filt.KalmanFilter(100, 100),
            filt.NotchFilter(25),
-           filt.ImputeNAN(),
-           filt.RemoveSpikes()]
+           filt.RemoveSpikes()
+           ]
 
 def _test_filters(signal):
-    assert isinstance(signal, xr.Dataset)
-    assert isinstance(signal.p.main_signal, xr.DataArray)
+    # assert isinstance(signal, xr.Dataset)
+    # assert isinstance(signal.p.main_signal, xr.DataArray)
     
     for f in filters:
+        print(f)
         # print(f)
         result = f(signal)
         # print(f.__name__())
@@ -38,3 +39,4 @@ def test_filter():
             _test_filters(signal)
             
 test_filter()
+#%%

@@ -2,6 +2,7 @@ import numpy as np
 from pyphysio.signal import create_signal
 import xarray as xr
 
+#%%
 def test_gets(signal):
     assert isinstance(signal, xr.Dataset)
     assert isinstance(signal.p.main_signal, xr.DataArray)

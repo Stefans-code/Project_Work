@@ -43,13 +43,15 @@ class Normalize(_Algorithm):
         if norm_method == "custom":
             assert norm_range != 0, "norm_range must not be zero"
         _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     def algorithm(self, signal, **kwargs):
+        print(signal.values.shape)
         from .indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
         params = self._params
         method = params['norm_method']

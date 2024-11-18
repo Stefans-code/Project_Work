@@ -9,16 +9,17 @@ class Mean(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal, {'time': 1})
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
         
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
-        result = _np.mean(signal_values, keepdims=True)
-        # print(result.shape)
+        result = _np.array([_np.mean(signal_values)])#, keepdims=True)
+        # print(result, result.shape)
         return result
 
 class Min(_Algorithm):
@@ -27,11 +28,12 @@ class Min(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal, {'time': 1})
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     @classmethod
     def algorithm(cls, signal):
@@ -45,11 +47,12 @@ class Max(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1})
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
@@ -62,11 +65,12 @@ class Range(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1})
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         return Max()(signal).values - Min()(signal).values
@@ -78,11 +82,12 @@ class Median(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1})
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
@@ -95,11 +100,12 @@ class StDev(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal, {'time': 1})
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
@@ -112,11 +118,12 @@ class Sum(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1})
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()

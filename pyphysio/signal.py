@@ -83,12 +83,12 @@ def create_signal(data, times=None, sampling_freq=None,
 
     #TODO: names for channels/components?
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
-    assert data.ndim <= 3, "data should have maximum 3 dimensions"
+    # assert data.ndim <= 3, "data should have maximum 3 dimensions"
     
-    if data.ndim == 1:
-        data = _np.expand_dims(data, [1,2])
-    elif data.ndim == 2:
-        data = _np.expand_dims(data, 2)
+    # if data.ndim == 1:
+    #     data = _np.expand_dims(data, [1,2])
+    # elif data.ndim == 2:
+    #     data = _np.expand_dims(data, 2)
     
     #--> check validity of the temporal information
     if sampling_freq is None: #defined by times
@@ -128,16 +128,22 @@ def create_signal(data, times=None, sampling_freq=None,
     start_time = times[0]
         
     #check dims and set coordinates
-    dims = ('time', 'channel', 'component')
+    dims = ['time', 'channel', 'component']
+    dims_data = data.ndim
+    if dims_data > 3:
+        for i in _np.arange(4, dims_data+1):
+            dims.append(f'dimension_{i}')
+    
+    
     coords = {'time':times}
     
-    for i_dim in _np.arange(1,3): #assign coords to other dimensions
-        coords[dims[i_dim]] = _np.arange(data.shape[i_dim]).astype(_np.float64)
+    for i_dim in _np.arange(1, dims_data): #assign coords to other dimensions
+        coords[dims[i_dim]] = _np.arange(data.shape[i_dim]).astype(int)
         
     info['sampling_freq'] = sampling_freq
     info['start_time'] = start_time
         
-    signal = _xr.DataArray(data, dims = dims,
+    signal = _xr.DataArray(data, dims = dims[:dims_data],
                            coords = coords, 
                            attrs = info,
                            name = name)
@@ -206,10 +212,6 @@ class PyphysioDataArray(object):
 
     def __init__(self, xdataarray):
         self.da = xdataarray
-    
-    @property
-    def main_signal(self):
-        return self.da
     
     #++++++++++++++++++++++++++++++++++++
     #!!! CHECK
@@ -338,24 +340,29 @@ class PyphysioDataArray(object):
         return self.get_end_time() - self.get_start_time()
 
     def has_multi_channels(self):
-        return(self.get_nchannels()>1)
+        return(self.da.values.ndim > 1)
     
     def get_nchannels(self):
-        return(len(self.da.coords['channel']))
+        if self.has_multi_channels():
+            return(len(self.da.coords['channel']))
+        else:
+            return(None)
         
     def has_multi_components(self):
-        return(self.get_ncomponents()>1)
+        return(self.da.values.ndim > 2)
     
     def get_ncomponents(self):
-        return(len(self.da.coords['component']))
+        if self.has_multi_components():
+            return(len(self.da.coords['component']))
+        else:
+            return(None)
     
     def get_info(self):
         return self.da.attrs
 
-
-    #TODO: check
-    def replace(self, new_vals):
-        return self.assign({'signal': (('time', 'channel', 'component'), new_vals)})
+    # #TODO: 
+    # def replace(self, new_vals):
+    #     return self.assign({'signal': (('time', 'channel', 'component'), new_vals)})
         
     def resample(self, f_out):
         t_start = self.get_start_time()

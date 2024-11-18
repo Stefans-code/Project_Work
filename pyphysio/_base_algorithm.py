@@ -46,7 +46,7 @@ class _Algorithm(object):
     def __init__(self, **kwargs):
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
-        self.chunk_dict = {}
+        self.required_dims = []
         
     @property
     def name(self):
@@ -59,6 +59,7 @@ class _Algorithm(object):
         on the different chunks.
         Should be implemented by each algorithm.
         In most cases, the __get_template__ function will just be a call to
+        __compute_chunk_dict to compute the chunk_dict and to
         __compute_template__ with a specification of the output dimensions 
         (out_dims parameter).
         
@@ -78,7 +79,16 @@ class _Algorithm(object):
         """
         pass
         
-    
+    def __compute_chunk_dict__(self, signal):
+        signal_dims = signal.dims
+        
+        chunk_dict = {}
+        for dim in signal_dims:
+            if dim not in self.required_dims:
+                chunk_dict[dim] = 1
+        return(chunk_dict)        
+        
+        
     def __compute_template__(self, signal, out_dims = None):
         """
         Helper function to obtain the template of the output.
@@ -99,15 +109,16 @@ class _Algorithm(object):
             Template of the output.
         """
         
-        
         if out_dims is None: #no changes in dimensions or coordinates
             return(signal)
         
         shape_out = []
         coords_out = {}
         
+        signal_dims = signal.dims
+    
         #first process required dimensions
-        for dim in ['time', 'channel', 'component']:
+        for dim in signal_dims:
             
             if dim in out_dims.keys(): #if dim is changed
                 out_coord = out_dims[dim]
@@ -204,7 +215,7 @@ class _Algorithm(object):
         
         signal_name = signal.name
         
-        if len(self.chunk_dict) == 0:
+        if len(self.required_dims) == 0:
             #This is to allow special implementations, where the "rolling"
             #mechanism is avoided
             result_numpy = self.algorithm(signal, **kwargs)
@@ -280,9 +291,23 @@ class _Algorithm(object):
             
         result_numpy = self.algorithm(signal_in, **kwargs)
         
-        assert result_numpy.ndim == template_out.ndim, '{} vs {}'.format(result_numpy.ndim,
-                                                                         template_out.ndim)
-
+        
+        result_ndims = result_numpy.ndim
+        template_ndims = template_out.ndim
+        assert result_ndims <= template_ndims
+        
+        if result_ndims > len(self.required_dims): #adding a dimension
+            add_axis = -2            
+        else:
+            add_axis = -1
+        
+        n_dims_to_add = template_ndims - result_ndims        
+        
+        for i in _np.arange(n_dims_to_add):
+            result_numpy = _np.expand_dims(result_numpy, add_axis)
+        
+        
+        
         coords_out = {}
         for dim in template_out.dims:
             coords_out[dim] = []
@@ -329,6 +354,8 @@ class _Algorithm(object):
     @abstractmethod
     def algorithm(cls, signal):
         """
-        Placeholder for the subclasses
+        This method is the algorithm that is applied to the signal.
+        It should return a numpy array with a number of dimension that 
+        is not lower than the number of required dimensions in self.required_dims
         """
         pass

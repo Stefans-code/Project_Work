@@ -88,8 +88,9 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
+psd = utils.PSD('welch')
 
-pwd = utils.PSD('welch')(signal)
+pwd = psd(signal)
 
 for i in np.arange(1, len(freqs)):
     idx_max = np.argmax(pwd.p.get_values()[:,i])
@@ -98,7 +99,7 @@ for i in np.arange(1, len(freqs)):
 pwd = utils.PSD('welch')(signal)
 
 for i in np.arange(1, len(freqs)):
-    idx_max = np.argmax(pwd.p.get_values()[:,i])
+    idx_max = np.argmax(pwd.p.get_values()[:,i,:,:])
     assert abs((pwd.coords['freq'].values[idx_max] - i)) < 0.01
 
 # pwd = tool.PSD('ar')(signal)
@@ -115,8 +116,8 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=fsamp, name = 'random')
 
-wavelet = utils.Wavelet()(signal)
-
+wavelet = utils.Wavelet()
+W = wavelet(signal)
 #TODO: create assert here
 
 #%%

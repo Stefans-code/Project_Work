@@ -15,12 +15,12 @@ def _loss(t1, t2, signal, amplitude):
     if t2<=t1:
         return(_np.sum(abs(signal.p.get_values().ravel())))
     
-    driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal, add_signal=False)
-    driver_f = _IIRFilter(0.05, btype='lowpass')(driver, add_signal=False)
+    driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal)
+    signal_f = _IIRFilter(0.05, btype='lowpass')(driver).p.get_values()
     
     driver_diff = driver.p.get_values() - signal_f
     
-    phasic_values = PhasicEstimKalman(amplitude=amplitude)(driver, add_signal=False)
+    phasic_values = PhasicEstimKalman(amplitude=amplitude)(driver)
 
     phasic_values[_np.where(phasic_values>0)[0]] = _np.nan
     loss_out = abs(_np.nanmean(phasic_values))
@@ -105,7 +105,11 @@ class DriverEstim(_Algorithm):
                             optim_bayes=optim_bayes,
                             optim_bounds = optim_bounds,
                             amplitude=amplitude)
-        self.dimensions = {'time': 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
         
     def algorithm(self, signal):
         optim = self._params['optim']
@@ -208,7 +212,11 @@ class PhasicEstim(_Algorithm):
         assert win_pre > 0,  "Window pre peak value has to be positive"
         assert win_post > 0, "Window post peak value has to be positive"
         _Algorithm.__init__(self, amplitude=amplitude, win_pre=win_pre, win_post=win_post, polyfit=polyfit, return_phasic=return_phasic)
-        self.dimensions = {'time': 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -294,7 +302,11 @@ class PhasicEstimKalman(_Algorithm):
         assert amplitude > 0, "Amplitude value has to be positive"
         _Algorithm.__init__(self, amplitude=amplitude,
                             return_phasic=return_phasic)
-        self.dimensions = {'time': 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params

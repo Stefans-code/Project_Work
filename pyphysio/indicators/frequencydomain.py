@@ -32,7 +32,11 @@ class PowerInBand(_Algorithm):
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
         _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -73,7 +77,11 @@ class PeakInBand(_Algorithm):
 
     def __init__(self, freq_min, freq_max, method, **kwargs):
         _Algorithm.__init__(self, freq_min=freq_min, freq_max=freq_max, method=method, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         

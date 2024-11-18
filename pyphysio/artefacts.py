@@ -61,7 +61,7 @@ class DetectMA(_Algorithm):
         #(using fused channels)
         #and adapt the behaviour of the algorithm on the different dimensions:
         if fuse:
-            self.dimensions = {}
+            self.chunk_dict = {}
         else:
             self.chunk_dict = {'channel': 1, 'component': 1}
         
@@ -181,7 +181,7 @@ class DetectMA_AR(_Algorithm):
                             **kwargs)
         
         if fuse == 'all':
-            self.dimensions = {}
+            self.chunk_dict = {}
         elif fuse == 'component':
             self.chunk_dict = {'channel': 1}
         else:
@@ -205,9 +205,7 @@ class DetectMA_AR(_Algorithm):
         order = params['order']
         # th_std_coeff = params['th_std_coeff']
         fuse = params['fuse']
-        
-        fsamp = signal.p.get_sampling_freq()
-                
+                        
         signal_norm = _Normalize()(signal)
         signal_values = signal_norm.values
         

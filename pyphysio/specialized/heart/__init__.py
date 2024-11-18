@@ -37,7 +37,11 @@ class BeatMSPTD(_Algorithm):
     def __init__(self, win_len=6, overlap=0.2, tol=0.05):
         # TODO: tol depending on bpm_max?
         _Algorithm.__init__(self, win_len=win_len, overlap=overlap, tol=tol)
-        self.dimensions = {'time': 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -192,7 +196,11 @@ class BeatFromBP(_Algorithm):
 
         _Algorithm.__init__(self, bpm_max=bpm_max,
                             win_pre=win_pre, win_post=win_post)
-        self.dimensions = {'time': 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -235,7 +243,7 @@ class BeatFromBP(_Algorithm):
         # compute the signal derivative
         dxdt = _Diff()(signal).values
         
-        import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as plt
         true_peaks = []
         # for each candidate peak find the correct peak
         for idx_beat in maxp:
@@ -322,8 +330,12 @@ class BeatFromECG(_Algorithm):
         assert delta >= 0, "Delta value should be positive (or equal to 0 if automatically computed)"
         assert 0 < k < 1, "K coefficient must be in the range (0,1)"
         _Algorithm.__init__(self, bpm_max=bpm_max, delta=delta, k=k)
-        self.dimensions = {'time': 0}
-
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
+    
     def algorithm(self, signal):
         params = self._params
         bpm_max, delta, k = params["bpm_max"], params["delta"], params["k"]
@@ -393,7 +405,11 @@ class RemoveBeatOutliers(_Algorithm):
 
         _Algorithm.__init__(self, ibi_median=ibi_median,
                             cache=cache, sensitivity=sensitivity)
-        self.dimensions = {'time': 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         assert signal.p.get_sampling_freq() != 'unevenly', "This algorithm should be applied to evenly IBI. Avoid processing nans before"
@@ -476,7 +492,11 @@ class BeatOptimizer(_Algorithm):
 
         _Algorithm.__init__(self, ibi_median=ibi_median,
                             cache=cache, sensitivity=sensitivity)
-        self.dimensions = {'time': 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
 
     def _add_peaks(self, t_prev, t_curr, ibi_cache, bvp_signal=None):

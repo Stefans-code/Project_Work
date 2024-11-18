@@ -12,7 +12,7 @@ class Mean(_Algorithm):
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
+        template = self.__compute_template__(signal, {'time': 1})
         return(self.chunk_dict, template)
         
     def algorithm(self, signal):
@@ -27,7 +27,11 @@ class Min(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time': 1})
+        return(self.chunk_dict, template)
 
     @classmethod
     def algorithm(cls, signal):
@@ -41,7 +45,11 @@ class Max(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
@@ -54,7 +62,11 @@ class Range(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         return Max()(signal).values - Min()(signal).values
@@ -66,7 +78,11 @@ class Median(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
@@ -96,7 +112,11 @@ class Sum(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.p.get_values()
@@ -105,40 +125,48 @@ class Sum(_Algorithm):
 
 class AUC(_Algorithm):
     """
-    Computes the Area Under the Curve of the signal, treating Not a Numbers (NaNs) as zero.
+    Computes the Area Under the Curve of the signal.
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         fsamp = signal.p.get_sampling_freq()
         return Sum()(signal).values*(1./fsamp)
     
-class DetrendedAUC(_Algorithm):
-    """
-    Computes the Area Under the Curve of the signal, treating Not a Numbers (NaNs) as zero.
-    """
-    def __init__(self, **kwargs):
-        _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+# class DetrendedAUC(_Algorithm):
+#     """
+#     Computes the Area Under the Curve of the signal, treating Not a Numbers (NaNs) as zero.
+#     """
+#     def __init__(self, **kwargs):
+#         _Algorithm.__init__(self, **kwargs)
+#         self.chunk_dict = {'channel': 1, 'component': 1}
+    
+#     def __get_template__(self, signal):
+#         template = self.__compute_template__(signal, {'time':1})
+#         return(self.chunk_dict, template)
 
-    def algorithm(self, signal):
-        fsamp = signal.p.get_sampling_freq()
+#     def algorithm(self, signal):
+#         fsamp = signal.p.get_sampling_freq()
         
-        signal_values = signal.p.get_values()
+#         signal_values = signal.p.get_values()
         
-        #detrend
-        idx = _np.arange(len(signal_values))[:, _np.newaxis, _np.newaxis]
-        intercept = signal_values[[0]]
-        coeff = (signal_values[[-1]] - signal_values[[0]]) / len(signal_values)
+#         #detrend
+#         idx = _np.arange(len(signal_values))[:, _np.newaxis, _np.newaxis]
+#         intercept = signal_values[[0]]
+#         coeff = (signal_values[[-1]] - signal_values[[0]]) / len(signal_values)
         
-        baseline = intercept + coeff*idx
+#         baseline = intercept + coeff*idx
         
-        signal_ = signal_values - baseline
+#         signal_ = signal_values - baseline
         
-        auc = (1. / fsamp) * _np.sum(signal_, keepdims=True)
-        return auc
+#         auc = (1. / fsamp) * _np.sum(signal_, keepdims=True)
+#         return auc
 
 
 class RMSSD(_Algorithm):
@@ -147,7 +175,11 @@ class RMSSD(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         
@@ -161,7 +193,11 @@ class SDSD(_Algorithm):
     """
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         diff = _Diff()(signal)

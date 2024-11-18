@@ -19,7 +19,11 @@ class PoincareSD1(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         """
@@ -46,7 +50,11 @@ class PoincareSD2(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         """
@@ -73,7 +81,11 @@ class PoincareSD1SD2(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         """
@@ -99,7 +111,11 @@ class PoinEll(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         sd1 = PoincareSD1()(signal)
@@ -125,7 +141,11 @@ class PNNx(_Algorithm):
 
     def __init__(self, threshold, **kwargs):
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -150,7 +170,11 @@ class NNx(_Algorithm):
     def __init__(self, threshold, **kwargs):
         assert threshold > 0, "Not implemented for threshold not > 0"
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -162,7 +186,11 @@ class NNx(_Algorithm):
 class _Embed(_Algorithm):
     def __init__(self, dimension, **kwargs):
         _Algorithm.__init__(self, dimension=dimension, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         """
@@ -203,7 +231,11 @@ class ApproxEntropy(_Algorithm):
     def __init__(self, radius=.5, **kwargs):
         assert radius > 0, "Parameter radius should be > 0"
         _Algorithm.__init__(self, radius=radius, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -256,7 +288,11 @@ class SampleEntropy(_Algorithm):
     def __init__(self, radius=.5, **kwargs):
         assert radius > 0, "Parameter radius should be > 0"
         _Algorithm.__init__(self, radius=radius, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -305,7 +341,11 @@ class DFAShortTerm(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         
@@ -345,7 +385,11 @@ class DFALongTerm(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time' : 1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal, {'time':1})
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         

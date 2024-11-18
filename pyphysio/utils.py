@@ -41,9 +41,12 @@ class Diff(_Algorithm): #xarray done
     def __init__(self, degree=1):
         assert degree > 0, "The degree value should be positive"
         _Algorithm.__init__(self, degree=degree)
-        self.dimensions = {'time' : 0}
-
+        self.chunk_dict = {'channel': 1, 'component': 1}
     
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
+
     def algorithm(self, signal):
         """
         Calculates the differences between consecutive values
@@ -96,11 +99,11 @@ class PeakDetection(_Algorithm): #xarray done
         assert delta.all() > 0, "Delta value/s should be positive"
         assert refractory >= 0, "Refractory value should be non negative"
         _Algorithm.__init__(self, delta=delta, refractory=refractory, return_peaks=return_peaks)
-        self.dimensions = {'time' : 0}
-
-    # def __finalize__(self, res_sig, arr_windows):
-    #     return __finalize_special__(res_sig)
-        
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         params = self._params
@@ -208,7 +211,11 @@ class SignalRange(_Algorithm): #xarray done
         assert win_len > 0, "Window length should be positive"
         assert win_step > 0, "Window step should be positive"
         _Algorithm.__init__(self, win_len=win_len, win_step=win_step, smooth=smooth)
-        self.dimensions = {'time' : 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     
     def algorithm(self, signal):
@@ -299,7 +306,17 @@ class PSD(_Algorithm): #xarray done
         _Algorithm.__init__(self, method=method, nfft=nfft, window=window, min_order=min_order,
                        max_order=max_order, remove_mean=remove_mean, scaling=scaling, **kwargs)
         
-        self.dimensions = 'special'
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        nfft = self._params['nfft']
+        N = int(nfft/2 + 1)
+        fsamp = signal.p.get_sampling_freq()
+        freqs = _np.linspace(start=0, stop=fsamp / 2, num=N)
+        
+        template = self.__compute_template__(signal, {'time':1, 'freq': freqs})
+        
+        return(self.chunk_dict, template)
     
     def __finalize__(self, res_sig, arr_window):
         return __finalize_special__(res_sig)
@@ -419,36 +436,22 @@ class PSD(_Algorithm): #xarray done
         # out.name = signal.name+'_'+self.name
         # out.values = _np.expand_dims(psd,[1,2])
         
-        psd = _np.expand_dims(psd,[1, 2])
         
-        out = signal.copy(deep=True)
-        out = out.expand_dims({'freq':freqs}, axis=0)[:,0]
-        out = out.drop('time')
-        # out.name = signal.name+'_'+self.name
-        # print(out)
+        psd = psd[_np.newaxis, _np.newaxis, _np.newaxis, :]
+        # print(psd.shape)
         
-        out.values = psd
+        # out = signal.copy(deep=True)
+        # out = out.expand_dims({'freq':freqs}, axis=0)[:,0]
+        # out = out.drop('time')
+        # # out.name = signal.name+'_'+self.name
+        # # print(out)
+        
+        # out.values = psd
         # print('<-----', self.name)
-        return out
+        return psd
+        # return out
 
-    def __get_template__(self, signal):
-        nfft = self._params['nfft']
-        N = int(nfft/2 + 1)
-        out = _np.zeros(shape=(N, #1,
-                               signal.sizes['channel'], 
-                               signal.sizes['component']))
-        
-        fsamp = signal.p.get_sampling_freq()
-        
-        freqs = _np.linspace(start=0, stop=fsamp / 2, num=N)
-        
-        out = _xr.DataArray(out, dims=('freq', 'channel', 'component'), #'time', 'channel', 'component'),
-                            coords = {'freq': freqs,
-                                      # 'time': [signal.coords['time'].values[0]],
-                                      'channel': signal.coords['channel'],
-                                      'component': signal.coords['component']})
-        # print(out)
-        return {'channel': 1, 'component':1}, out
+
     
 class Wavelet(_Algorithm):
     """
@@ -467,10 +470,19 @@ class Wavelet(_Algorithm):
                             minScale = minScale, nNotes = nNotes,
                             detrend=detrend, normalize=normalize,
                             compute_coi=compute_coi)
-        self.dimensions = 'special'
+        self.chunk_dict = {'channel':1, 'component':1}
         
-    def __finalize__(self, res_sig, arr_window):
-        return __finalize_special__(res_sig)
+    # def __finalize__(self, res_sig, arr_window):
+    #     return __finalize_special__(res_sig)
+    
+    def __get_template__(self, signal):
+        self._compute_scales(signal)
+        fsamp = signal.p.get_sampling_freq()
+        freqs = self._params['freqs_nyq']*fsamp
+        
+        template = self.__compute_template__(signal, {'freq': freqs})
+        
+        return(self.chunk_dict, template)
     
     def _compute_coi(self, W):
         N = W.shape[1]
@@ -558,41 +570,46 @@ class Wavelet(_Algorithm):
         if compute_coi:
             W = self._compute_coi(W)
                 
-        W = _np.expand_dims(W,[2,3])
         
-        out = signal.copy(deep=True)
+        W = W.T
+        W = W[:, _np.newaxis, _np.newaxis, :]
         
-        out = out.expand_dims({'freq':freqs.astype(_np.float64)}, axis=0)
-        # out.name = signal.name+'_'#+self.name
+        return W
+        # W = _np.expand_dims(W,[2,3])
         
-        out.values = W
-        return out
+        # out = signal.copy(deep=True)
+        
+        # out = out.expand_dims({'freq':freqs.astype(_np.float64)}, axis=0)
+        # # out.name = signal.name+'_'#+self.name
+        
+        # out.values = W
+        # return out
     
-    def __get_template__(self, signal):
-        self._compute_scales(signal)
+    # def __get_template__(self, signal):
+    #     self._compute_scales(signal)
         
-        signal_values = signal.p.get_values()
-        N = signal_values.shape[0]
-        fsamp = signal.p.get_sampling_freq()
+    #     signal_values = signal.p.get_values()
+    #     N = signal_values.shape[0]
+    #     fsamp = signal.p.get_sampling_freq()
         
-        scales = self._params['scales']
-        # if 'freqs' in self._params:
-        #     freqs = self._params['freqs']
-        # else:
-        freqs = self._params['freqs_nyq']*fsamp
+    #     scales = self._params['scales']
+    #     # if 'freqs' in self._params:
+    #     #     freqs = self._params['freqs']
+    #     # else:
+    #     freqs = self._params['freqs_nyq']*fsamp
 
-        out = _np.zeros(shape=(len(scales), N,
-                               signal.sizes['channel'], 
-                               signal.sizes['component']))
+    #     out = _np.zeros(shape=(len(scales), N,
+    #                            signal.sizes['channel'], 
+    #                            signal.sizes['component']))
 
-        out = _xr.DataArray(out, 
-                            dims=('freq', 'time', 'channel', 'component'),
-                            coords = {'freq': freqs,
-                                      'time': signal.coords['time'].values,
-                                      'channel': signal.coords['channel'],
-                                      'component': signal.coords['component']})
+    #     out = _xr.DataArray(out, 
+    #                         dims=('freq', 'time', 'channel', 'component'),
+    #                         coords = {'freq': freqs,
+    #                                   'time': signal.coords['time'].values,
+    #                                   'channel': signal.coords['channel'],
+    #                                   'component': signal.coords['component']})
 
-        return {'channel': 1, 'component':1}, out
+    #     return {'channel': 1, 'component':1}, out
         
 
 class Maxima(_Algorithm): #xarray done

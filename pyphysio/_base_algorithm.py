@@ -18,8 +18,8 @@ class _Algorithm(object):
     ----------
     _params : dict
         Dictionary of parameters set for the algorithm.
-    dimensions : dict
-        Dictionary of dimensions to be used for the algorithm.
+    required_dims : list
+        List of named dimensions to be used by the algorithm.
     name : str
         Name of the algorithm.
 
@@ -80,6 +80,23 @@ class _Algorithm(object):
         pass
         
     def __compute_chunk_dict__(self, signal):
+        """
+        Helper function to obtain the chunk_dict to perform the rolling.
+        Should be overwritten by algorithms that require a special behavior
+        
+        Used by __call__ to know how to create chunks
+
+        Parameters
+        ----------
+        signal : xarray.DataArray
+            Input signal.
+        
+        Returns
+        -------
+        chunk_dict: dict
+            The chunk_dict.
+        """
+        
         signal_dims = signal.dims
         
         chunk_dict = {}
@@ -94,8 +111,8 @@ class _Algorithm(object):
         Helper function to obtain the template of the output.
         Should be overwritten by algorithms that have a special output format
         
-        Used by __call__ to know how to create chunks and compose the results
-        on the different chunks
+        Used by __call__ to know how to compose the results
+        from the different chunks
 
         Parameters
         ----------
@@ -305,7 +322,6 @@ class _Algorithm(object):
         
         for i in _np.arange(n_dims_to_add):
             result_numpy = _np.expand_dims(result_numpy, add_axis)
-        
         
         
         coords_out = {}

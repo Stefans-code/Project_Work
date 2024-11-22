@@ -51,7 +51,6 @@ class Normalize(_Algorithm):
         return(chunk_dict, template)
 
     def algorithm(self, signal, **kwargs):
-        print(signal.values.shape)
         from .indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
         params = self._params
         method = params['norm_method']
@@ -125,11 +124,12 @@ class IIRFilter(_Algorithm):
             "Filter type must be in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel']"
         _Algorithm.__init__(self, fp=fp, fs=fs, btype=btype, order=order, 
                             loss=loss, att=att, ftype=ftype, safe=safe)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         # print('----->', self.name)
@@ -163,7 +163,7 @@ class IIRFilter(_Algorithm):
                 return signal.values
 
         # print('<-----', self.name)
-        return sig_filtered[:, _np.newaxis, _np.newaxis]
+        return sig_filtered
 
 class NotchFilter(_Algorithm):
     """
@@ -183,11 +183,12 @@ class NotchFilter(_Algorithm):
         assert f > 0
         assert Q > 0
         _Algorithm.__init__(self, f=f, Q=Q, safe=safe)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -205,7 +206,7 @@ class NotchFilter(_Algorithm):
                 print('Filter parameters allow no solution. Returning original signal.')
                 return signal.values
         
-        return sig_filtered[:, _np.newaxis, _np.newaxis]
+        return sig_filtered
         
 class FIRFilter(_Algorithm):
     """
@@ -248,11 +249,12 @@ class FIRFilter(_Algorithm):
             "Window type must be in ['hamming']"
         _Algorithm.__init__(self, fp=fp, fs=fs, order=order, btype=btype,
                             att=att, wtype=wtype, safe=True)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -308,7 +310,7 @@ class FIRFilter(_Algorithm):
                 print('Filter parameters allow no solution. Returning original signal.')
                 return signal_values
         
-        return sig_out[:, _np.newaxis, _np.newaxis]
+        return sig_out
 
 class KalmanFilter(_Algorithm):
     """
@@ -334,11 +336,12 @@ class KalmanFilter(_Algorithm):
         assert Q > 0, "Q should be positive"
         
         _Algorithm.__init__(self, R=R, Q=Q)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
         
     def algorithm(self, signal):
         params = self._params
@@ -359,7 +362,7 @@ class KalmanFilter(_Algorithm):
                 x_out[k] = x_ + K * (x_out[k] - x_)
                 P = (1 - K ) * P_
 
-        return(x_out[:, _np.newaxis, _np.newaxis])
+        return(x_out)
 
 class RemoveSpikes(_Algorithm):
     #TODO: see MA removal using spline in fnirs specialized
@@ -370,11 +373,12 @@ class RemoveSpikes(_Algorithm):
         assert D>=0, "D should be >= 0.0"
         assert method in ['linear', 'step']
         _Algorithm.__init__(self, K=K, N=N, dilate=dilate, D=D, method=method)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
     
     def algorithm(self, signal):
         params = self._params
@@ -419,7 +423,7 @@ class RemoveSpikes(_Algorithm):
                 delta = x_out[IDX] - x_out[IDX-1]
                 x_out[IDX:] = x_out[IDX:] - D*delta
         
-        return(x_out[:, _np.newaxis, _np.newaxis])
+        return(x_out)
 
 class ConvolutionalFilter(_Algorithm):
     """
@@ -442,11 +446,12 @@ class ConvolutionalFilter(_Algorithm):
             "IRF type must be in ['gauss', 'rect', 'triang', 'dgauss', 'custom']"
         assert irftype == 'custom' or win_len > 0, "Window length value should be positive"
         _Algorithm.__init__(self, irftype=irftype, win_len=win_len, irf=irf, normalize=normalize)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     # TODO (Andrea): TEST normalization and results
     def algorithm(self, signal):
@@ -497,7 +502,7 @@ class ConvolutionalFilter(_Algorithm):
 
         signal_out = signal_f[n:-n]
         
-        return signal_out[:, _np.newaxis, _np.newaxis]
+        return signal_out
 
 class DeConvolutionalFilter(_Algorithm):
     """
@@ -517,11 +522,12 @@ class DeConvolutionalFilter(_Algorithm):
     def __init__(self, irf, normalize=True, deconv_method='sps'):
         assert deconv_method in ['fft', 'sps'], "Deconvolution method not valid"
         _Algorithm.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -551,7 +557,7 @@ class DeConvolutionalFilter(_Algorithm):
         else:
             print('Deconvolution method not implemented. Returning original signal.')
             out = s
-        return out[:, _np.newaxis, _np.newaxis]
+        return out
 
 class Prewhitening(_Algorithm):
     """Prewhitening algorithm for time series data.
@@ -585,11 +591,12 @@ class Prewhitening(_Algorithm):
         """
         _Algorithm.__init__(self, p=p, optimize=optimize,
                             pmin=pmin, pmax=pmax, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
 
     def algorithm(self, signal, **kwargs):
         from statsmodels.tsa.ar_model import AutoReg as _AutoReg

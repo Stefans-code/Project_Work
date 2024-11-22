@@ -23,12 +23,13 @@ def _test_filters(signal):
         # print(f)
         result = f(signal)
         # print(f.__name__())
-        assert result.p.main_signal.values.ndim == signal.p.get_values().ndim
+        assert result.values.ndim == signal.p.get_values().ndim
         
 
 def test_filter():
     sizes = [1000, (1000), (1000,1), (1000,1,1),
-             (1000, 5), (1000, 5, 2)]
+             (1000, 5), (1000, 5, 2),
+             (1000, 2, 2, 2)]
     
     sampling_freqs = [100]
     

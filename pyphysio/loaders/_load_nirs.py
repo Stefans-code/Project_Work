@@ -68,7 +68,7 @@ def SDto1darray(nirs):
         
     return(nirs)
 
-def load_snirf(datafile):
+def load_snirf(datafile, load_2D=True):
     from snirf import Snirf
     
     snirf = Snirf(datafile, 'r')
@@ -98,16 +98,22 @@ def load_snirf(datafile):
         idx_det = data.measurementList[i_ch].detectorIndex - 1
         
         srcPos = probe.sourcePos3D[idx_src]/10
-        srcPos2D = probe.sourcePos2D[idx_src]/10
-    
         detPos = probe.detectorPos3D[idx_det]/10
-        detPos2D = probe.detectorPos2D[idx_det]/10
+        distance = _np.linalg.norm(srcPos - detPos)
+        
+        if load_2D:
+            srcPos2D = probe.sourcePos2D[idx_src]/10
+            detPos2D = probe.detectorPos2D[idx_det]/10
+            distance2D = _np.linalg.norm(srcPos2D - detPos2D)
+            ch_dict = [i_ch, idx_src, idx_det, distance, distance2D]
+        else:
+            ch_dict = [i_ch, idx_src, idx_det, distance, _np.nan]
         
         # chnPos = (srcPos + detPos) /2
         # chnPos2D = (srcPos2D + detPos2D) /2
         
-        distance = _np.linalg.norm(srcPos - detPos)
-        distance2D = _np.linalg.norm(srcPos2D - detPos2D)
+        
+        
         
         # ch_dict = {'id': i_ch,
         #            'source_id': idx_src, 'detector_id': idx_det,
@@ -116,8 +122,6 @@ def load_snirf(datafile):
         #            'chnPos': chnPos, 'chnPos2D': chnPos2D,
         #            'distance': distance, 'distance2D': distance2D}
         
-        ch_dict = [i_ch, idx_src, idx_det, distance, distance2D]
-        
         info_channels.append(ch_dict)
     
     info_channels = _np.array(info_channels)
@@ -125,11 +129,12 @@ def load_snirf(datafile):
     SD['SpatialUnit'] = 'cm' #TODO; check
     SD['Lambda'] = probe.wavelengths
     SD['SrcPos'] = probe.sourcePos3D/10
-    SD['SrcPos2D'] = probe.sourcePos2D/10
-    
     SD['DetPos'] = probe.detectorPos3D/10
-    SD['DetPos2D'] = probe.detectorPos2D/10
     
+    if load_2D:
+        SD['SrcPos2D'] = probe.sourcePos2D/10
+        SD['DetPos2D'] = probe.detectorPos2D/10
+        
     nirs = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
     return(nirs)
         

@@ -295,7 +295,6 @@ def compare_channels(function, signal_1, signal_2=None, channels=None,
                 inner_max = len(channels)
             
             for j_ch in _np.arange(i_ch+idx_offset, inner_max):
-                print(i_ch, j_ch)
                 ch_2 = channels[j_ch]
                 s_2 = signal_2.isel({'channel': [ch_2], 'component': [i_comp]})
                 

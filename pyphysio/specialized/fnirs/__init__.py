@@ -319,8 +319,7 @@ class ComputeClusters(_Algorithm):
                                             
                                             
     def algorithm(self, signal):
-        def normalize_signal(x):
-            return( (x-_np.mean(x))/_np.std(x))
+
         clusters = self._params['clusters']
         n_min_good = self._params['n_min_good']
         mode = self._params['mode']

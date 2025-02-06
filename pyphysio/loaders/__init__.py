@@ -24,11 +24,7 @@ def load_xdf(datafile, stream_name, stream_type='signal', select_multiple=None,
     recoding_dict = None #will be not None if used for recoding of events; in that case it should be added to the attrs
     signals_info = None #will be not None if multiple signals are present
     
-    names = []
-    for i_d, d in enumerate(data):
-        info = d['info']
-        names.append(info['name'][0])
-    names = _np.array(names)
+    names = _np.array(get_xdf_stream_names(datafile))
 
 
     idx_stream = _np.where(names == stream_name)[0]
@@ -77,7 +73,6 @@ def load_xdf(datafile, stream_name, stream_type='signal', select_multiple=None,
         sources_info = montage_info['optodes'][0]['sources'][0]['source'] 
         detectors_info = montage_info['optodes'][0]['detectors'][0]['detector'] # 
         
-        #### create SD
         SD = {}
 
         # generating SD['Lambda']

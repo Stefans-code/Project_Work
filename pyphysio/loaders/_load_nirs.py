@@ -68,7 +68,7 @@ def SDto1darray(nirs):
         
     return(nirs)
 
-def load_snirf(datafile, load_2D=True):
+def load_snirf(datafile, load_2D=True, has_stim=False):
     from snirf import Snirf
     
     snirf = Snirf(datafile, 'r')
@@ -125,9 +125,20 @@ def load_snirf(datafile, load_2D=True):
     if load_2D:
         SD['SrcPos2D'] = probe.sourcePos2D/distance_conv
         SD['DetPos2D'] = probe.detectorPos2D/distance_conv
-        
-    nirs = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
-    return(nirs)
+    
+    nirs_signal = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
+    
+    if has_stim:
+        stim_data = nirs.stim
+        stim_signal = []
+        for s in stim_data:
+            stim_signal.append(s.data)
+            
+        stim_signal = _np.concatenate(stim_signal)
+        stim_signal = create_signal(stim_signal[:, 1], times = stim_signal[:,0])
+        return(nirs_signal, stim_signal)
+    
+    return(nirs_signal)
         
 
 def load_nirx2(DATADIR):

@@ -105,7 +105,7 @@ def create_signal(data, times=None, sampling_freq=None,
         #i.e. for which there is not a valid sampling frequency
         sampling_freq = 'unevenly'
     else: 
-        assert sampling_freq > 0
+        assert sampling_freq > 0, f'Sampling frequency: {sampling_freq}'
         sampling_freq = float(sampling_freq)
         if times is None: #create times
             times = _np.arange(0, data.shape[0])/sampling_freq + start_time

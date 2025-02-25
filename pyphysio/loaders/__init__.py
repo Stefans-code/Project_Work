@@ -17,7 +17,7 @@ def info_xdf(datafile):
 
 
 def load_xdf(datafile, stream_name, stream_type='signal', select_multiple=None,
-             start_time = None):
+             start_time = None, times_from_lsl=True):
     
     data, header = pyxdf.load_xdf(datafile, verbose=True)
 
@@ -156,8 +156,13 @@ def load_xdf(datafile, stream_name, stream_type='signal', select_multiple=None,
         except:
             age = None
                 
-        
-    signal = _create_signal(signal_values, times=t)    
+    if times_from_lsl: #rely on timestamps from LSL
+        signal = _create_signal(signal_values, times=t)    
+    else:
+        #if we dont trust the LSL times, we probably wont trust the effective_srate
+        fsamp = float(data_['info']['nominal_srate'][0])
+        assert fsamp > 0
+        signal = _create_signal(signal_values, start_time=t[0], sampling_freq=fsamp)
         
     if stream_type == 'nirs':
         signal.p.main_signal.attrs = SD

@@ -13,7 +13,7 @@ import matplotlib.cm as _cm
 
 
 #COMPARE 
-def compute_betas_barker(nirs_signal, dm, pmax=30, max_iter = 10):
+def compute_betas_barker(nirs_signal, dm, pmax=10, max_iter = 10):
     Y = nirs_signal
     X = dm
     
@@ -22,7 +22,7 @@ def compute_betas_barker(nirs_signal, dm, pmax=30, max_iter = 10):
     # 1. Initialize beta via an OLS fit.
     model_initial = _sm.OLS(Y, X)
     results_initial = model_initial.fit()
-    beta_curr = results_initial.params
+    beta_outer = results_initial.params
     residuals = results_initial.resid
 
     iteration_outer = 0
@@ -52,10 +52,10 @@ def compute_betas_barker(nirs_signal, dm, pmax=30, max_iter = 10):
         #. Perform iteratively reweighted least squares (IRLS)
         done = False
         iterations = 0
-        beta_old = beta_curr
+        beta_inner = beta_outer
         #initialize weights to ones
         weights = _np.ones(len(Y_w))
-        while(not done):
+        while((not done) and (iterations<max_iter)):
             #a- solve beta by WLS
             #fit weighted LS
             model_WLS = _sm.WLS(Y_w, X_w, weights=weights)
@@ -66,27 +66,27 @@ def compute_betas_barker(nirs_signal, dm, pmax=30, max_iter = 10):
             #b- recalculate weights
             residuals_WLS = results_WLS.resid
             weights = _sm.robust.norms.TukeyBiweight(c=4.685).weights(residuals_WLS)
-            change = _np.min(abs((beta_new - beta_old)/beta_old))
+            change = _np.min(abs((beta_new - beta_inner)/beta_inner))
             
             #c- repeat steps 5a-b until changes in beta are small (<1%)
-            if (change <0.01) or (iterations >= max_iter):
+            if (change <0.005) or (iterations >= max_iter):
                 done = True
             
-            beta_old = beta_new
+            beta_inner = beta_new
             
             iterations +=1
 
-        change_outer = _np.min(abs((beta_curr - beta_new)/beta_curr))
+        change_outer = _np.min(abs((beta_outer - beta_inner)/beta_outer))
         
         #Repeat steps 2-5 until changes in β are sufficiently small (e.g., < 1% change).  
-        if (change_outer <0.01) or (iteration_outer >= max_iter):
+        if (change_outer <0.005) or (iteration_outer >= max_iter):
             done_outer = True
         
-        beta_curr = beta_new
-        residuals = Y - _np.dot(X, beta_curr)
+        beta_outer = beta_inner
+        residuals = Y - _np.dot(X, beta_outer)
         iteration_outer +=1
 
-    beta = beta_curr
+    beta = beta_outer
     return(beta)
 
 #%%

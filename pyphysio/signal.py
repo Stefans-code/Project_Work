@@ -89,12 +89,12 @@ def create_signal(data, times=None, sampling_freq=None,
 
     #TODO: names for channels/components?
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
-    assert data.ndim <= 3, "data should have maximum 3 dimensions"
+    # assert data.ndim <= 3, "data should have maximum 3 dimensions"
     
-    if data.ndim == 1:
-        data = _np.expand_dims(data, [1,2])
-    elif data.ndim == 2:
-        data = _np.expand_dims(data, 2)
+    # if data.ndim == 1:
+    #     data = _np.expand_dims(data, [1,2])
+    # elif data.ndim == 2:
+    #     data = _np.expand_dims(data, 2)
     
     #--> check validity of the temporal information
     if sampling_freq is None: #defined by times
@@ -134,23 +134,29 @@ def create_signal(data, times=None, sampling_freq=None,
     start_time = times[0]
         
     #check dims and set coordinates
-    dims = ('time', 'channel', 'component')
+    dims = ['time', 'channel', 'component']
+    dims_data = data.ndim
+    if dims_data > 3:
+        for i in _np.arange(4, dims_data+1):
+            dims.append(f'dimension_{i}')
+    
+    
     coords = {'time':times}
     
-    for i_dim in _np.arange(1,3): #assign coords to other dimensions
-        coords[dims[i_dim]] = _np.arange(data.shape[i_dim])
+    for i_dim in _np.arange(1, dims_data): #assign coords to other dimensions
+        coords[dims[i_dim]] = _np.arange(data.shape[i_dim]).astype(int)
         
     info['sampling_freq'] = sampling_freq
     info['start_time'] = start_time
         
-    signal = _xr.DataArray(data, dims = dims,
+    signal = _xr.DataArray(data, dims = dims[:dims_data],
                            coords = coords, 
                            attrs = info,
                            name = name)
     
-    signal = signal.to_dataset()
-    signal.attrs['MAIN'] = name
-    signal.attrs['history'] = [name]
+    # signal = signal.to_dataset()
+    # signal.attrs['MAIN'] = name
+    # signal.attrs['history'] = [name]
     
     return signal
 
@@ -344,24 +350,29 @@ class PyphysioDataArray(object):
         return self.get_end_time() - self.get_start_time()
 
     def has_multi_channels(self):
-        return(self.get_nchannels()>1)
+        return(self.da.values.ndim > 1)
     
     def get_nchannels(self):
-        return(len(self.da.coords['channel']))
+        if self.has_multi_channels():
+            return(len(self.da.coords['channel']))
+        else:
+            return(None)
         
     def has_multi_components(self):
-        return(self.get_ncomponents()>1)
+        return(self.da.values.ndim > 2)
     
     def get_ncomponents(self):
-        return(len(self.da.coords['component']))
+        if self.has_multi_components():
+            return(len(self.da.coords['component']))
+        else:
+            return(None)
     
     def get_info(self):
         return self.da.attrs
 
-
-    #TODO: check
-    def replace(self, new_vals):
-        return self.assign({'signal': (('time', 'channel', 'component'), new_vals)})
+    # #TODO: 
+    # def replace(self, new_vals):
+    #     return self.assign({'signal': (('time', 'channel', 'component'), new_vals)})
         
     def resample(self, f_out):
         t_start = self.get_start_time()
@@ -564,102 +575,102 @@ class PyphysioDataArray(object):
             _tight_layout()
             _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
 
-@_xr.register_dataset_accessor('p')
-class PyPhysioDataset(object):
-    def __init__(self, xdataset):
-        self.ds = xdataset
+# @_xr.register_dataset_accessor('p')
+# class PyPhysioDataset(object):
+#     def __init__(self, xdataset):
+#         self.ds = xdataset
     
-    # def clone(self, values, name='signal'):
-    #     assert values.shape[0] == self.da.values.shape[0]
-    #     signal_clone = create_signal(values, times = self.da.coords['time'].values,
-    #                                  name = name, info=self.da.attrs)
-    #     return(signal_clone)
+#     # def clone(self, values, name='signal'):
+#     #     assert values.shape[0] == self.da.values.shape[0]
+#     #     signal_clone = create_signal(values, times = self.da.coords['time'].values,
+#     #                                  name = name, info=self.da.attrs)
+#     #     return(signal_clone)
     
-    @property
-    def main_signal(self):
-        main_signal = self.ds.attrs['MAIN']
-        da = self.ds[main_signal]
-        return da
+#     @property
+#     def main_signal(self):
+#         main_signal = self.ds.attrs['MAIN']
+#         da = self.ds[main_signal]
+#         return da
     
-    def get_values(self):
-        return self.main_signal.p.get_values()
+#     def get_values(self):
+#         return self.main_signal.p.get_values()
     
-    def get_times(self):
-        time = self.main_signal.p.get_times()
-        return time
+#     def get_times(self):
+#         time = self.main_signal.p.get_times()
+#         return time
     
-    def segment_time(self, t_start, t_stop=None):
-        """
-        Segment the signal given a time interval
+#     def segment_time(self, t_start, t_stop=None):
+#         """
+#         Segment the signal given a time interval
 
-        Parameters
-        ----------
-        t_start : float
-            The instant of the start of the interval
-        t_stop : float 
-            The instant of the end of the interval. By default is the end of the signal
+#         Parameters
+#         ----------
+#         t_start : float
+#             The instant of the start of the interval
+#         t_stop : float 
+#             The instant of the end of the interval. By default is the end of the signal
 
-        Returns
-        -------
-        portion : UnvenlySignal
-            The selected portion
-        """
-        # t_start_timedelta = _pd.to_timedelta(t_start, 's')
-        # t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
+#         Returns
+#         -------
+#         portion : UnvenlySignal
+#             The selected portion
+#         """
+#         # t_start_timedelta = _pd.to_timedelta(t_start, 's')
+#         # t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
         
-        #TODO t_stop - 1/fsamp
-        sub_dataset = self.ds.sel(time = slice(t_start,
-                                               t_stop))
-        return sub_dataset
+#         #TODO t_stop - 1/fsamp
+#         sub_dataset = self.ds.sel(time = slice(t_start,
+#                                                t_stop))
+#         return sub_dataset
     
-    def get_start_time(self):
-        return self.main_signal.p.get_start_time()
+#     def get_start_time(self):
+#         return self.main_signal.p.get_start_time()
         
-    def get_end_time(self):
-        return self.main_signal.p.get_end_time()
+#     def get_end_time(self):
+#         return self.main_signal.p.get_end_time()
 
-    def get_sampling_freq(self):
-        return self.main_signal.p.get_sampling_freq()
+#     def get_sampling_freq(self):
+#         return self.main_signal.p.get_sampling_freq()
     
-    def get_duration(self):
-        return self.main_signal.p.get_duration()
+#     def get_duration(self):
+#         return self.main_signal.p.get_duration()
 
-    def get_info(self):
-        return self.ds.attrs
+#     def get_info(self):
+#         return self.ds.attrs
 
-    #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
-    #should we remove all the other signals ('variables')
-    #before computing?
-    def resample(self, f_out):
-        t_start = self.main_signal.p.get_start_time()
-        t_end = self.main_signal.p.get_end_time()
+#     #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
+#     #should we remove all the other signals ('variables')
+#     #before computing?
+#     def resample(self, f_out):
+#         t_start = self.main_signal.p.get_start_time()
+#         t_end = self.main_signal.p.get_end_time()
         
-        t_out = _np.arange(t_start, t_end, 1/f_out)
-        resampled_dataset = self.ds.interp(time=t_out, method='cubic')
-        resampled_dataset.p.main_signal.attrs['sampling_freq'] = f_out
-        return(resampled_dataset)
+#         t_out = _np.arange(t_start, t_end, 1/f_out)
+#         resampled_dataset = self.ds.interp(time=t_out, method='cubic')
+#         resampled_dataset.p.main_signal.attrs['sampling_freq'] = f_out
+#         return(resampled_dataset)
     
-    #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
-    #should we remove all the other signals ('variables')
-    #before computing?
-    def process_na(self, na_action = 'keep', na_remaining='keep', 
-                   method='cubic',
-                   max_gap=None):
-        main_signal = self.ds.attrs['MAIN']
-        da = self.ds[main_signal]
-        processed_da = da.p.process_na(na_action, 
-                                       na_remaining=na_remaining, 
-                                       method=method,
-                                       max_gap=max_gap)
+#     #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
+#     #should we remove all the other signals ('variables')
+#     #before computing?
+#     def process_na(self, na_action = 'keep', na_remaining='keep', 
+#                    method='cubic',
+#                    max_gap=None):
+#         main_signal = self.ds.attrs['MAIN']
+#         da = self.ds[main_signal]
+#         processed_da = da.p.process_na(na_action, 
+#                                        na_remaining=na_remaining, 
+#                                        method=method,
+#                                        max_gap=max_gap)
 
-        processed_dataset = self.ds
-        processed_dataset[main_signal] = processed_da
-        if na_remaining != 'keep':
-            processed_dataset = processed_dataset.dropna('time')
-        return(processed_dataset)
+#         processed_dataset = self.ds
+#         processed_dataset[main_signal] = processed_da
+#         if na_remaining != 'keep':
+#             processed_dataset = processed_dataset.dropna('time')
+#         return(processed_dataset)
         
-    def plot(self, marker=None, color = None, ncols=4, sharey=False):
-        self.main_signal.p.plot(marker=marker,
-                                color = color,
-                                ncols=ncols,
-                                sharey=sharey)
+#     def plot(self, marker=None, color = None, ncols=4, sharey=False):
+#         self.main_signal.p.plot(marker=marker,
+#                                 color = color,
+#                                 ncols=ncols,
+#                                 sharey=sharey)

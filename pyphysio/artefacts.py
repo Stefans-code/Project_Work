@@ -41,7 +41,7 @@ class DetectMA(_Algorithm):
     def __init__(self, win_len=1, win_mask=1, method='iqr',
                  iqr=1.5,
                  th_std = None, th_std_coeff=None, 
-                 th_amp = None, fuse=False, **kwargs):
+                 th_amp = None, fuse=None, **kwargs):
         
         assert method in ['iqr', 'mad', 'fixed']
         if method == 'fixed':
@@ -60,12 +60,26 @@ class DetectMA(_Algorithm):
         #IDEA for the MA detection, we can do that by channel or globally
         #(using fused channels)
         #and adapt the behaviour of the algorithm on the different dimensions:
-        if fuse:
-            self.dimensions = {'time' : 0, 'channel':1, 'component':1}
+        if fuse == 'all':
+            self.required_dims = ['time', 'channel', 'component']
+        elif fuse == 'component':
+            self.required_dims = ['time', 'component']
         else:
-            self.dimensions = {'time' : 0}
-   
+            self.required_dims = ['time']
+        
     
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        
+        fuse = self._params['fuse']
+        if fuse == 'all':
+            template = self.__compute_template__(signal, {'channel': 1, 'component': 1})
+        elif fuse == 'component':
+            template = self.__compute_template__(signal, {'component': 1})
+        else:
+            template = self.__compute_template__(signal)
+        return(chunk_dict, template)
+
     def algorithm(self, signal):
         params = self._params
         win_len = params['win_len']
@@ -81,9 +95,13 @@ class DetectMA(_Algorithm):
         fsamp = signal.p.get_sampling_freq()
                 
         signal_norm = _Normalize()(signal)
+        
+        #TODO: USE PCA
         signal_values = signal_norm.values
-        if fuse:
+        if fuse == 'all':
             signal_values = _np.mean(_np.mean(signal_values, axis=1), axis=1)
+        elif fuse == 'component':
+            signal_values = _np.mean(signal_values, axis=2).ravel()
         else:
             signal_values = signal_values.ravel()
         
@@ -165,7 +183,7 @@ class DetectMA_AR(_Algorithm):
 
     def __init__(self, order=0, 
                  # th_std_coeff=2, 
-                 fuse='none',
+                 fuse=None,
                  **kwargs):
         
         _Algorithm.__init__(self, order=order, 
@@ -174,12 +192,23 @@ class DetectMA_AR(_Algorithm):
                             **kwargs)
         
         if fuse == 'all':
-            self.dimensions = {'time' : 0, 'channel' : 1, 'component' : 1}
+            self.required_dims = ['time', 'channel', 'component']
         elif fuse == 'component':
-            self.dimensions = {'time' : 0, 'component' : 1}
+            self.required_dims = ['time', 'component']
         else:
-            self.dimensions = {'time' : 0}
-            
+            self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        
+        fuse = self._params['fuse']
+        if fuse == 'all':
+            template = self.__compute_template__(signal, {'channel': 1, 'component': 1})
+        elif fuse == 'component':
+            template = self.__compute_template__(signal, {'component': 1})
+        else:
+            template = self.__compute_template__(signal)
+        return(chunk_dict, template)
    
     
     def algorithm(self, signal):
@@ -187,9 +216,7 @@ class DetectMA_AR(_Algorithm):
         order = params['order']
         # th_std_coeff = params['th_std_coeff']
         fuse = params['fuse']
-        
-        fsamp = signal.p.get_sampling_freq()
-                
+                        
         signal_norm = _Normalize()(signal)
         signal_values = signal_norm.values
         
@@ -257,7 +284,10 @@ class MARA(_Algorithm):
 
     def __init__(self, MA, **kwargs):
         _Algorithm.__init__(self, MA=MA, **kwargs)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(self.__get_template_timeonly__(self, signal)
     
     def algorithm(self, signal):
         from csaps import csaps as _csaps
@@ -267,11 +297,21 @@ class MARA(_Algorithm):
         
         params = self._params
         MA = params['MA']
-        
         ch = signal.channel.values[0]
-        cp = 0#signal.component.values[0]
-        MA_signal = MA.isel(channel=[ch], component=[cp])
-        MA_signal_values = MA_signal.p.main_signal.values.ravel()
+        cp = signal.component.values[0]
+        
+        if MA.sizes['channel'] == 1:
+            ch_MA = 0
+        else:
+            ch_MA = ch
+            
+        if MA.sizes['component'] == 1:
+            cp_MA = 0
+        else:
+            cp_MA = cp
+            
+        MA_signal = MA.isel(channel=[ch_MA], component=[cp_MA])
+        MA_signal_values = MA_signal.values.ravel()
         MA_signal_diff = _np.diff(MA_signal_values)
         idx_st = _np.where(MA_signal_diff > 0)[0]
         idx_sp = _np.where(MA_signal_diff < 0)[0]
@@ -360,8 +400,10 @@ class WaveletFilter(_Algorithm):
     """ 
     def __init__(self, iqr=1.5, **kwargs):
         _Algorithm.__init__(self, iqr=iqr, **kwargs)
-        self.dimensions = {'time' : 0}
-        
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(self.__get_template_timeonly__(self, signal)
     
     def _normalization_noise(self, y):
         #% normalize using computed mean abs dev

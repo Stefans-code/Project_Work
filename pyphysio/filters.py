@@ -8,7 +8,7 @@ from scipy.signal import filtfilt as _filtfilt, \
     filter_design as _filter_design, iirfilter as _iirfilter, \
         deconvolve as _deconvolve, firwin as _firwin, \
             iirnotch as _iirnotch, lfilter as _lfilter
-from ._base_algorithm import _Algorithm
+from ._base_algorithm import _Algorithm, __get_template_timeonly__
 from .utils import SignalRange as _SignalRange
 
 class Normalize(_Algorithm):
@@ -43,7 +43,10 @@ class Normalize(_Algorithm):
         if norm_method == "custom":
             assert norm_range != 0, "norm_range must not be zero"
         _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal, **kwargs):
         from .indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
@@ -119,7 +122,10 @@ class IIRFilter(_Algorithm):
             "Filter type must be in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel']"
         _Algorithm.__init__(self, fp=fp, fs=fs, btype=btype, order=order, 
                             loss=loss, att=att, ftype=ftype, safe=safe)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         # print('----->', self.name)
@@ -173,7 +179,10 @@ class NotchFilter(_Algorithm):
         assert f > 0
         assert Q > 0
         _Algorithm.__init__(self, f=f, Q=Q, safe=safe)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         params = self._params
@@ -234,7 +243,10 @@ class FIRFilter(_Algorithm):
             "Window type must be in ['hamming']"
         _Algorithm.__init__(self, fp=fp, fs=fs, order=order, btype=btype,
                             att=att, wtype=wtype, safe=True)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         params = self._params
@@ -316,7 +328,10 @@ class KalmanFilter(_Algorithm):
         assert Q > 0, "Q should be positive"
         
         _Algorithm.__init__(self, R=R, Q=Q)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
         
     def algorithm(self, signal):
         params = self._params
@@ -348,7 +363,10 @@ class RemoveSpikes(_Algorithm):
         assert D>=0, "D should be >= 0.0"
         assert method in ['linear', 'step']
         _Algorithm.__init__(self, K=K, N=N, dilate=dilate, D=D, method=method)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
     
     def algorithm(self, signal):
         params = self._params
@@ -416,7 +434,10 @@ class ConvolutionalFilter(_Algorithm):
             "IRF type must be in ['gauss', 'rect', 'triang', 'dgauss', 'custom']"
         assert irftype == 'custom' or win_len > 0, "Window length value should be positive"
         _Algorithm.__init__(self, irftype=irftype, win_len=win_len, irf=irf, normalize=normalize)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
 
     # TODO (Andrea): TEST normalization and results
     def algorithm(self, signal):
@@ -466,6 +487,7 @@ class ConvolutionalFilter(_Algorithm):
         signal_f = _np.convolve(signal_, irf, mode='same')
 
         signal_out = signal_f[n:-n]
+        
         return signal_out
 
 class DeConvolutionalFilter(_Algorithm):
@@ -486,7 +508,10 @@ class DeConvolutionalFilter(_Algorithm):
     def __init__(self, irf, normalize=True, deconv_method='sps'):
         assert deconv_method in ['fft', 'sps'], "Deconvolution method not valid"
         _Algorithm.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         params = self._params
@@ -553,7 +578,10 @@ class Prewhitening(_Algorithm):
         """
         _Algorithm.__init__(self, p=p, optimize=optimize,
                             pmin=pmin, pmax=pmax, **kwargs)
-        self.dimensions = {'time' : 0}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal, **kwargs):
         from statsmodels.tsa.ar_model import AutoReg as _AutoReg

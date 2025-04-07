@@ -41,7 +41,11 @@ class Diff(_Algorithm): #xarray done
     def __init__(self, degree=1):
         assert degree > 0, "The degree value should be positive"
         _Algorithm.__init__(self, degree=degree)
-        self.dimensions = {'time' : 0}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     
     def algorithm(self, signal):

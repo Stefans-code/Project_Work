@@ -19,8 +19,8 @@ class _Algorithm(object):
     ----------
     _params : dict
         Dictionary of parameters set for the algorithm.
-    dimensions : dict
-        Dictionary of dimensions to be used for the algorithm.
+    required_dims : list
+        List of named dimensions to be used by the algorithm.
     name : str
         Name of the algorithm.
 
@@ -47,11 +47,16 @@ class _Algorithm(object):
     def __init__(self, **kwargs):
         self._params = {}
         self.set_params(**kwargs)  # already checked by __init__
-        self.chunk_dict = {}
+        self.required_dims = []
         
     @property
     def name(self):
         return(self.__class__.__name__)
+
+    def __get_template_timeonly__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal)
+        return(chunk_dict, template)
     
     @abstractmethod
     def __get_template__(self, signal):
@@ -60,6 +65,7 @@ class _Algorithm(object):
         on the different chunks.
         Should be implemented by each algorithm.
         In most cases, the __get_template__ function will just be a call to
+        __compute_chunk_dict to compute the chunk_dict and to
         __compute_template__ with a specification of the output dimensions 
         (out_dims parameter).
         
@@ -79,14 +85,40 @@ class _Algorithm(object):
         """
         pass
         
-    
+    def __compute_chunk_dict__(self, signal):
+        """
+        Helper function to obtain the chunk_dict to perform the rolling.
+        Should be overwritten by algorithms that require a special behavior
+        
+        Used by __call__ to know how to create chunks
+
+        Parameters
+        ----------
+        signal : xarray.DataArray
+            Input signal.
+        
+        Returns
+        -------
+        chunk_dict: dict
+            The chunk_dict.
+        """
+        
+        signal_dims = signal.dims
+        
+        chunk_dict = {}
+        for dim in signal_dims:
+            if dim not in self.required_dims:
+                chunk_dict[dim] = 1
+        return(chunk_dict)        
+        
+        
     def __compute_template__(self, signal, out_dims = None):
         """
         Helper function to obtain the template of the output.
         Should be overwritten by algorithms that have a special output format
         
-        Used by __call__ to know how to create chunks and compose the results
-        on the different chunks
+        Used by __call__ to know how to compose the results
+        from the different chunks
 
         Parameters
         ----------
@@ -100,15 +132,16 @@ class _Algorithm(object):
             Template of the output.
         """
         
-        
         if out_dims is None: #no changes in dimensions or coordinates
             return(signal)
         
         shape_out = []
         coords_out = {}
         
+        signal_dims = signal.dims
+    
         #first process required dimensions
-        for dim in ['time', 'channel', 'component']:
+        for dim in signal_dims:
             
             if dim in out_dims.keys(): #if dim is changed
                 out_coord = out_dims[dim]
@@ -150,28 +183,33 @@ class _Algorithm(object):
         return(template)
 
     
-    def __call__(self, signal_in, dimensions=None, scheduler=scheduler, **kwargs):
+    def __call__(self, signal_in, scheduler=scheduler, **kwargs):
         '''
         This function iteratively calls the self.algorithm on signal's chunks.
         If dask is installed and properly configured, this allows to parallelize
         the executon, for instance in cases of multi-channel/multi-components
         data.
-        
-        The workflow is the following:
-        __call__() will apply the function __mapper_func__() to each signal chunk
-        using the _xr.map_blocks function.
-        
-        __mapper_func__ will call the algorithm() function on each signal chunk.
-        algorithm() will return a numpy array, which is then properly formatted
-        into a DataArray based on the template output from __get_template__(signal)
-        
-        the _xr.map_blocks function takes care of composing the results from 
-        different chunks into a unique DataArray.
-        
         This mechanism requires a dictionary to inform how to create the chunks
         and a template of the output of the parallelization (e.g. format of the 
         expected result). Both are obtained by the call to __get_template__(), 
         which uses information in self.chunk_dict.
+        
+        The typical workflow is the following:
+        1. __get_template__ is called to get information on how to split the signal
+          (chink_dict) and how the resulting xarray should look like (template).
+          Then chunks of the input signal and of the template are created
+          
+        2. _xr.map_blocks will call __mapper_func__ to process each chunk.
+        
+        3. __mapper_func__ will call the algorithm() function on each signal chunk.
+        algorithm() will return a numpy array, which is then properly formatted
+        into a DataArray based on the template.
+        
+        4. the _xr.map_blocks function receives the results from all the chunks and
+        takes care of composing them into a unique DataArray.
+        
+        5. attributes of the origiinal signal are copied to the resulting xarray
+        
         
         Parameters
         ----------
@@ -180,7 +218,7 @@ class _Algorithm(object):
         
         scheduler : string, optional
             To allow changing the scheduler at runtime. Useful for debugging.
-            The default is scheduler.
+            The default is 'threads'.
 
         Returns
         -------
@@ -200,7 +238,7 @@ class _Algorithm(object):
         
         signal_name = signal.name
         
-        if len(self.chunk_dict) == 0:
+        if len(self.required_dims) == 0:
             #This is to allow special implementations, where the "rolling"
             #mechanism is avoided
             result_numpy = self.algorithm(signal, **kwargs)
@@ -276,8 +314,22 @@ class _Algorithm(object):
             
         result_numpy = self.algorithm(signal_in, **kwargs)
         
-        assert result_numpy.ndim == template_out.ndim
-
+        
+        result_ndims = result_numpy.ndim
+        template_ndims = template_out.ndim
+        assert result_ndims <= template_ndims
+        
+        if result_ndims > len(self.required_dims): #adding a dimension
+            add_axis = -2            
+        else:
+            add_axis = -1
+        
+        n_dims_to_add = template_ndims - result_ndims        
+        
+        for i in _np.arange(n_dims_to_add):
+            result_numpy = _np.expand_dims(result_numpy, add_axis)
+        
+        
         coords_out = {}
         for dim in template_out.dims:
             coords_out[dim] = []
@@ -324,7 +376,9 @@ class _Algorithm(object):
     @abstractmethod
     def algorithm(cls, signal):
         """
-        Placeholder for the subclasses
+        This method is the algorithm that is applied to the signal.
+        It should return a numpy array with a number of dimension that 
+        is not lower than the number of required dimensions in self.required_dims
         """
         pass
 

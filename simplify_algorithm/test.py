@@ -1,29 +1,34 @@
-from template_algorithms import NoRolling, SimpleFilter, SimpleIndicator, AddDimension, \
-    ShrinkDimension, WhateverDimension, Wavelet
+from template_algorithms import SimpleFilter, SimpleIndicator, AddDimension, \
+    ShrinkDimension, WhateverDimension, SimpleSQIIndicator
     
 import pyphysio as ph
 import numpy as _np
 import xarray as _xr
 
-signal = ph.create_signal(_np.ones(shape = (1000, 9, 2)),
+signal = ph.create_signal(_np.ones(shape = (1000, 2)),
                           sampling_freq=4,
                           start_time=100,
                           name='signal')
-print(signal)
+# print(signal)
 
 #%%
-no_rolling = NoRolling()
-signal_out = no_rolling(signal)
-print(signal_out)
+# no_rolling = NoRolling()
+# signal_out = no_rolling(signal)
+# print(signal_out)
 
 #%%
 simple_filter = SimpleFilter()
 signal_out = simple_filter(signal)
-print(signal_out)
+# print(signal_out)
 
 #%%
 simple_indicator = SimpleIndicator()
 signal_out = simple_indicator(signal)
+print(signal_out)
+
+#%%
+simple_sqi_indicator = SimpleSQIIndicator(threshold = [0, 10])
+signal_out = simple_sqi_indicator(signal)
 print(signal_out)
 
 #%%
@@ -43,14 +48,14 @@ print(signal_out)
 
 #%%
 wavelet = Wavelet()
-_, wavelet_template = wavelet.__get_template__(signal.p.main_signal)
+_, wavelet_template = wavelet.__get_template__(signal)
 signal_out = wavelet(signal)
 print(signal_out)
 
 #%%
 target_freqs = _np.arange(0.01, 0.21, 0.01)[::-1]
 wavelet = Wavelet(freqs=target_freqs)
-_, wavelet_template = wavelet.__get_template__(signal.p.main_signal)
+_, wavelet_template = wavelet.__get_template__(signal)
 signal_out = wavelet(signal)
 print(signal_out)
 

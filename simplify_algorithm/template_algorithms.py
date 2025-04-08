@@ -5,29 +5,21 @@ import pywt as _pywt
 from scipy.signal import detrend as _detrend
     
 
-class NoRolling(_Algorithm):
-    """
-    """
+# class NoRolling(_Algorithm):
+#     """ WIP
+#     """
 
-    def __init__(self, **kwargs):
-        _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {}
+#     def __init__(self, **kwargs):
+#         _Algorithm.__init__(self, **kwargs)
+#         self.required_dims = []
         
-    def algorithm(self, signal, **kwargs):
-        return(_np.ones(shape=(1,1,10)))
+#     def algorithm(self, signal, **kwargs):
+#         return(_np.ones(shape=(1,1,10)))
     
-    def __get_template__(self, signal):
-        # template = self.__compute_template__(signal)
-        # return(self.chunk_dict, template)
-        pass
-
-    def __finalize__(self, result_numpy, signal):
-        result_out = self.__compute_template__(signal,
-                                               out_dims={'time': 1,
-                                                         'channel': 1,
-                                                         'component': 10})
-        result_out.values = result_numpy
-        return(result_out)
+#     def __get_template__(self, signal):
+#         chunk_dict = {}
+#         template = self.__compute_template__(signal)
+        # return(chunk_dict, template)
     
 class SimpleFilter(_Algorithm):
     """
@@ -35,44 +27,106 @@ class SimpleFilter(_Algorithm):
 
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(self.__get_template_timeonly__(signal))
     
     def algorithm(self, signal, **kwargs):
-        signal_values = signal.values
-        return(_np.zeros_like(signal_values))
-    
+        in_shape = signal.values.shape
+        out = _np.zeros(in_shape[0])
+        print(out.shape)
+        return(out)
     
     
 class SimpleIndicator(_Algorithm):
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
         
     def algorithm(self, signal, **kwargs):
-        return(_np.zeros((1, signal.shape[1], signal.shape[2])))
+        out = _np.array(0)      
+        print(out.shape)
+        return(out)
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         template = self.__compute_template__(signal, {'time': 1})
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
+
+
+class _SignalQualityIndicator(_Algorithm):
+    """ 
+    A Signal Quality Indicator is a special class of indicators
+    that also returns if the value is within a range.
+    Used to check the quality of signals.
+
+    Args:
+        threshold (low, high): The range within which the sqi indicates good quality
+    
+    Returns:
+        result (sqi, isgood): Tuple containing the value of the sqi and if it corresponds to good quality
+    
+    """
+    def __init__(self, threshold, **kwargs):
+        '''
+        '''
+        assert len(threshold)==2
+        _Algorithm.__init__(self, threshold=threshold, **kwargs)
+        
+    def __check_good__(self, sqi_indicator, signal):
+        params = self._params
+        threshold = params['threshold']
+        
+        is_good = (sqi_indicator >= threshold[0]) & (sqi_indicator <= threshold[1])
+        
+        out_shape = _np.array(signal.shape)
+        out_shape[0] = 1
+        
+        sqi_indicator = _np.array(sqi_indicator).reshape(out_shape)
+        is_good = _np.array(is_good).reshape(out_shape)
+        
+        out = _np.stack([sqi_indicator, is_good], axis = - 1)
+        
+        return(out)
+    
+class SimpleSQIIndicator(_SignalQualityIndicator):
+    """
+    Compute the Kurtosis of the signal
+    
+    """
+    def __init__(self, threshold, **kwargs):
+        _SignalQualityIndicator.__init__(self, threshold=threshold, **kwargs)
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1, 
+                                                      'is_good': 2})
+        return(chunk_dict, template)
+     
+    def algorithm(self, signal):
+        sqi_indicator = 3
+        sqi_out = self.__check_good__(sqi_indicator, signal)
+        
+        return(sqi_out)
     
 class AddDimension(_Algorithm):
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
         
     def algorithm(self, signal, **kwargs):
         size_new_dim = self._params['size_new_dim']
-        signal_values = signal.values
-        out_zeros = _np.zeros((signal_values.shape[0], 1, 1, 3))
+        out_dims = [x for x in signal.shape]
+        out_dims.append(size_new_dim)
+        out_zeros = _np.zeros(out_dims)
         return(out_zeros)
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'new_dim': [4, 7, 90]})
-        return(self.chunk_dict, template)
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'new_dim': self._params['size_new_dim']})
+        return(chunk_dict, template)
     
 class ShrinkDimension(_Algorithm):
     '''
@@ -80,37 +134,41 @@ class ShrinkDimension(_Algorithm):
     '''
     def __init__(self, n_channels_out, **kwargs):
         _Algorithm.__init__(self, n_channels_out=n_channels_out, **kwargs)
-        self.chunk_dict = {'component': 1}
+        self.required_dims = ['time', 'channel']
         
     def algorithm(self, signal, **kwargs):
         n_channels_out = self._params['n_channels_out']
         assert n_channels_out <= signal.shape[1]
-        out_zeros = _np.zeros((signal.shape[0], 
-                               n_channels_out,
-                               signal.shape[2]))
+        
+        out_dims = [x for x in signal.shape]
+        out_dims[1] = n_channels_out
+        out_zeros = _np.zeros(out_dims)
+        
         return(out_zeros)
     
     def __get_template__(self, signal):
         
         #new size of dim should be derived knowing the algorithm params
+        chunk_dict = self.__compute_chunk_dict__(signal)
         n_channels_out = self._params['n_channels_out']
         template = self.__compute_template__(signal, {'channel': n_channels_out})
-        
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
     
 class WhateverDimension(_Algorithm):
     '''
-    Assume that a signal (timepoints x components) is processed to obtain a
-    timepoints x new_component_dims x new_dimension
+    Assume that a signal (timepoints x channels x ... ) is processed to obtain a
+    timepoints x channels x new_component_dims x new_dimension
     
-    (We dont work on component to test the rolling mechanism)
+    We dont alter the size of channels to test the rolling mechanism; 
+    chunk_dict will be {'channel':1}
     '''
+    
     def __init__(self, n_components_out, n_newdim_out, **kwargs):
         _Algorithm.__init__(self,
                             n_components_out=n_components_out,
                             n_newdim_out=n_newdim_out,
                             **kwargs)
-        self.chunk_dict = {'channel': 1}
+        self.required_dims = ['time', 'component']
         
     def algorithm(self, signal, **kwargs):
         
@@ -126,13 +184,14 @@ class WhateverDimension(_Algorithm):
         return(out_data)
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
         n_components_out = self._params['n_components_out']
         n_newdim_out = self._params['n_newdim_out']
         
         template = self.__compute_template__(signal, {'component': n_components_out,
                                                       'new_dim': n_newdim_out})
         
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
     
 class Wavelet(_Algorithm):
     """
@@ -152,7 +211,7 @@ class Wavelet(_Algorithm):
                             detrend=detrend, normalize=normalize,
                             compute_coi=compute_coi)
         
-        self.chunk_dict = {'channel':1, 'component':1}
+        self.required_dims = ['timel']
         
     def _compute_coi(self, W):
         N = W.shape[1]
@@ -250,10 +309,12 @@ class Wavelet(_Algorithm):
         return out
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        
         self._compute_scales(signal)
         fsamp = signal.p.get_sampling_freq()
         freqs = self._params['freqs_nyq']*fsamp
         
         template = self.__compute_template__(signal, {'freq': freqs})
         
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)

@@ -210,6 +210,7 @@ class DetectMA_AR(_Algorithm):
             template = self.__compute_template__(signal)
         return(chunk_dict, template)
    
+    
     def algorithm(self, signal):
         params = self._params
         order = params['order']
@@ -286,9 +287,7 @@ class MARA(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(self.__get_template_timeonly__(self, signal)
     
     def algorithm(self, signal):
         from csaps import csaps as _csaps
@@ -404,10 +403,7 @@ class WaveletFilter(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
-        
+        return(self.__get_template_timeonly__(self, signal)
     
     def _normalization_noise(self, y):
         #% normalize using computed mean abs dev

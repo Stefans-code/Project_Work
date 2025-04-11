@@ -8,7 +8,7 @@ from scipy.signal import filtfilt as _filtfilt, \
     filter_design as _filter_design, iirfilter as _iirfilter, \
         deconvolve as _deconvolve, firwin as _firwin, \
             iirnotch as _iirnotch, lfilter as _lfilter
-from ._base_algorithm import _Algorithm
+from ._base_algorithm import _Algorithm, __get_template_timeonly__
 from .utils import SignalRange as _SignalRange
 
 class Normalize(_Algorithm):
@@ -46,9 +46,7 @@ class Normalize(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal, **kwargs):
         from .indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
@@ -127,9 +125,7 @@ class IIRFilter(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         # print('----->', self.name)
@@ -186,9 +182,7 @@ class NotchFilter(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         params = self._params
@@ -252,9 +246,7 @@ class FIRFilter(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         params = self._params
@@ -339,9 +331,7 @@ class KalmanFilter(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
         
     def algorithm(self, signal):
         params = self._params
@@ -376,9 +366,7 @@ class RemoveSpikes(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
     
     def algorithm(self, signal):
         params = self._params
@@ -449,9 +437,7 @@ class ConvolutionalFilter(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     # TODO (Andrea): TEST normalization and results
     def algorithm(self, signal):
@@ -525,9 +511,7 @@ class DeConvolutionalFilter(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         params = self._params
@@ -594,9 +578,7 @@ class Prewhitening(_Algorithm):
         self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal, **kwargs):
         from statsmodels.tsa.ar_model import AutoReg as _AutoReg

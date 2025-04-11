@@ -78,7 +78,13 @@ class _Algorithm(object):
             Template of the output.
         """
         pass
-        
+    
+
+    def __get_template_timeonly__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal)
+        return(chunk_dict, template)
+
     def __compute_chunk_dict__(self, signal):
         """
         Helper function to obtain the chunk_dict to perform the rolling.
@@ -202,7 +208,7 @@ class _Algorithm(object):
         4. the _xr.map_blocks function receives the results from all the chunks and
         takes care of composing them into a unique DataArray.
         
-        5. attributes of the origiinal signal are copied to the resulting xarray
+        5. attributes of the original signal are copied to the resulting xarray
         
         
         Parameters

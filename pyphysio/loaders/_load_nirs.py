@@ -67,7 +67,7 @@ def SDto1darray(nirs):
         
     return(nirs)
 
-def load_snirf(datafile):
+def load_snirf(datafile, load_2D=True, has_stim=False):
     from snirf import Snirf
     
     snirf = Snirf(datafile, 'r')
@@ -90,32 +90,27 @@ def load_snirf(datafile):
     SD['SpatialUnit'] = 'cm' #TODO; check
     
     SD['Lambda'] = probe.wavelengths
+    distance_conv = 1
     
     info_channels = []
     for i_ch in range(n_ch):
         idx_src = data.measurementList[i_ch].sourceIndex - 1
         idx_det = data.measurementList[i_ch].detectorIndex - 1
         
-        srcPos = probe.sourcePos3D[idx_src]/10
-        srcPos2D = probe.sourcePos2D[idx_src]/10
-    
-        detPos = probe.detectorPos3D[idx_det]/10
-        detPos2D = probe.detectorPos2D[idx_det]/10
-        
-        # chnPos = (srcPos + detPos) /2
-        # chnPos2D = (srcPos2D + detPos2D) /2
-        
+        srcPos = probe.sourcePos3D[idx_src]
+        detPos = probe.detectorPos3D[idx_det]
         distance = _np.linalg.norm(srcPos - detPos)
-        distance2D = _np.linalg.norm(srcPos2D - detPos2D)
         
-        # ch_dict = {'id': i_ch,
-        #            'source_id': idx_src, 'detector_id': idx_det,
-        #            'srcPos': srcPos, 'srcPos2D': srcPos2D,
-        #            'detPos': detPos, 'detPos2D': detPos2D,
-        #            'chnPos': chnPos, 'chnPos2D': chnPos2D,
-        #            'distance': distance, 'distance2D': distance2D}
-        
-        ch_dict = [i_ch, idx_src, idx_det, distance, distance2D]
+        if distance > 10:
+            distance_conv = 10
+            
+        if load_2D:
+            srcPos2D = probe.sourcePos2D[idx_src]
+            detPos2D = probe.detectorPos2D[idx_det]
+            distance2D = _np.linalg.norm(srcPos2D - detPos2D)
+            ch_dict = [i_ch, idx_src, idx_det, distance/distance_conv, distance2D/distance_conv]
+        else:
+            ch_dict = [i_ch, idx_src, idx_det, distance/distance_conv]
         
         info_channels.append(ch_dict)
     
@@ -123,14 +118,26 @@ def load_snirf(datafile):
     SD['Channels'] = info_channels
     SD['SpatialUnit'] = 'cm' #TODO; check
     SD['Lambda'] = probe.wavelengths
-    SD['SrcPos'] = probe.sourcePos3D/10
-    SD['SrcPos2D'] = probe.sourcePos2D/10
+    SD['SrcPos'] = probe.sourcePos3D/distance_conv
+    SD['DetPos'] = probe.detectorPos3D/distance_conv
     
-    SD['DetPos'] = probe.detectorPos3D/10
-    SD['DetPos2D'] = probe.detectorPos2D/10
+    if load_2D:
+        SD['SrcPos2D'] = probe.sourcePos2D/distance_conv
+        SD['DetPos2D'] = probe.detectorPos2D/distance_conv
     
-    nirs = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
-    return(nirs)
+    nirs_signal = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
+    
+    if has_stim:
+        stim_data = nirs.stim
+        stim_signal = []
+        for s in stim_data:
+            stim_signal.append(s.data)
+            
+        stim_signal = _np.concatenate(stim_signal)
+        stim_signal = create_signal(stim_signal[:, 1], times = stim_signal[:,0])
+        return(nirs_signal, stim_signal)
+    
+    return(nirs_signal)
         
 
 def load_nirx2(DATADIR):

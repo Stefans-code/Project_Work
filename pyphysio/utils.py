@@ -8,7 +8,7 @@ from scipy.signal import welch as _welch, periodogram as _periodogram, \
 import pywt as _pywt
 #TODO replace with pywavelets
 from sklearn.decomposition import PCA as _PCA
-from ._base_algorithm import _Algorithm
+from ._base_algorithm import _Algorithm, __get_template_timeonly__
 
 
 def __finalize_special__(res_sig):
@@ -41,11 +41,10 @@ class Diff(_Algorithm): #xarray done
     def __init__(self, degree=1):
         assert degree > 0, "The degree value should be positive"
         _Algorithm.__init__(self, degree=degree)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     def algorithm(self, signal):
         """
@@ -99,11 +98,10 @@ class PeakDetection(_Algorithm): #xarray done
         assert delta.all() > 0, "Delta value/s should be positive"
         assert refractory >= 0, "Refractory value should be non negative"
         _Algorithm.__init__(self, delta=delta, refractory=refractory, return_peaks=return_peaks)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
     
     def algorithm(self, signal):
         params = self._params
@@ -211,11 +209,10 @@ class SignalRange(_Algorithm): #xarray done
         assert win_len > 0, "Window length should be positive"
         assert win_step > 0, "Window step should be positive"
         _Algorithm.__init__(self, win_len=win_len, win_step=win_step, smooth=smooth)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        return(__get_template_timeonly__(self, signal))
 
     
     def algorithm(self, signal):
@@ -306,10 +303,13 @@ class PSD(_Algorithm): #xarray done
         _Algorithm.__init__(self, method=method, nfft=nfft, window=window, min_order=min_order,
                        max_order=max_order, remove_mean=remove_mean, scaling=scaling, **kwargs)
         
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
+        self.required_dims = ['time']
+
+    #TODO:
     def __get_template__(self, signal):
-        nfft = self._params['nfft']
+        chunk_dict = __compute_chunkdict__(signal)
+	
+	nfft = self._params['nfft']
         N = int(nfft/2 + 1)
         fsamp = signal.p.get_sampling_freq()
         freqs = _np.linspace(start=0, stop=fsamp / 2, num=N)

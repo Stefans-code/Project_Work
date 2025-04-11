@@ -235,7 +235,7 @@ class BeatFromBP(_Algorithm):
         # compute the signal derivative
         dxdt = _Diff()(signal).values
         
-        import matplotlib.pyplot as plt
+        # import matplotlib.pyplot as plt
         true_peaks = []
         # for each candidate peak find the correct peak
         for idx_beat in maxp:

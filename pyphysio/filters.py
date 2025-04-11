@@ -543,9 +543,6 @@ class DeConvolutionalFilter(_Algorithm):
             out = s
         return out
 
-
-##TODO: check why huppert seemingly does not use the first coefficient:
-# 
 class Prewhitening(_Algorithm):
     """Prewhitening algorithm for time series data.
 

@@ -47,7 +47,6 @@ class Diff(_Algorithm): #xarray done
         template = self.__compute_template__(signal)
         return(self.chunk_dict, template)
 
-    
     def algorithm(self, signal):
         """
         Calculates the differences between consecutive values

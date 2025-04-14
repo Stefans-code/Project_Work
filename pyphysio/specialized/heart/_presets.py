@@ -1,7 +1,7 @@
 from ...indicators.frequencydomain import *
-from ...indicators.nonlinear import *
 from ...indicators.peaks import *
 from ...indicators.timedomain import *
+from . import RMSSD, SDSD
 from ...sqi import *
 
 def preset_sqi_ecg(prefix="SQI_", method='ar'):

@@ -1,20 +1,20 @@
-from template_algorithms import SimpleFilter, SimpleIndicator, AddDimension, \
-    ShrinkDimension, WhateverDimension, SimpleSQIIndicator
+from template_algorithms import NoRolling, SimpleFilter, SimpleIndicator, AddDimension, \
+    ShrinkDimension, WhateverDimension, SimpleSQIIndicator, AlgorithmUsingSupportingSignal
     
 import pyphysio as ph
 import numpy as _np
 import xarray as _xr
 
-signal = ph.create_signal(_np.ones(shape = (1000, 2)),
+signal = ph.create_signal(_np.ones(shape = (1000, 5, 2)),
                           sampling_freq=4,
                           start_time=100,
                           name='signal')
 # print(signal)
 
 #%%
-# no_rolling = NoRolling()
-# signal_out = no_rolling(signal)
-# print(signal_out)
+no_rolling = NoRolling()
+signal_out = no_rolling(signal)
+print(signal_out)
 
 #%%
 simple_filter = SimpleFilter()
@@ -46,26 +46,8 @@ whatever_dimension = WhateverDimension(n_components_out=10, n_newdim_out=4)
 signal_out = whatever_dimension(signal)
 print(signal_out)
 
-#%%
-wavelet = Wavelet()
-_, wavelet_template = wavelet.__get_template__(signal)
-signal_out = wavelet(signal)
+supp_algorithm = AlgorithmUsingSupportingSignal()
+signal_in = signal.copy(deep=True)
+signal_in['new_coord'] = signal
+signal_out = supp_algorithm(signal_in)
 print(signal_out)
-
-#%%
-target_freqs = _np.arange(0.01, 0.21, 0.01)[::-1]
-wavelet = Wavelet(freqs=target_freqs)
-_, wavelet_template = wavelet.__get_template__(signal)
-signal_out = wavelet(signal)
-print(signal_out)
-
-#%%
-from pyphysio.loaders import load_xrnirs
-
-# target_freqs = np.around(np.arange(0.01, 0.21, 0.01)[::-1], decimals=2)
-nirs_A_wav = load_xrnirs('/home/bizzego/tmp/A_3min_wav_prew')
-nirs_A_wav = nirs_A_wav.isel({'channel': [0], 'component': [0]})
-
-nirs_A_wav = nirs_A_wav['signal_WaveletFilter_Raw2Oxy_Prewhitening']
-ww = Wavelet(freqs=target_freqs)
-W_A = ww(nirs_A_wav)

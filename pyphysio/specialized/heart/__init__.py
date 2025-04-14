@@ -7,10 +7,30 @@ from ...signal import create_signal
 from ...filters import IIRFilter as _IIRFilter
 from ...utils import SignalRange as _SignalRange, Minima as _Minima, Diff as _Diff, PeakDetection as _PeakDetection
 import itertools as _itertools
+from ...indicators import _Indicator
 
-from ._presets import *
+class RMSSD(_Indicator):
+    """
+    Compute the square root of the mean of the squared 1st order discrete differences.
+    """
+    
+    def algorithm(self, signal):
+        
+        signal_values = signal.p.get_values()
+        diff = _np.diff(signal_values)
+        return _np.array(_np.sqrt(_np.mean(_np.power(diff, 2))))
+
+class SDSD(_Indicator):
+    """
+    Calculate the standard deviation of the 1st order discrete differences.
+    """
+    def algorithm(self, signal):
+        signal_values = signal.p.get_values()
+        diff = _np.diff(signal_values)
+        return _np.array(_np.std(diff))
+
+
 # IBI ESTIMATION
-
 class BeatMSPTD(_Algorithm):
     """
     Identify the beats in a Blood Pulse (BP) signal and compute the IBIs.

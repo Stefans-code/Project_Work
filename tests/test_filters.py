@@ -11,18 +11,13 @@ filters = [filt.Normalize(),
            filt.IIRFilter(20, 30),
            filt.KalmanFilter(100, 100),
            filt.NotchFilter(25),
-           filt.RemoveSpikes()
+           filt.RemoveSpikes(),
+           filt.Prewhitening(pmin=1, pmax=3)
            ]
 
 def _test_filters(signal):
-    # assert isinstance(signal, xr.Dataset)
-    # assert isinstance(signal.p.main_signal, xr.DataArray)
-    
     for f in filters:
-        print(f)
-        # print(f)
         result = f(signal)
-        # print(f.__name__())
         assert result.values.ndim == signal.p.get_values().ndim
         
 

@@ -9,20 +9,9 @@ import pywt as _pywt
 #TODO replace with pywavelets
 from sklearn.decomposition import PCA as _PCA
 from ._base_algorithm import _Algorithm
+from .filters import _Filter
 
-
-def __finalize_special__(res_sig):
-    original_coords = list(res_sig.coords)
-    res_sig = res_sig.reset_coords()
-    dimensions = list(res_sig.dims)
-    for c in original_coords:
-        if c not in dimensions:
-            res_sig = res_sig.drop(c)
-    res_sig = res_sig.to_array()
-    res_sig = res_sig.squeeze(dim='variable').drop('variable')
-    return res_sig
-
-class Diff(_Algorithm): #xarray done
+class Diff(_Filter): #xarray done
     """
     Computes the differences between adjacent samples.
 
@@ -40,12 +29,7 @@ class Diff(_Algorithm): #xarray done
 
     def __init__(self, degree=1):
         assert degree > 0, "The degree value should be positive"
-        _Algorithm.__init__(self, degree=degree)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
+        _Filter.__init__(self, degree=degree)
 
     def algorithm(self, signal):
         """
@@ -65,7 +49,7 @@ class Diff(_Algorithm): #xarray done
 
         return out
     
-class PeakDetection(_Algorithm): #xarray done
+class PeakDetection(_Filter): #xarray done
     """
     Estimate the maxima and the minima in the signal (in particular for periodic signals).
 
@@ -98,13 +82,8 @@ class PeakDetection(_Algorithm): #xarray done
         assert delta.ndim <= 1, "Delta value should be 1 or 0-dimensional"
         assert delta.all() > 0, "Delta value/s should be positive"
         assert refractory >= 0, "Refractory value should be non negative"
-        _Algorithm.__init__(self, delta=delta, refractory=refractory, return_peaks=return_peaks)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
-    
+        _Filter.__init__(self, delta=delta, refractory=refractory, return_peaks=return_peaks)
+        
     def algorithm(self, signal):
         params = self._params
         refractory = params['refractory']
@@ -185,7 +164,7 @@ class PeakDetection(_Algorithm): #xarray done
         
         return out
 
-class SignalRange(_Algorithm): #xarray done
+class SignalRange(_Filter): #xarray done
     """
     Estimate the local range of the signal by sliding windowing
 
@@ -210,14 +189,8 @@ class SignalRange(_Algorithm): #xarray done
     def __init__(self, win_len, win_step, smooth=True):
         assert win_len > 0, "Window length should be positive"
         assert win_step > 0, "Window step should be positive"
-        _Algorithm.__init__(self, win_len=win_len, win_step=win_step, smooth=smooth)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal)
-        return(self.chunk_dict, template)
-
-    
+        _Filter.__init__(self, win_len=win_len, win_step=win_step, smooth=smooth)
+        
     def algorithm(self, signal):
         params = self._params
         win_len = params['win_len']
@@ -306,21 +279,19 @@ class PSD(_Algorithm): #xarray done
         _Algorithm.__init__(self, method=method, nfft=nfft, window=window, min_order=min_order,
                        max_order=max_order, remove_mean=remove_mean, scaling=scaling, **kwargs)
         
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        self.required_dims = ['time']
     
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        
         nfft = self._params['nfft']
         N = int(nfft/2 + 1)
         fsamp = signal.p.get_sampling_freq()
         freqs = _np.linspace(start=0, stop=fsamp / 2, num=N)
         
         template = self.__compute_template__(signal, {'time':1, 'freq': freqs})
-        
-        return(self.chunk_dict, template)
-    
-    def __finalize__(self, res_sig, arr_window):
-        return __finalize_special__(res_sig)
-    
+        return(chunk_dict, template)
+   
     def algorithm(self, signal):
         # print('----->', self.name)
         params = self._params
@@ -437,7 +408,7 @@ class PSD(_Algorithm): #xarray done
         # out.values = _np.expand_dims(psd,[1,2])
         
         
-        psd = psd[_np.newaxis, _np.newaxis, _np.newaxis, :]
+        psd = psd[_np.newaxis, :]
         # print(psd.shape)
         
         # out = signal.copy(deep=True)
@@ -470,22 +441,27 @@ class Wavelet(_Algorithm):
                             minScale = minScale, nNotes = nNotes,
                             detrend=detrend, normalize=normalize,
                             compute_coi=compute_coi)
-        self.chunk_dict = {'channel':1, 'component':1}
+        self.required_dims = ['time']
         
-    # def __finalize__(self, res_sig, arr_window):
-    #     return __finalize_special__(res_sig)
-    
     def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        
         self._compute_scales(signal)
         fsamp = signal.p.get_sampling_freq()
         freqs = self._params['freqs_nyq']*fsamp
         
         template = self.__compute_template__(signal, {'freq': freqs})
         
-        return(self.chunk_dict, template)
+        return(chunk_dict, template)
     
     def _compute_coi(self, W):
-        N = W.shape[1]
+        id_freq = W.dims.index('freq')
+        id_time = W.dims.index('time')
+        assert id_time == 0 
+        assert id_freq == W.ndim -1
+        
+        N = W.sizes['time']
+        
         freqs_nyq = self._params['freqs_nyq']
         coif_ = 1/(2*_np.arange(1, N//2))
 
@@ -495,9 +471,10 @@ class Wavelet(_Algorithm):
         coif[:len(coif_)] = coif_
         coif[-len(coif_):] = coif_[::-1]
         
-        for i in range(W.shape[1]):
+        
+        for i in range(W.sizes['time']):
             idx_na = _np.where(freqs_nyq < coif[i])[0]
-            W[idx_na, i] = _np.nan
+            W[i, ..., idx_na] = _np.nan
         return(W)
             
     
@@ -555,8 +532,6 @@ class Wavelet(_Algorithm):
         
         W, freqs_nyq = _pywt.cwt(signal_values, scales, wavelet=wtype)
         
-        
-        freqs=freqs_nyq*fsamp
         self._params['freqs_nyq'] = freqs_nyq
         
         #normalize computed W
@@ -572,7 +547,7 @@ class Wavelet(_Algorithm):
                 
         
         W = W.T
-        W = W[:, _np.newaxis, _np.newaxis, :]
+        W = W[:, _np.newaxis, :]
         
         return W
         # W = _np.expand_dims(W,[2,3])
@@ -612,7 +587,7 @@ class Wavelet(_Algorithm):
     #     return {'channel': 1, 'component':1}, out
         
 
-class Maxima(_Algorithm): #xarray done
+class Maxima(_Filter): 
     """
     Find all local maxima in the signal
 
@@ -646,12 +621,9 @@ class Maxima(_Algorithm): #xarray done
         if method == 'windowing':
             assert win_len > 0, "Window length should be positive"
             assert win_step > 0, "Window step should be positive"
-        _Algorithm.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
-        self.dimensions = {'time' : 0}
-    
-    def __finalize__(self, res_sig, arr_window):
-        return __finalize_special__(res_sig)
-    
+        _Filter.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
+        self.required_dims = ['time']
+        
     def algorithm(self, signal):
         params = self._params
         method = params['method']
@@ -659,20 +631,23 @@ class Maxima(_Algorithm): #xarray done
         
         if method == 'complete':
             refractory = params['refractory']
-            if refractory == 0:
-                refractory = 1
-            else:
-                refractory = refractory * signal.p.get_sampling_freq()
+            if refractory != 0:
+                refractory = int(refractory * signal.p.get_sampling_freq())
+            
             idx_maxs = []
             prev = signal_values[0]
             k = 1
             while k < len(signal_values) - 1 - refractory:
                 curr = signal_values[k]
                 nxt = signal_values[k + 1]
-                if (curr >= prev) and (curr >= nxt):
+                if (curr >= prev) and (curr > nxt):
                     idx_maxs.append(k)
-                    prev = signal_values[k + 1 + refractory]
-                    k = k + 2 + refractory
+                    #update next k
+                    if refractory > 0:
+                        k = k + refractory
+                    else:
+                        k = k + 2
+                    prev = signal_values[k - 1]
                 else:  # continue
                     prev = signal_values[k]
                     k += 1
@@ -683,8 +658,8 @@ class Maxima(_Algorithm): #xarray done
             winlen = int(params['win_len'] * fsamp)
             winstep = int(params['win_step'] * fsamp)
 
-            # TODO: check that winlen > 2
-            # TODO: check that winstep >= 1
+            assert winlen >= 3, "Window length is less that 3 samples"
+            assert winstep >= 1, "Window step is less than 1 sample"
 
             idx_maxs = [_np.nan]
             if winlen < len(signal):
@@ -698,8 +673,7 @@ class Maxima(_Algorithm): #xarray done
                     idx_sp = len(signal_values)
                 curr_win = signal_values[idx_st: idx_sp]
                 curr_idx_max = _np.argmax(curr_win) + idx_st
-                curr_max = _np.max(curr_win)
-
+                
                 # peak not already detected & peak not at the beginnig/end of the window:
                 if curr_idx_max != idx_maxs[-1] and curr_idx_max != idx_st and curr_idx_max != idx_sp - 1:
                     idx_maxs.append(curr_idx_max)
@@ -707,10 +681,9 @@ class Maxima(_Algorithm): #xarray done
             
         out = _np.ones_like(signal.values)*_np.nan
         out[idx_maxs] = signal.values[idx_maxs]
-        out_xarray = signal.copy(data = out)
-        return out_xarray
+        return out
         
-class Minima(_Algorithm): #xarray done
+class Minima(Maxima): 
     """
     Find all local minima in the signal
 
@@ -736,97 +709,35 @@ class Minima(_Algorithm): #xarray done
     val_mins : array
         Array containing values of the minima
     """
-
-    def __init__(self, method='complete', refractory=0, win_len=None, win_step=None):
-        assert method in ['complete', 'windowing'], "Method not valid"
-        assert refractory >= 0, "Refractory time value should be positive (or 0 to deactivate)"
-        
-        if method == 'windowing':
-            assert win_len > 0, "Window length should be positive"
-            assert win_step > 0, "Window step should be positive"
-        _Algorithm.__init__(self, method=method, refractory=refractory, win_len=win_len, win_step=win_step)
-        self.dimensions = {'time' : 0}
-        
-    def __finalize__(self, res_sig, arr_window):
-        return __finalize_special__(res_sig)
     
     def algorithm(self, signal):
-        params = self._params
-        max_alg = Maxima(**params) 
-        result = -1*max_alg.algorithm(-signal)
-        return(result)
+        result = super().algorithm(-signal)
+        return(-result)
 
-
-
-class PCA(_Algorithm): #xarray done
+class PCA(_Algorithm):
     """
     """
 
-    def __init__(self, n_out_channels=1):
-        _Algorithm.__init__(self, n_out_channels=n_out_channels)
-        self.dimensions = {'time' : 0,
-                           'channel': n_out_channels,
-                           'component': 0}
+    def __init__(self, n_out=1, dimension='channel'):
+        _Algorithm.__init__(self, n_out=n_out, dimension=dimension)
+        self.required_dims = ['time', dimension]
+    
+    def __get_template__(self, signal):
+        assert dimension in signal.dims
+        dimension = self._params['dimension']
+        n_out = self._params['n_out']
         
-    
-    
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {dimension: n_out})
+        return(chunk_dict, template)
+        
     def algorithm(self, signal):
-        pca = _PCA(n_components=self._params['n_out_channels'])
-        orig_channels = signal.p.get_values()[:,:,0]
+        pca = _PCA(n_components=self._params['n_out'])
+        orig_channels = _np.squeeze(signal.p.get_values())
         out_channels = pca.fit_transform(orig_channels)
         return(out_channels)
 
-#TODO from here
-# class BootstrapEstimation(_Algorithm):
-#     """
-#     Perform a bootstrapped estimation of given statistical indicator
-    
-#     Parameters
-#     ----------
-#     func : numpy function
-#         Function to use in the bootstrapping. Must accept data as input
-        
-#     Optional parameters
-#     -------------------
-    
-#     n : int, >0, default = 100
-#         Number of iterations
-#     k : float, (0,1), default = 0.5
-#         Portion of data to be used at each iteration
-    
-#     Returns
-#     -------
-#     estim : float
-#         Bootstrapped estimate
-    
-#     """
-
-#     def __init__(self, func, n=100, k=0.5):
-#         from types import FunctionType as Func
-#         assert isinstance(func, Func), "Parameter function should be a function (types.FunctionType)"
-#         assert n > 0, "n should be positive"
-#         assert 0 < k <= 1, "k should be between (0 and 1]"
-#         _Algorithm.__init__(self, func=func, n=n, k=k)
-
-    
-#     def algorithm(self, signal):
-#         params = self._params
-#         signal = _np.asarray(signal)
-#         l = len(signal)
-#         func = params['func']
-#         niter = int(params['n'])
-#         k = params['k']
-
-#         estim = []
-#         for i in range(niter):
-#             ixs = _np.arange(l)
-#             ixs_p = _np.random.permutation(ixs)
-#             sampled_data = signal[ixs_p[:int(round(k * l))]]
-#             curr_est = func(sampled_data)
-#             estim.append(curr_est)
-#         estim = _np.sort(estim)
-#         return estim[int(len(estim) / 2)]
-
+#TODO IF NEEDED
 # class Durations(_Algorithm):
 #     """
 #     Compute durations of events starting from their start and stop indexes
@@ -906,7 +817,7 @@ class PCA(_Algorithm): #xarray done
 #                 slopes.append(_np.nan)
 #         return slopes
 
-class PeakSelection(_Algorithm):
+class PeakSelection(_Filter):
     """
     Identify the start and the end indexes of each peak in the signal, using derivatives.
 
@@ -927,20 +838,29 @@ class PeakSelection(_Algorithm):
         Array containing end indexes
     """
 
-    def __init__(self, indices, win_pre, win_post):
-        indices = _np.array(indices)
-        assert indices.ndim < 2, "Parameter indices has to be 1 or 0-dimensional"
-        assert indices.all() >= 0, "Parameter indices contains negative values"
+    def __init__(self, win_pre, win_post):
         assert win_pre > 0, "Window pre peak value should be positive"
         assert win_post > 0, "Window post peak value should be positive"
-        _Algorithm.__init__(self, indices=indices, win_pre=win_pre, win_post=win_post)
-        self.dimensions = {'time': 0}
+        _Filter.__init__(self, win_pre=win_pre, win_post=win_post)
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        chunk_dict, template = super().__get_template__(signal)
+        template['peaks'] = signal['peaks']
 
+        return (chunk_dict, template)
+    
+    def __mapper_func__(self, signal_in, **kwargs):
+        out = super().__mapper_func__(signal_in, **kwargs)
+        out['peaks'] = signal_in['peaks']
+        return(out)
     
     def algorithm(self, signal):
+        assert 'peaks' in signal.coords, "Signal coords should contain peaks"
         
         params = self._params
-        i_peaks = params['indices']
+        peaks = signal['peaks']
+        i_peaks = _np.where(_np.isnan(peaks)==False)[0]
         i_pre_max = int(params['win_pre'] * signal.p.get_sampling_freq())
         i_post_max = int(params['win_post'] * signal.p.get_sampling_freq())
         
@@ -949,63 +869,20 @@ class PeakSelection(_Algorithm):
 
         i_start = []
         i_stop = []
-
         
         for idx_max in i_peaks:
-
             idx_pre = idx_max-1
             while ((dd[idx_pre]>-0.5) and ((idx_max-idx_pre) <= i_pre_max)) and (idx_pre>0):
                 idx_pre -=1
+            idx_pre = idx_pre + 1
             i_start.append(idx_pre)
             
             idx_post = idx_max+1
             while ((dd[idx_post]<-0.5) and ((idx_post-idx_max) <= i_post_max)) and (idx_post<(len(signal_values)-1)):
                 idx_post +=1
-            idx_post -=1    
+
             i_stop.append(idx_post)
         
-        
-        
-        
-        # i_start = _np.empty(len(i_peaks), int)
-        # i_stop = _np.empty(len(i_peaks), int)
-
-        # signal_dt = _np.diff(signal_values)
-        # for i in range(len(i_peaks)):
-        #     i_pk = int(i_peaks[i])
-
-        #     if i_pk < i_pre_max:
-        #         i_st = 0
-        #         i_sp = i_pk + i_post_max
-        #     elif i_pk >= len(signal_dt) - i_post_max:
-        #         i_st = i_pk - i_pre_max
-        #         i_sp = len(signal_dt) - 1
-        #     else:
-        #         i_st = i_pk - i_pre_max
-        #         i_sp = i_pk + i_post_max
-
-        #     # find START
-        #     signal_dt_pre = signal_dt[i_st:i_pk]
-        #     i_pre = len(signal_dt_pre) - 1
-
-        #     # OR below is to allow small fluctuations (?)
-
-        #     while i_pre > 0 and (signal_dt_pre[i_pre] > 0 or abs(signal_dt_pre[i_pre]) >= ZERO):
-        #         i_pre -= 1
-
-        #     i_start[i] = i_st + i_pre + 1
-
-        #     # find STOP
-        #     signal_dt_post = signal_dt[i_pk: i_sp]
-        #     i_post = 1
-
-        #     # OR below is to allow small fluctuations (?)
-        #     while i_post < len(signal_dt_post) - 1 and (
-        #                     signal_dt_post[i_post] < 0 or abs(signal_dt_post[i_post]) >= ZERO):
-        #         i_post += 1
-
-        #     i_stop[i] = i_pk + i_post
-        # print(i_start, i_stop)
         sig_out = _np.zeros(len(signal_values))
         
         for i_st, i_sp in zip(i_start, i_stop):

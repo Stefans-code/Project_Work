@@ -118,7 +118,7 @@ def get_ss_ls_channels(nirs, max_dist=1.5):
     idx_ss = []
     idx_ls = []
     distances = []
-    for idx_ch, ch in enumerate(nirs.p.main_signal.attrs['Channels']):
+    for idx_ch, ch in enumerate(nirs.p.attrs['Channels']):
         distances.append(ch[3])
         if ch[3]<=max_dist:
             idx_ss.append(idx_ch)
@@ -128,13 +128,13 @@ def get_ss_ls_channels(nirs, max_dist=1.5):
 
 def get_ch_pos(nirs, ch_target, twoD=False):
     if twoD:
-        src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos2D'])
-        det_pos = _np.array(nirs.p.main_signal.attrs['DetPos2D'])
+        src_pos = _np.array(nirs.p.attrs['SrcPos2D'])
+        det_pos = _np.array(nirs.p.attrs['DetPos2D'])
     else:
-        src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos'])
-        det_pos = _np.array(nirs.p.main_signal.attrs['DetPos'])
+        src_pos = _np.array(nirs.p.attrs['SrcPos'])
+        det_pos = _np.array(nirs.p.attrs['DetPos'])
 
-    ch_target_info = nirs.p.main_signal.attrs['Channels'][ch_target]
+    ch_target_info = nirs.p.attrs['Channels'][ch_target]
     ch_src = int(ch_target_info[1])
     ch_det = int(ch_target_info[2])
 
@@ -167,9 +167,7 @@ class PCAFilter(_Algorithm):
         _Algorithm.__init__(self, nSV=nSV, 
                             return_systemic=return_systemic,
                             **kwargs)
-        self.dimensions = {'time':0, 
-                           'channel': 0, 
-                           'component':0}
+        self.required_dims = ['time', 'channel', 'component']
     
     # def __call__(self, signal, manage_original):
     #     return _Algorithm.__call__(self, signal,
@@ -219,7 +217,7 @@ class RegressShortSeparation(_Algorithm):
     def __init__(self, var_explained=0.9, max_dist=1.5, **kwargs):
         _Algorithm.__init__(self, var_explained=var_explained, 
                             max_dist=max_dist, **kwargs)
-        self.dimensions = {'time':0, 'component':0, 'channel':0}
+        self.required_dims = ['time', 'channel', 'component']
         
             
     def algorithm(self, signal):
@@ -272,7 +270,7 @@ class NegativeCorrelationFilter(_Algorithm):
     '''
     def __init__(self, **kwargs):
         _Algorithm.__init__(self, **kwargs)
-        self.dimensions = {'time':0, 'component':0}
+        self.required_dims = ['time', 'component']
         
     # def __call__(self, signal, manage_original):
     #     return _Algorithm.__call__(self, signal,
@@ -306,8 +304,13 @@ class ComputeClusters(_Algorithm):
                             mode=mode,
                             **kwargs)
         
-        self.dimensions = {'time':0, 
-                           'channel': len(clusters)}
+        self.required_dims = ['time', 'channel']
+    
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        clusters = self._params['clusters']
+        template = self.__compute_template__(signal, {'channel': len(clusters)})
+        return (chunk_dict, template)
     
     def __call__(self, signal_in, **kwargs):
         if 'good_channels' in signal_in.attrs:
@@ -363,24 +366,7 @@ class ComputeClusters(_Algorithm):
                 out_signal[:,i_cluster, :] = cluster_signal
         
         return(out_signal)
-        
 
-
-# def __finalize_special__(res_sig):
-#     # print('----->', self.name, 'finalize')
-#     original_coords = list(res_sig.coords)
-#     res_sig = res_sig.reset_coords()
-    
-#     dimensions = list(res_sig.dims)
-#     for c in original_coords:
-#         if c not in dimensions:
-#             res_sig = res_sig.drop(c)
-#     res_sig = res_sig.to_array()
-#     res_sig = res_sig.squeeze(dim='variable').drop('variable')
-#     # print('<-----', self.name, 'finalize')
-#     return res_sig
-
-        
 """
 class FunctionalSeparationFilter(_Algorithm):
     '''
@@ -474,4 +460,3 @@ class FunctionalSeparationFilter(_Algorithm):
         
         return out
 """
-#TODO: slowly include pynirs

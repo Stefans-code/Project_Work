@@ -1,7 +1,7 @@
 import numpy as _np
 from ._base_algorithm import _Algorithm
 from copy import deepcopy as copy
-from .filters import IIRFilter as _IIRFilter, Normalize as _Normalize
+from .filters import IIRFilter as _IIRFilter, Normalize as _Normalize, _Filter
 import pywt
 from scipy.stats import median_abs_deviation as _mad, iqr as _iqr
 from statsmodels.tsa.ar_model import AutoReg as _AutoReg
@@ -256,7 +256,7 @@ class DetectMA_AR(_Algorithm):
         signal_out[idx_MA] = 1
         return(signal_out)
         
-class MARA(_Algorithm):
+class MARA(_Filter):
     """
     This class implements the MARA algorithm, which is used for signal processing based on the method described in the paper "F Scholkmann et al 2010 Physiol. Meas. 31 649".
 
@@ -280,38 +280,34 @@ class MARA(_Algorithm):
     ----------
     - F. Scholkmann et al. "How to detect and reduce movement artifacts in near-infrared imaging using moving standard deviation and spline interpolation." Physiological Measurement, 2010.
     """
-
-    def __init__(self, MA, **kwargs):
-        _Algorithm.__init__(self, MA=MA, **kwargs)
-        self.required_dims = ['time']
     
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+    def __mapper_func__(self, signal_in, **kwargs):
+        out = super().__mapper_func__(signal_in, **kwargs)
+        out['MA'] = signal_in['MA']
+        return out
     
     def algorithm(self, signal):
+        assert 'MA' in signal.coords
         from csaps import csaps as _csaps
 
         signal_values = signal.values.ravel()
         fsamp = signal.p.get_sampling_freq()
-        
-        params = self._params
-        MA = params['MA']
+
+        MA_signal = signal['MA']
         ch = signal.channel.values[0]
         cp = signal.component.values[0]
         
-        if MA.sizes['channel'] == 1:
-            ch_MA = 0
-        else:
-            ch_MA = ch
+        # if MA.sizes['channel'] == 1:
+        #     ch_MA = 0
+        # else:
+        #     ch_MA = ch
             
-        if MA.sizes['component'] == 1:
-            cp_MA = 0
-        else:
-            cp_MA = cp
+        # if MA.sizes['component'] == 1:
+        #     cp_MA = 0
+        # else:
+        #     cp_MA = cp
             
-        MA_signal = MA.isel(channel=[ch_MA], component=[cp_MA])
+        # MA_signal = MA.isel(channel=[ch_MA], component=[cp_MA])
         MA_signal_values = MA_signal.values.ravel()
         MA_signal_diff = _np.diff(MA_signal_values)
         idx_st = _np.where(MA_signal_diff > 0)[0]

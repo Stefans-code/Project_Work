@@ -15,13 +15,21 @@ signal = create_signal(data, sampling_freq=sampling_freq, name = 'random')
 
 #%%
 MA_none = art.DetectMA(fuse=None)(signal)
-MA_all = art.DetectMA(fuse='all')(signal)
-MA_component = art.DetectMA(fuse='component')(signal)
+signal['MA'] = MA_none
+signal_none = art.MARA()(signal, scheduler='single-threaded')
+signal = signal.drop_vars('MA')
 
-#%%
-signal_none = art.MARA(MA_none)(signal, scheduler='single-threaded')
-signal_all = art.MARA(MA_all)(signal, scheduler='single-threaded')
-signal_component = art.MARA(MA_component)(signal, scheduler='single-threaded')
+MA_all = art.DetectMA(fuse='all')(signal)
+signal['MA'] = MA_all
+signal_all = art.MARA()(signal, scheduler='single-threaded')
+signal = signal.drop_vars('MA')
+
+
+MA_component = art.DetectMA(fuse='component')(signal)
+signal['MA'] = MA_component
+signal_component = art.MARA()(signal, scheduler='single-threaded')
+signal = signal.drop_vars('MA')
+
 
 #%%
 signal_ = art.WaveletFilter()(signal)

@@ -4,7 +4,7 @@ import torch.nn as _nn
 import numpy as _np
 import os as _os
 
-from ...sqi import _SignalQualityIndicator
+from ...sqi import _SQIIndicator
 # from torch.utils.data import Dataset as _Dataset
 
 FSAMP = 10
@@ -50,13 +50,13 @@ class _Simple(_nn.Module):
         return(x_feat)
     
 #%%
-class SignalQualityDeepLearning(_SignalQualityIndicator):
+class SignalQualityDeepLearning(_SQIIndicator):
     def __init__(self, threshold=[0.5, 1.5]):
         model = _Simple(n_classes=2)
         model = model.to(device)
         model.eval()
         self.model = model
-        _SignalQualityIndicator.__init__(self, threshold=threshold)
+        _SQIIndicator.__init__(self, threshold=threshold)
         self.dimensions = {'time' : 1, 'component': 1}
         
     

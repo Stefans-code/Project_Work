@@ -1,11 +1,9 @@
-import pyphysio as ph
+from abc import ABC, abstractmethod
 import numpy as _np
 import xarray as _xr
-from abc import ABC, abstractmethod
-
-scheduler = 'threads'
 _xr.set_options(keep_attrs=True)
-   
+scheduler = 'single-threaded'
+
 class _Algorithm(object):
     """
     Base class for all algorithms in pyphysio.
@@ -52,11 +50,6 @@ class _Algorithm(object):
     @property
     def name(self):
         return(self.__class__.__name__)
-
-    def __get_template_timeonly__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
     
     @abstractmethod
     def __get_template__(self, signal):
@@ -84,6 +77,11 @@ class _Algorithm(object):
             Template of the output.
         """
         pass
+
+    def __get_template_timeonly__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal)
+        return(chunk_dict, template)
         
     def __compute_chunk_dict__(self, signal):
         """
@@ -231,14 +229,12 @@ class _Algorithm(object):
         #but the __call__ "rolling" mechanism assumes to operate on a DataArray.
         #These lines convert the input Dataset to a DataArray, making a
         #COPY of the input Dataset.
-        if isinstance(signal_in, _xr.Dataset):
-            signal = signal_in.p.main_signal.copy(deep=True)
-        else:
-            signal = signal_in.copy(deep=True)
+        signal = signal_in.copy(deep=True)
         
         signal_name = signal.name
-        
+
         if len(self.required_dims) == 0:
+            
             #This is to allow special implementations, where the "rolling"
             #mechanism is avoided
             result_numpy = self.algorithm(signal, **kwargs)
@@ -256,7 +252,7 @@ class _Algorithm(object):
         else:
             #get chunk_dict and template from the algorithm's class
             chunk_dict, template = self.__get_template__(signal)
-
+            
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
             
@@ -313,7 +309,6 @@ class _Algorithm(object):
             assert signal_in.sizes[k] == v
             
         result_numpy = self.algorithm(signal_in, **kwargs)
-        
         
         result_ndims = result_numpy.ndim
         template_ndims = template_out.ndim
@@ -381,6 +376,3 @@ class _Algorithm(object):
         is not lower than the number of required dimensions in self.required_dims
         """
         pass
-
-#%%
-

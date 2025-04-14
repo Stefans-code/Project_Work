@@ -1,6 +1,7 @@
 import numpy as _np
 from scipy.interpolate import interp1d
 from ..._base_algorithm import _Algorithm
+from ...filters import _Filter
 import xarray as _xr
 
 # TODO: reset info
@@ -226,15 +227,10 @@ def _OD2Conc(nirs, SD, channel, ppf=[6,6], force_max_dist=True):
 
     return(concentration)
 
-class Raw2Oxy(_Algorithm):
+class Raw2Oxy(_Filter):
     def __init__(self, age=None, **kwargs):
-        _Algorithm.__init__(self, age=age, **kwargs)
-        self.dimensions = {'time':0, 'component':0}
-    
-    # def __call__(self, signal_in, manage_original='add'):
-    #     return _Algorithm.__call__(self, signal_in,
-    #                                by='channel', 
-    #                                manage_original=manage_original)
+        _Filter.__init__(self, age=age, **kwargs)
+        self.required_dims = ['time', 'component']
     
     def algorithm(self, signal):
         SD = signal.attrs

@@ -320,7 +320,7 @@ class LabelSegments(_Segmenter):
         self._i = 0
         
     def _next_segment(self):
-        timeline_values = self.timeline.p.main_signal.values
+        timeline_values = self.timeline.values
         if self._i >= len(timeline_values):
             raise StopIteration()
         end = self._i
@@ -448,7 +448,6 @@ def fmap(segmenter, algorithms, signal):
     
     result = []
     
-    signal_name = signal.p.main_signal.name
     #for all algorithms
     for alg in algorithms:
         # print(alg.name)
@@ -456,19 +455,17 @@ def fmap(segmenter, algorithms, signal):
         for i_seg, seg in enumerate(segmenter): #this generates segments from the segmenter
             # print(seg.get_begin_time())    
             signal_segment = seg(signal)
+            signal_segment['time']
             if signal_segment.p.get_values().shape[0] > 0:
-                res = alg(signal_segment, add_signal=True)
-                res = res.drop(signal_name)
-                
+                res = alg(signal_segment)
                 res_out = res.copy()
-                
+                # print(res_out)
                 res_out = res_out.dropna(dim='time', 
-                                         how='all', 
-                                         subset=[f'{signal_name}_{alg.__repr__()}'])
+                                         how='all')
                 
-                #if the result of the computation of the indicator is na
-                if res_out.dims['time'] == 0:
-                    res_out = res.isel({'time':[0]})
+                # #if the result of the computation of the indicator is na
+                # if res_out.sizes['time'] == 0:
+                #     res_out = signal_segment.isel({'time':[0]})
                     
             res_out = res_out.assign_coords(label=('time', [seg.get_label()]))
             result_algorithm.append(res_out)

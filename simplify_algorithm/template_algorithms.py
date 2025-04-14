@@ -5,21 +5,41 @@ import pywt as _pywt
 from scipy.signal import detrend as _detrend
     
 
-# class NoRolling(_Algorithm):
-#     """ WIP
-#     """
-
-#     def __init__(self, **kwargs):
-#         _Algorithm.__init__(self, **kwargs)
-#         self.required_dims = []
-        
-#     def algorithm(self, signal, **kwargs):
-#         return(_np.ones(shape=(1,1,10)))
+class NoRolling(_Algorithm):
+    """
+    To avoid the rolling mechanism, required_dims should be an empty list.
     
-#     def __get_template__(self, signal):
-#         chunk_dict = {}
-#         template = self.__compute_template__(signal)
-        # return(chunk_dict, template)
+    The input signal will be processed as is by the algorithm function.
+    
+    To refine the output, you can write the function __finalize__.
+    The function __finalize__ will be called after the algorithm function, with the following parameters:
+    - result_algorithm: the result from the call of the function algorithm
+    - signal: the input signal
+    """
+
+    def __init__(self, **kwargs):
+        _Algorithm.__init__(self, **kwargs)
+        self.required_dims = []
+        
+    def algorithm(self, signal, **kwargs):
+        return(_np.ones(shape=(1,1,10)))
+    
+    def __finalize__(self, result_algorithm, signal):
+        '''
+        This function is called after the algorithm function.
+        It can be used to refine the output.
+        
+        Args:
+            result_algorithm: the result from the call of the function algorithm
+            signal: the input signal
+        '''
+        #do something with the result_algorithm
+        # and the signal
+        signal_out = _xr.DataArray(result_algorithm, coords = {'time': [0], 
+                                                               'channel': [0],
+                                                               'component': _np.arange(10)},)
+        
+        return(signal_out)
     
 class SimpleFilter(_Algorithm):
     """
@@ -37,7 +57,6 @@ class SimpleFilter(_Algorithm):
         out = _np.zeros(in_shape[0])
         print(out.shape)
         return(out)
-    
     
 class SimpleIndicator(_Algorithm):
     def __init__(self, **kwargs):
@@ -73,7 +92,13 @@ class _SignalQualityIndicator(_Algorithm):
         '''
         assert len(threshold)==2
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
-        
+    
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1, 
+                                                      'is_good': 2})
+        return(chunk_dict, template)
+    
     def __check_good__(self, sqi_indicator, signal):
         params = self._params
         threshold = params['threshold']
@@ -99,16 +124,10 @@ class SimpleSQIIndicator(_SignalQualityIndicator):
         _SignalQualityIndicator.__init__(self, threshold=threshold, **kwargs)
         self.required_dims = ['time']
     
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal, {'time': 1, 
-                                                      'is_good': 2})
-        return(chunk_dict, template)
      
     def algorithm(self, signal):
         sqi_indicator = 3
         sqi_out = self.__check_good__(sqi_indicator, signal)
-        
         return(sqi_out)
     
 class AddDimension(_Algorithm):
@@ -192,129 +211,38 @@ class WhateverDimension(_Algorithm):
                                                       'new_dim': n_newdim_out})
         
         return(chunk_dict, template)
-    
-class Wavelet(_Algorithm):
-    """
 
-    """
-    def __init__(self, wtype = 'cmor_1.15-1.0',
-                 freqs = None,
-                 minScale = 2,
-                 nNotes = 12,
-                 detrend=True,
-                 normalize=False,
-                 compute_coi=False):
-            
-        
-        _Algorithm.__init__(self, wtype = wtype, freqs = freqs,
-                            minScale = minScale, nNotes = nNotes,
-                            detrend=detrend, normalize=normalize,
-                            compute_coi=compute_coi)
-        
-        self.required_dims = ['timel']
-        
-    def _compute_coi(self, W):
-        N = W.shape[1]
-        freqs_nyq = self._params['freqs_nyq']
-        coif_ = 1/(2*_np.arange(1, N//2))
-
-        # coif_ = fsamp/(2*np.arange(1, N//2))
-        min_coif = coif_[-1]
-        coif = _np.zeros(N) + min_coif
-        coif[:len(coif_)] = coif_
-        coif[-len(coif_):] = coif_[::-1]
-        
-        for i in range(W.shape[1]):
-            idx_na = _np.where(freqs_nyq < coif[i])[0]
-            W[idx_na, i] = _np.nan
-        return(W)
-            
+class AlgorithmUsingSupportingSignal(_Algorithm):
+    '''
+    First, add the supporting signal should be added to the signal to process
+    as a new coordinate.
+    The supporting signal should be a signal with the same coordinates and dimensions of the signal to process.
+    For instance a signal resulting from the application of another algorithm to the same signal to process
     
-    def _compute_scales(self, signal):
-        params = self._params
-        freqs = params['freqs']
-        wtype = params['wtype']
-        
-        signal_values = signal.p.get_values()
-        fsamp = signal.p.get_sampling_freq()
-        
-        if freqs is None: #users want the algoritm to compute the scales
-            minScale = params['minScale']
-            nNotes = params['nNotes']
-            
-            # The scales as of Mallat 1999
-            # minScale = 2 # / wavelet.flambda()
-            N = signal_values.shape[0]
-            nOctaves = int(_np.round(_np.log2(N/2) / (1/nNotes)))
-            scales = minScale * 2 ** (_np.arange(0, nOctaves + 1) * (1/nNotes))
-            freqs_nyq = _pywt.scale2frequency(wtype, scales)
-            
-        else: #user provided the frequencies
-            freqs = _np.array(freqs)
-            #check correct order of frequencies
-            assert freqs[0]>freqs[-1]
-            assert (_np.diff(freqs)<0).all()
-            freqs_nyq = freqs/fsamp
-            scales = _pywt.frequency2scale(wtype, freqs_nyq)
-            
-        scales = _np.sort(scales)
-        
-        self._params['freqs_nyq'] = freqs_nyq
-        self._params['scales'] = scales
-        
+    signal['new_coord'] = supporting_signal
     
+    The new coordinate will be also divided into chunks to allow processing in parallel.
+    But the new coordinate should be added to the result 
+    before the results from the different chunks are merged.
+    This is because the template is created based on the signal with the additional coordinate.
+    
+    To this aim, it is necessary to define the __mapper__function__ properly.
+    See example below.
+    '''
+    
+    def __init__(self, **kwargs):
+        _Algorithm.__init__(self, **kwargs)
+        self.required_dims = []
+        
     def algorithm(self, signal):
-        if 'scales' not in self._params:
-            self._compute_scales(signal)
-        
-        params = self._params
-        #get signal values and info
-        signal_values = signal.p.get_values().ravel()
-        fsamp = signal.p.get_sampling_freq()
-        N = len(signal_values)
-        
-        #remove linear drift
-        detrend = params['detrend']
-        if detrend:
-            signal_values = _detrend(signal_values, type='linear')
-        
-        #compute wavelet
-        wtype = params['wtype']
-        scales = params['scales']
-        
-        W, freqs_nyq = _pywt.cwt(signal_values, scales, wavelet=wtype)
-        
-        
-        freqs=freqs_nyq*fsamp
-        self._params['freqs_nyq'] = freqs_nyq
-        
-        #normalize computed W
-        normalize = params['normalize']
-        if normalize:
-            scaleMatrix = _np.ones([1, N]) * scales[:, None]
-            W = W**2 / scaleMatrix
-        
-        #compute coi and assign na outside
-        compute_coi = params['compute_coi']
-        if compute_coi:
-            W = self._compute_coi(W)
-        
-        W = W.T
-        W = W[:, _np.newaxis, _np.newaxis, :]
-        out = signal.copy(deep=True)
-        
-        out = out.expand_dims({'freq':freqs.astype(_np.float64)}, axis=-1)
-        
-        out.values = W
-        return out
-    
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        
-        self._compute_scales(signal)
-        fsamp = signal.p.get_sampling_freq()
-        freqs = self._params['freqs_nyq']*fsamp
-        
-        template = self.__compute_template__(signal, {'freq': freqs})
-        
-        return(chunk_dict, template)
+        assert 'new_coord' in signal.coords
+        supporting_signal = signal['new_coord'];
+        #do something using the signal to process (signal)
+        # and the supporting signal
+        # note that the result will be a numpy array
+        return(signal.values)
+
+    def __mapper_func__(self, signal_in, **kwargs):
+        out = super().__mapper_func__(signal_in, **kwargs)
+        out['new_coord'] = signal_in['new_coord']
+        return(out)

@@ -5,7 +5,7 @@
 
 import numpy as _np
 #import xarray as _xr
-from .._base_algorithm import _Algorithm
+from .._base_Indicator import _Indicator
 from ..utils import PeakDetection as _PeakDetection,\
     PeakSelection as _PeakSelection
 
@@ -58,7 +58,7 @@ def _get_slopes(signal, idx_peaks, params):
             
     return slopes
 
-class PeaksMax(_Algorithm):
+class PeaksMax(_Indicator):
     """
     Return the maximum amplitude of detected peaks.
 
@@ -75,7 +75,7 @@ class PeaksMax(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        _Algorithm.__init__(self, delta=delta, **kwargs)
+        _Indicator.__init__(self, delta=delta, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -93,7 +93,7 @@ class PeaksMax(_Algorithm):
         return _np.max(signal_values[idx_peaks], keepdims=True)
 
 
-class PeaksMin(_Algorithm):
+class PeaksMin(_Indicator):
     """
     Return the minimum amplitude of detected peaks.
 
@@ -109,7 +109,7 @@ class PeaksMin(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        _Algorithm.__init__(self, delta=delta, **kwargs)
+        _Indicator.__init__(self, delta=delta, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -127,7 +127,7 @@ class PeaksMin(_Algorithm):
         return _np.min(signal_values[idx_peaks], keepdims=True)
 
 
-class PeaksMean(_Algorithm):
+class PeaksMean(_Indicator):
     """
     Return the average amplitude of detected peaks.
 
@@ -143,7 +143,7 @@ class PeaksMean(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        _Algorithm.__init__(self, delta=delta, **kwargs)
+        _Indicator.__init__(self, delta=delta, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -162,7 +162,7 @@ class PeaksMean(_Algorithm):
         return out
 
 
-class PeaksNum(_Algorithm):
+class PeaksNum(_Indicator):
     """
     Return the number of detected peaks.
 
@@ -178,7 +178,7 @@ class PeaksNum(_Algorithm):
     
     """
     def __init__(self, delta, **kwargs):
-        _Algorithm.__init__(self, delta=delta, **kwargs)
+        _Indicator.__init__(self, delta=delta, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -190,7 +190,7 @@ class PeaksNum(_Algorithm):
         return _np.array([len(idx_peaks)])
 
 
-class DurationMin(_Algorithm):
+class DurationMin(_Indicator):
     """
     Return the minimum duration of detected peaks.
 
@@ -213,7 +213,7 @@ class DurationMin(_Algorithm):
         assert delta > 0, 'delta must be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
-        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -234,7 +234,7 @@ class DurationMin(_Algorithm):
         return(_np.array([_np.min(durations)]))
 
 
-class DurationMax(_Algorithm):
+class DurationMax(_Indicator):
     """
     Return the maximum duration of detected peaks.
 
@@ -257,7 +257,7 @@ class DurationMax(_Algorithm):
         assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
-        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -278,7 +278,7 @@ class DurationMax(_Algorithm):
         return(_np.array([_np.max(durations)]))
 
 
-class DurationMean(_Algorithm):
+class DurationMean(_Indicator):
     """
     Return the average duration of detected peaks.
 
@@ -301,7 +301,7 @@ class DurationMean(_Algorithm):
         assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
-        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -324,7 +324,7 @@ class DurationMean(_Algorithm):
         return(_np.array([_np.mean(durations)]))
 
 
-class SlopeMin(_Algorithm):
+class SlopeMin(_Indicator):
     """
     Return the minimum slope of detected peaks.
 
@@ -347,7 +347,7 @@ class SlopeMin(_Algorithm):
         assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
-        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -368,7 +368,7 @@ class SlopeMin(_Algorithm):
         return(_np.array([_np.min(slopes)]))
 
 
-class SlopeMax(_Algorithm):
+class SlopeMax(_Indicator):
     """
     Return the maximum slope of detected peaks.
 
@@ -391,7 +391,7 @@ class SlopeMax(_Algorithm):
         assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
-        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):
@@ -412,7 +412,7 @@ class SlopeMax(_Algorithm):
         return(_np.array([_np.max(slopes)]))
 
 
-class SlopeMean(_Algorithm):
+class SlopeMean(_Indicator):
     """
     Return the average slope of detected peaks.
 
@@ -435,7 +435,7 @@ class SlopeMean(_Algorithm):
         assert delta > 0, 'Parameter delta, i.e. amplitude of the minimum peak, has to be > 0'
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
-        _Algorithm.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
+        _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
         self.chunk_dict = {'channel': 1, 'component': 1}
     
     def __get_template__(self, signal):

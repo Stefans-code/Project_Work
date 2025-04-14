@@ -83,12 +83,6 @@ def create_signal(data, times=None, sampling_freq=None,
 
     #TODO: names for channels/components?
     assert (times is None) ^ (sampling_freq is None), "Either times or sampling freq"
-    # assert data.ndim <= 3, "data should have maximum 3 dimensions"
-    
-    # if data.ndim == 1:
-    #     data = _np.expand_dims(data, [1,2])
-    # elif data.ndim == 2:
-    #     data = _np.expand_dims(data, 2)
     
     #--> check validity of the temporal information
     if sampling_freq is None: #defined by times
@@ -525,12 +519,16 @@ class PyphysioDataArray(object):
 
             #if existing figure has enough number of axes
             #use the figure
+            
+            if (n_ch is None):
+                n_ch = 1
+            
             if len(fig.axes)>= n_ch:
                 axes = fig.axes
             
             #else create a new figure 
             else: 
-                if n_ch>1:
+                if (n_ch>1):
                     #compute number of cols and rows and create a new figure
                     n_cols = n_ch if n_ch < ncols else ncols
                     n_rows = int(_np.ceil(n_ch/n_cols))
@@ -546,7 +544,8 @@ class PyphysioDataArray(object):
             for i_ch in range(n_ch):
                 _sca(axes[i_ch])
                 ax = _gca()
-                if n_comp>1:
+                
+                if (n_comp is not None) and (n_comp>1):
                     for i_comp in range(n_comp):
                         if marker is None:                
                             ax.plot(t_, v_[:,i_ch, i_comp], linestyle = linestyle, color=color)
@@ -564,103 +563,3 @@ class PyphysioDataArray(object):
             _xlim(self.get_start_time(), self.get_end_time())
             _tight_layout()
             _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
-
-# @_xr.register_dataset_accessor('p')
-# class PyPhysioDataset(object):
-#     def __init__(self, xdataset):
-#         self.ds = xdataset
-    
-#     # def clone(self, values, name='signal'):
-#     #     assert values.shape[0] == self.da.values.shape[0]
-#     #     signal_clone = create_signal(values, times = self.da.coords['time'].values,
-#     #                                  name = name, info=self.da.attrs)
-#     #     return(signal_clone)
-    
-#     @property
-#     def main_signal(self):
-#         main_signal = self.ds.attrs['MAIN']
-#         da = self.ds[main_signal]
-#         return da
-    
-#     def get_values(self):
-#         return self.main_signal.p.get_values()
-    
-#     def get_times(self):
-#         time = self.main_signal.p.get_times()
-#         return time
-    
-#     def segment_time(self, t_start, t_stop=None):
-#         """
-#         Segment the signal given a time interval
-
-#         Parameters
-#         ----------
-#         t_start : float
-#             The instant of the start of the interval
-#         t_stop : float 
-#             The instant of the end of the interval. By default is the end of the signal
-
-#         Returns
-#         -------
-#         portion : UnvenlySignal
-#             The selected portion
-#         """
-#         # t_start_timedelta = _pd.to_timedelta(t_start, 's')
-#         # t_stop_timedelta = _pd.to_timedelta(t_stop, 's')
-        
-#         #TODO t_stop - 1/fsamp
-#         sub_dataset = self.ds.sel(time = slice(t_start,
-#                                                t_stop))
-#         return sub_dataset
-    
-#     def get_start_time(self):
-#         return self.main_signal.p.get_start_time()
-        
-#     def get_end_time(self):
-#         return self.main_signal.p.get_end_time()
-
-#     def get_sampling_freq(self):
-#         return self.main_signal.p.get_sampling_freq()
-    
-#     def get_duration(self):
-#         return self.main_signal.p.get_duration()
-
-#     def get_info(self):
-#         return self.ds.attrs
-
-#     #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
-#     #should we remove all the other signals ('variables')
-#     #before computing?
-#     def resample(self, f_out):
-#         t_start = self.main_signal.p.get_start_time()
-#         t_end = self.main_signal.p.get_end_time()
-        
-#         t_out = _np.arange(t_start, t_end, 1/f_out)
-#         resampled_dataset = self.ds.interp(time=t_out, method='cubic')
-#         resampled_dataset.p.main_signal.attrs['sampling_freq'] = f_out
-#         return(resampled_dataset)
-    
-#     #TODO: TEST: HOW THIS SHOULD APPLY TO DATASETS?
-#     #should we remove all the other signals ('variables')
-#     #before computing?
-#     def process_na(self, na_action = 'keep', na_remaining='keep', 
-#                    method='cubic',
-#                    max_gap=None):
-#         main_signal = self.ds.attrs['MAIN']
-#         da = self.ds[main_signal]
-#         processed_da = da.p.process_na(na_action, 
-#                                        na_remaining=na_remaining, 
-#                                        method=method,
-#                                        max_gap=max_gap)
-
-#         processed_dataset = self.ds
-#         processed_dataset[main_signal] = processed_da
-#         if na_remaining != 'keep':
-#             processed_dataset = processed_dataset.dropna('time')
-#         return(processed_dataset)
-        
-#     def plot(self, marker=None, color = None, ncols=4, sharey=False):
-#         self.main_signal.p.plot(marker=marker,
-#                                 color = color,
-#                                 ncols=ncols,
-#                                 sharey=sharey)

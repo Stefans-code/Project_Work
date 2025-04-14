@@ -9,9 +9,16 @@ from scipy.signal import filtfilt as _filtfilt, \
         deconvolve as _deconvolve, firwin as _firwin, \
             iirnotch as _iirnotch, lfilter as _lfilter
 from ._base_algorithm import _Algorithm
-from .utils import SignalRange as _SignalRange
 
-class Normalize(_Algorithm):
+class _Filter(_Algorithm):
+    def __init__(self, **kwargs):
+        _Algorithm.__init__(self, **kwargs)
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        return(self.__get_template_timeonly__(signal))
+
+class Normalize(_Filter):
     """
     A class for normalizing signals using various methods.
 
@@ -42,14 +49,8 @@ class Normalize(_Algorithm):
             "norm_method must be one of 'mean', 'standard', 'min', 'maxmin', 'custom'"
         if norm_method == "custom":
             assert norm_range != 0, "norm_range must not be zero"
-        _Algorithm.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
-        self.required_dims = ['time']
+        _Filter.__init__(self, norm_method=norm_method, norm_bias=norm_bias, norm_range=norm_range, **kwargs)
     
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
-
     def algorithm(self, signal, **kwargs):
         from .indicators.timedomain import Mean as _Mean, StDev as _StDev, Min as _Min, Max as _Max
         params = self._params
@@ -74,7 +75,7 @@ class Normalize(_Algorithm):
         else:
             raise ValueError
 
-class IIRFilter(_Algorithm):
+class IIRFilter(_Filter):
     """
     Infinite Impulse Response (IIR) Filter implementation.
 
@@ -122,14 +123,11 @@ class IIRFilter(_Algorithm):
         assert att > loss, "Attenuation value should be greater than loss value"
         assert ftype in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel'],\
             "Filter type must be in ['butter', 'cheby1', 'cheby2', 'ellip', 'bessel']"
-        _Algorithm.__init__(self, fp=fp, fs=fs, btype=btype, order=order, 
+        _Filter.__init__(self, fp=fp, fs=fs, btype=btype, order=order, 
                             loss=loss, att=att, ftype=ftype, safe=safe)
-        self.required_dims = ['time']
     
     def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        return(self.__get_template_timeonly__(signal))
 
     def algorithm(self, signal):
         # print('----->', self.name)
@@ -165,7 +163,7 @@ class IIRFilter(_Algorithm):
         # print('<-----', self.name)
         return sig_filtered
 
-class NotchFilter(_Algorithm):
+class NotchFilter(_Filter):
     """
     NotchFilter is a class that implements a notch filter algorithm to remove a specific frequency component from a signal.
 
@@ -182,14 +180,8 @@ class NotchFilter(_Algorithm):
     def __init__(self, f, Q=30, safe=True):
         assert f > 0
         assert Q > 0
-        _Algorithm.__init__(self, f=f, Q=Q, safe=safe)
-        self.required_dims = ['time']
+        _Filter.__init__(self, f=f, Q=Q, safe=safe)
     
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
-
     def algorithm(self, signal):
         params = self._params
         fsamp = signal.p.get_sampling_freq()
@@ -208,7 +200,7 @@ class NotchFilter(_Algorithm):
         
         return sig_filtered
         
-class FIRFilter(_Algorithm):
+class FIRFilter(_Filter):
     """
     Finite Impulse Response (FIR) filter class for signal processing.
 
@@ -247,17 +239,12 @@ class FIRFilter(_Algorithm):
         assert att > 0, "Attenuation value should be positive"
         assert wtype in ['hamming'],\
             "Window type must be in ['hamming']"
-        _Algorithm.__init__(self, fp=fp, fs=fs, order=order, btype=btype,
+        _Filter.__init__(self, fp=fp, fs=fs, order=order, btype=btype,
                             att=att, wtype=wtype, safe=True)
-        self.required_dims = ['time']
     
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
-
     def algorithm(self, signal):
         params = self._params
+        signal_values = signal.values.ravel()
         fsamp = signal.p.get_sampling_freq()
         fp, fs, order = params["fp"], params["fs"], params["order"]
         btype, att, wtype = params["btype"], params["att"], params["wtype"]
@@ -283,7 +270,7 @@ class FIRFilter(_Algorithm):
             # from https://dsp.stackexchange.com/questions/31066/how-many-taps-does-an-fir-filter-need
             # N = int(2/3*_np.log10(1/(10*d1*d2))*fsamp/Dsamp)
             N = int(att/(22*Dsamp))
-                           
+            assert N<signal_values.shape[0], "Filter parameters allow no solution"
             pass_zero=True
                       
             if fp[0]>fs[0]:
@@ -297,7 +284,7 @@ class FIRFilter(_Algorithm):
             N+=1
             
         b = _firwin(N, wp, window=wtype, pass_zero=pass_zero)
-        signal_values = signal.values.ravel()
+        
         sig_filtered = _lfilter(b, 1.0, signal_values)
         sig_filtered[0:N] = sig_filtered[N]
         sig_out = _np.ones(len(signal_values)) * sig_filtered[-1]
@@ -312,7 +299,7 @@ class FIRFilter(_Algorithm):
         
         return sig_out
 
-class KalmanFilter(_Algorithm):
+class KalmanFilter(_Filter):
     """
     Implements a Kalman Filter algorithm for signal processing.
 
@@ -334,14 +321,8 @@ class KalmanFilter(_Algorithm):
     def __init__(self, R, Q):
         assert R > 0, "R should be positive"
         assert Q > 0, "Q should be positive"
-        
-        _Algorithm.__init__(self, R=R, Q=Q)
-        self.required_dims = ['time']
-    
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        _Filter.__init__(self, R=R, Q=Q)
+
         
     def algorithm(self, signal):
         params = self._params
@@ -364,7 +345,7 @@ class KalmanFilter(_Algorithm):
 
         return(x_out)
 
-class RemoveSpikes(_Algorithm):
+class RemoveSpikes(_Filter):
     #TODO: see MA removal using spline in fnirs specialized
     def __init__(self, K=2, N=1, dilate=0, D=0.95, method='step'):
         assert K > 0, "K should be positive"
@@ -372,13 +353,7 @@ class RemoveSpikes(_Algorithm):
         assert dilate>=0, "dilate should be >= 0.0"
         assert D>=0, "D should be >= 0.0"
         assert method in ['linear', 'step']
-        _Algorithm.__init__(self, K=K, N=N, dilate=dilate, D=D, method=method)
-        self.required_dims = ['time']
-    
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        _Filter.__init__(self, K=K, N=N, dilate=dilate, D=D, method=method)
     
     def algorithm(self, signal):
         params = self._params
@@ -425,7 +400,7 @@ class RemoveSpikes(_Algorithm):
         
         return(x_out)
 
-class ConvolutionalFilter(_Algorithm):
+class ConvolutionalFilter(_Filter):
     """
     A class representing a convolutional filter algorithm.
 
@@ -445,13 +420,7 @@ class ConvolutionalFilter(_Algorithm):
         assert irftype in ['gauss', 'rect', 'triang', 'dgauss', 'custom'],\
             "IRF type must be in ['gauss', 'rect', 'triang', 'dgauss', 'custom']"
         assert irftype == 'custom' or win_len > 0, "Window length value should be positive"
-        _Algorithm.__init__(self, irftype=irftype, win_len=win_len, irf=irf, normalize=normalize)
-        self.required_dims = ['time']
-    
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        _Filter.__init__(self, irftype=irftype, win_len=win_len, irf=irf, normalize=normalize)
 
     # TODO (Andrea): TEST normalization and results
     def algorithm(self, signal):
@@ -504,7 +473,7 @@ class ConvolutionalFilter(_Algorithm):
         
         return signal_out
 
-class DeConvolutionalFilter(_Algorithm):
+class DeConvolutionalFilter(_Filter):
     """
     Class for performing deconvolution using different methods.
 
@@ -521,13 +490,7 @@ class DeConvolutionalFilter(_Algorithm):
     """
     def __init__(self, irf, normalize=True, deconv_method='sps'):
         assert deconv_method in ['fft', 'sps'], "Deconvolution method not valid"
-        _Algorithm.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
-        self.required_dims = ['time']
-    
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        _Filter.__init__(self, irf=irf, normalize=normalize, deconv_method=deconv_method)
 
     def algorithm(self, signal):
         params = self._params
@@ -559,7 +522,7 @@ class DeConvolutionalFilter(_Algorithm):
             out = s
         return out
 
-class Prewhitening(_Algorithm):
+class Prewhitening(_Filter):
     """Prewhitening algorithm for time series data.
 
      This class performs prewhitening on a time series signal to remove
@@ -589,14 +552,9 @@ class Prewhitening(_Algorithm):
             optimization. Defaults to 10.
           **kwargs: Additional keyword arguments passed to the base class.
         """
-        _Algorithm.__init__(self, p=p, optimize=optimize,
+        _Filter.__init__(self, p=p, optimize=optimize,
                             pmin=pmin, pmax=pmax, **kwargs)
-        self.required_dims = ['time']
-    
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
+        
 
     def algorithm(self, signal, **kwargs):
         from statsmodels.tsa.ar_model import AutoReg as _AutoReg
@@ -627,62 +585,3 @@ class Prewhitening(_Algorithm):
         sig_out = model_fit.resid
         signal_w = _np.insert(sig_out, 0, sig_out[0]*_np.ones(order_final))
         return(signal_w)
-
-'''
-# TODO: check and convert to xarray
-
-class DenoiseEDA(_Algorithm):
-    """
-    Remove noise due to sensor displacement from the EDA signal.
-    
-    Parameters
-    ----------
-    threshold : float, >0
-        Threshold to detect the noise
-        
-    Optional parameters
-    -------------------
-    
-    win_len : float, >0, default = 2
-        Length of the window
-   
-    Returns
-    -------
-    signal : EvenlySignal
-        De-noised signal
-            
-    """
-
-    def __init__(self, threshold, win_len=2):
-        assert threshold > 0, "Threshold value should be positive"
-        assert win_len > 0, "Window length value should be positive"
-        _Algorithm.__init__(self, threshold=threshold, win_len=win_len)
-
-    @classmethod
-    def algorithm(self, signal):
-        params = self._params
-        threshold = params['threshold']
-        win_len = params['win_len']
-
-        s = signal.values.ravel()
-        # remove fluctuations
-        noise = ConvolutionalFilter(irftype='triang', win_len=win_len, normalize=True)(abs(_np.diff(s)))
-
-        # identify noisy portions
-        idx_ok = _np.where(noise <= threshold)[0]
-
-        # fix start and stop of the signal for the following interpolation
-        if idx_ok[0] != 0:
-            idx_ok = _np.r_[0, idx_ok].astype(int)
-
-        if idx_ok[-1] != len(signal) - 1:
-            idx_ok = _np.r_[idx_ok, len(signal) - 1].astype(int)
-
-        denoised = _Signal(signal[idx_ok], sampling_freq=signal.get_sampling_freq(),
-                           start_time = signal.get_start_time(),
-                           x_values=idx_ok, x_type='indices')
-
-        # interpolation
-        signal_out = denoised.fill('linear')
-        return signal_out
-'''    

@@ -78,6 +78,11 @@ class _Algorithm(object):
             Template of the output.
         """
         pass
+
+    def __get_template_timeonly__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal)
+        return(chunk_dict, template)
         
     def __compute_chunk_dict__(self, signal):
         """
@@ -104,7 +109,6 @@ class _Algorithm(object):
             if dim not in self.required_dims:
                 chunk_dict[dim] = 1
         return(chunk_dict)        
-        
         
     def __compute_template__(self, signal, out_dims = None):
         """
@@ -144,6 +148,8 @@ class _Algorithm(object):
                     shape_out.append(out_coord)
                     coords_out[dim] = _np.arange(out_coord)
                 #otherwise assume it is an iterable with the coords values
+                #NOTE: for indicators this is the mechanism used. 
+                # See the __Indicator class
                 else:
                     shape_out.append(len(out_coord))
                     coords_out[dim] = out_coord
@@ -225,14 +231,12 @@ class _Algorithm(object):
         #but the __call__ "rolling" mechanism assumes to operate on a DataArray.
         #These lines convert the input Dataset to a DataArray, making a
         #COPY of the input Dataset.
-        if isinstance(signal_in, _xr.Dataset):
-            signal = signal_in.p.main_signal.copy(deep=True)
-        else:
-            signal = signal_in.copy(deep=True)
+        signal = signal_in.copy(deep=True)
         
         signal_name = signal.name
-        
+
         if len(self.required_dims) == 0:
+            
             #This is to allow special implementations, where the "rolling"
             #mechanism is avoided
             result_numpy = self.algorithm(signal, **kwargs)
@@ -250,7 +254,7 @@ class _Algorithm(object):
         else:
             #get chunk_dict and template from the algorithm's class
             chunk_dict, template = self.__get_template__(signal)
-
+            
             template_dask = template.chunk(chunk_dict)
             signal_dask = signal.chunk(chunk_dict)
             
@@ -307,7 +311,6 @@ class _Algorithm(object):
             assert signal_in.sizes[k] == v
             
         result_numpy = self.algorithm(signal_in, **kwargs)
-        
         
         result_ndims = result_numpy.ndim
         template_ndims = template_out.ndim

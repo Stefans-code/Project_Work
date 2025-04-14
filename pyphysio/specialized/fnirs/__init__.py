@@ -118,7 +118,7 @@ def get_ss_ls_channels(nirs, max_dist=1.5):
     idx_ss = []
     idx_ls = []
     distances = []
-    for idx_ch, ch in enumerate(nirs.p.attrs['Channels']):
+    for idx_ch, ch in enumerate(nirs.attrs['Channels']):
         distances.append(ch[3])
         if ch[3]<=max_dist:
             idx_ss.append(idx_ch)
@@ -128,13 +128,13 @@ def get_ss_ls_channels(nirs, max_dist=1.5):
 
 def get_ch_pos(nirs, ch_target, twoD=False):
     if twoD:
-        src_pos = _np.array(nirs.p.attrs['SrcPos2D'])
-        det_pos = _np.array(nirs.p.attrs['DetPos2D'])
+        src_pos = _np.array(nirs.attrs['SrcPos2D'])
+        det_pos = _np.array(nirs.attrs['DetPos2D'])
     else:
-        src_pos = _np.array(nirs.p.attrs['SrcPos'])
-        det_pos = _np.array(nirs.p.attrs['DetPos'])
+        src_pos = _np.array(nirs.attrs['SrcPos'])
+        det_pos = _np.array(nirs.attrs['DetPos'])
 
-    ch_target_info = nirs.p.attrs['Channels'][ch_target]
+    ch_target_info = nirs.attrs['Channels'][ch_target]
     ch_src = int(ch_target_info[1])
     ch_det = int(ch_target_info[2])
 
@@ -169,10 +169,10 @@ class PCAFilter(_Algorithm):
                             **kwargs)
         self.required_dims = ['time', 'channel', 'component']
     
-    # def __call__(self, signal, manage_original):
-    #     return _Algorithm.__call__(self, signal,
-    #                                by='none', 
-    #                                manage_original=manage_original)
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal)
+        return (chunk_dict, template)
     
     def algorithm(self, signal): #TODO: correct syntax for **kwargs
 
@@ -202,7 +202,6 @@ class PCAFilter(_Algorithm):
         if return_systemic:
             y_systemic = _np.stack([y_systemic[:, :n_channels], y_systemic[:, n_channels:]], axis=2)
             return y_systemic
-            
         
         y_filt = y - y_systemic
         y_filt = _np.stack([y_filt[:, :n_channels], y_filt[:, n_channels:]], axis=2)
@@ -219,7 +218,11 @@ class RegressShortSeparation(_Algorithm):
                             max_dist=max_dist, **kwargs)
         self.required_dims = ['time', 'channel', 'component']
         
-            
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal)
+        return (chunk_dict, template)
+    
     def algorithm(self, signal):
         params = self._params
         max_dist = params['max_dist']
@@ -228,7 +231,6 @@ class RegressShortSeparation(_Algorithm):
         idx_ls = []
         
         idx_ss, idx_ls = get_ss_ls_channels(signal, max_dist)
-                
         nirs_ss = signal.isel({'channel':idx_ss})
         
         #normalize SS channels

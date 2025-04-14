@@ -415,24 +415,32 @@ class PyphysioDataArray(object):
         if _np.sum(_np.isnan(data)) > 0:
             nans_in_dataset = True
             
-            #manage special cases
-            n_nans_foreach_timepoint = _np.sum(_np.sum(_np.isnan(data), axis = 1), axis=1)
-            tp_with_nans = _np.where(n_nans_foreach_timepoint > 0)[0]
-            n_ch = data.shape[1]
-            n_cp = data.shape[2]
+        #manage special cases
+        n_ch = self.get_nchannels()
+        n_cp = self.get_ncomponents()
+        n_nans_foreach_timepoint = _np.isnan(data)
+        if n_ch is not None:
+            n_nans_foreach_timepoint = _np.sum(n_nans_foreach_timepoint, axis = 1)
+        else:
+            n_ch = 1    
+        if n_cp is not None:
+            n_nans_foreach_timepoint = _np.sum(n_nans_foreach_timepoint, axis=1)
+        else:
+            n_cp = 1
+        
+        tp_with_nans = _np.where(n_nans_foreach_timepoint > 0)[0]
             
-            #nans at different timepoints across channels           
-            if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp and \
-                na_action == 'remove':
-                    #we cannot remove timepoints with nans, as not all ch / cp have nans
-                    #at the same timepoints
-                    raise ValueError('Nans in the signal, but impossible to remove timepoints as nan values do not share the same timepoints')
-            
-            # #nans at the beginning / end
-            # if ((tp_with_nans[0] == 0) or (tp_with_nans[-1] == data.shape[0])) and \
-            #     na_action == 'impute':
-                    
-            #         print('Nans at the beginning / end')
+        #nans at different timepoints across channels           
+        if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp and \
+            na_action == 'remove':
+                #we cannot remove timepoints with nans, as not all ch / cp have nans
+                #at the same timepoints
+                raise ValueError('Nans in the signal, but impossible to remove timepoints as nan values do not share the same timepoints')
+        
+        # #nans at the beginning / end
+        # if ((tp_with_nans[0] == 0) or (tp_with_nans[-1] == data.shape[0])) and \
+        #     na_action == 'impute':
+        #         print('Nans at the beginning / end')
 
                 
                     
@@ -483,92 +491,72 @@ class PyphysioDataArray(object):
         Returns
             None
         """
-        
+        if marker is None and self.get_sampling_freq() == 'unevenly':
+                marker = '.'
+                
         fig = _gcf()
         t_ = self.get_times()
+        
         v_ = self.get_values()
+        assert v_.ndim <=3, "Not supported for signals with more than 3 dimensions"
         linestyle='solid'
         
         n_ch = self.get_nchannels()
         n_comp = self.get_ncomponents()
         
-        #if single signal, then plot
-        if n_ch == 1:
-            v_ = v_[:,0,:]
+        if (n_ch is None):
+            v_ = v_[:, _np.newaxis]
+            n_ch = 1
+        if (n_comp is None):
+            v_ = v_[:, :, _np.newaxis]
+            n_comp = 1
+        
+        axes = fig.axes
 
-            #TODO if existing figure has many axes, 
-            #replicate the plot on each axis
+        if len(fig.axes) >= n_ch:
+            #plotting signal with number of channels <= existing number of axes'
+            if (n_ch == 1):
+                #plot same channel across all axes'
+                v_ = _np.repeat(v_, len(fig.axes), axis = 1)
+                n_ch = len(fig.axes)
             
-            #if good then use a solid line
-            #else use a dotted line
-            # linestyle='solid'
-            # if self.has_good():
-            #     good = self.get_good()
-            #     if len(good)==0:
-            #         linestyle = 'dotted'
+        else: 
+            #create new figure
+            n_cols = n_ch if n_ch < ncols else ncols
+            n_rows = int(_np.ceil(n_ch/n_cols))
+                
+            fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True, sharey=sharey)
             
-            #plot the signal
+            if n_rows*n_cols > 1:
+                axes = axes.ravel()
+            else:
+                axes = [axes]
+            
+        if len(axes) == 0:
+            axes = [axes]
+        
+        for i_ch in range(n_ch):
+            _sca(axes[i_ch])
             ax = _gca()
             
-            if marker is None and self.get_sampling_freq() == 'unevenly':
-                marker = '.'
-
-            if marker is None:
-                ax.plot(t_, _np.squeeze(v_), linestyle = linestyle, color=color)
-            elif marker == '|':
+            #TODO: if good then use a solid line
+            #else use a dotted line
+                    
+            if marker == '|': # no need to iterate across all components
                 ymin = ax.get_ylim()[0]
                 ymax = ax.get_ylim()[1]
                 ax.vlines(t_, ymin, ymax, linestyle = linestyle, color=color)
             else:
-                ax.plot(t_, _np.squeeze(v_), marker, linestyle = linestyle, color=color)
-            _grid(True)
-        
-        else:
-            n_ch = self.get_nchannels()
-            n_comp = self.get_ncomponents()
-
-            #if existing figure has enough number of axes
-            #use the figure
-            
-            if (n_ch is None):
-                n_ch = 1
-            
-            if len(fig.axes)>= n_ch:
-                axes = fig.axes
-            
-            #else create a new figure 
-            else: 
-                if (n_ch>1):
-                    #compute number of cols and rows and create a new figure
-                    n_cols = n_ch if n_ch < ncols else ncols
-                    n_rows = int(_np.ceil(n_ch/n_cols))
+                for i_comp in range(n_comp):
+                    v_current = v_[:, i_ch, i_comp]
                     
-                    fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True, sharey=sharey)
-                    axes = axes.ravel()
-                else:
-                    fig, axes = _subplots(1, 1, num = fig.number, sharex=True, sharey=sharey)
-                    axes = [axes]
-            
-            #recursive calls to signal.plot()
-            #for each channel and component
-            for i_ch in range(n_ch):
-                _sca(axes[i_ch])
-                ax = _gca()
-                
-                if (n_comp is not None) and (n_comp>1):
-                    for i_comp in range(n_comp):
-                        if marker is None:                
-                            ax.plot(t_, v_[:,i_ch, i_comp], linestyle = linestyle, color=color)
-                        else:
-                            ax.plot(t_, v_[:,i_ch, i_comp], marker, linestyle = linestyle, color=color)
-                else:
-                    if marker is None:                
-                        ax.plot(t_, v_[:,i_ch], linestyle = linestyle, color=color)
+                    if marker is None:
+                        ax.plot(t_, _np.squeeze(v_current), linestyle = linestyle, color=color)
                     else:
-                        ax.plot(t_, v_[:,i_ch], marker, linestyle = linestyle, color=color)
-
-                _ylabel(i_ch)
-                _grid(True)
+                        ax.plot(t_, _np.squeeze(v_current), marker, linestyle = linestyle, color=color)
+            
+            _ylabel(i_ch)
+            _grid(True)
                 
             _xlim(self.get_start_time(), self.get_end_time())
             _tight_layout()

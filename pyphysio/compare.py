@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jul 30 09:57:48 2024
-
-@author: bizzego
-"""
 import numpy as _np
 import statsmodels.api as _sm
 from scipy.stats import median_abs_deviation as _median_abs_deviation
@@ -449,8 +442,8 @@ def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
 
         return T
     
-    coef1 = W1.p.main_signal.values[:,:,0,0]
-    coef2 = W2.p.main_signal.values[:,:,0,0]
+    coef1 = W1.values[:,:,0,0]
+    coef2 = W2.values[:,:,0,0]
     coef12 = coef1 * coef2.conj()
     
     scales = wavelet_object._params['scales']

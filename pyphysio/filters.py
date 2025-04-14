@@ -8,8 +8,7 @@ from scipy.signal import filtfilt as _filtfilt, \
     filter_design as _filter_design, iirfilter as _iirfilter, \
         deconvolve as _deconvolve, firwin as _firwin, \
             iirnotch as _iirnotch, lfilter as _lfilter
-from ._base_algorithm import _Algorithm, __get_template_timeonly__
-from .utils import SignalRange as _SignalRange
+from ._base_algorithm import _Algorithm
 
 class _Filter(_Algorithm):
     def __init__(self, **kwargs):

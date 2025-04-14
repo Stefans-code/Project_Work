@@ -4,7 +4,7 @@ import numpy as _np
 from scipy.signal import detrend as _detrend
 from ..._base_algorithm import _Algorithm
 from ...signal import create_signal
-from ...filters import IIRFilter as _IIRFilter
+from ...filters import IIRFilter as _IIRFilter, _Filter
 from ...utils import SignalRange as _SignalRange, Minima as _Minima, Diff as _Diff, PeakDetection as _PeakDetection
 import itertools as _itertools
 from ...indicators import _Indicator
@@ -31,7 +31,7 @@ class SDSD(_Indicator):
 
 
 # IBI ESTIMATION
-class BeatMSPTD(_Algorithm):
+class BeatMSPTD(_Filter):
     """
     Identify the beats in a Blood Pulse (BP) signal and compute the IBIs.
     Optimized to identify the percussion peak.
@@ -56,12 +56,8 @@ class BeatMSPTD(_Algorithm):
 
     def __init__(self, win_len=6, overlap=0.2, tol=0.05):
         # TODO: tol depending on bpm_max?
-        _Algorithm.__init__(self, win_len=win_len, overlap=overlap, tol=tol)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        _Filter.__init__(self, win_len=win_len, overlap=overlap, tol=tol)
+        print('Refactoring to be completed')
 
     def algorithm(self, signal):
         params = self._params
@@ -176,7 +172,7 @@ class BeatMSPTD(_Algorithm):
 
         return ibi_scaffold
 
-class BeatFromBP(_Algorithm):
+class BeatFromBP(_Filter):
     """
     Identify the beats in a Blood Pulse (BP) signal and compute the IBIs.
     Optimized to identify the percussion peak.
@@ -214,13 +210,9 @@ class BeatFromBP(_Algorithm):
         assert 0 < win_pre <= ibi_min, "win_pre value should be between 0 and 60/bpm_max"
         assert 0 < win_post <= ibi_min, "win_post peak value should be between 0 and 60/bpm_max"
 
-        _Algorithm.__init__(self, bpm_max=bpm_max,
+        _Filter.__init__(self, bpm_max=bpm_max,
                             win_pre=win_pre, win_post=win_post)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        print('Refactoring to be completed')
 
     def algorithm(self, signal):
         params = self._params
@@ -319,7 +311,7 @@ class BeatFromBP(_Algorithm):
 
         return ibi_scaffold
 
-class BeatFromECG(_Algorithm):
+class BeatFromECG(_Filter):
     """
     Identify the beats in an ECG signal and compute the IBIs.
 
@@ -349,12 +341,8 @@ class BeatFromECG(_Algorithm):
             self.warn("Parameter bpm_max out of reasonable range (10, 400)")
         assert delta >= 0, "Delta value should be positive (or equal to 0 if automatically computed)"
         assert 0 < k < 1, "K coefficient must be in the range (0,1)"
-        _Algorithm.__init__(self, bpm_max=bpm_max, delta=delta, k=k)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        _Filter.__init__(self, bpm_max=bpm_max, delta=delta, k=k)
+        print('Refactoring to be completed')
     
     def algorithm(self, signal):
         params = self._params
@@ -396,8 +384,8 @@ class BeatFromECG(_Algorithm):
         ibi_scaffold[idx_beats] = ibi_values
 
         return ibi_scaffold
-
-class RemoveBeatOutliers(_Algorithm):
+    
+class RemoveBeatOutliers(_Filter):
     """
     Detect and remove outliers in the IBI signal. 
 
@@ -423,14 +411,10 @@ class RemoveBeatOutliers(_Algorithm):
         assert cache >= 1, "Cache size should be greater than 1"
         assert sensitivity > 0, "Sensitivity value shlud be positive"
 
-        _Algorithm.__init__(self, ibi_median=ibi_median,
+        _Filter.__init__(self, ibi_median=ibi_median,
                             cache=cache, sensitivity=sensitivity)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        print('Refactoring to be completed')
     
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
-
     def algorithm(self, signal):
         assert signal.p.get_sampling_freq() != 'unevenly', "This algorithm should be applied to evenly IBI. Avoid processing nans before"
         
@@ -478,7 +462,7 @@ class RemoveBeatOutliers(_Algorithm):
 
         return ibi_scaffold
 
-class BeatOptimizer(_Algorithm):
+class BeatOptimizer(_Filter):
     """
     Optimize detection of errors in IBI estimation.
 
@@ -510,15 +494,10 @@ class BeatOptimizer(_Algorithm):
         assert cache >= 1, "Cache size should be greater than 1"
         assert sensitivity > 0, "Sensitivity value shlud be positive"
 
-        _Algorithm.__init__(self, ibi_median=ibi_median,
+        _Filter.__init__(self, ibi_median=ibi_median,
                             cache=cache, sensitivity=sensitivity)
-        self.chunk_dict = {'channel': 1, 'component': 1}
+        print('Refactoring to be completed')
     
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
-
-
     def _add_peaks(self, t_prev, t_curr, ibi_cache, bvp_signal=None):
         params = self._params
         sensitivity = params["sensitivity"]

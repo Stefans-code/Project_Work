@@ -16,9 +16,9 @@ def _loss(t1, t2, signal, amplitude):
         return(_np.sum(abs(signal.p.get_values().ravel())))
     
     driver = DriverEstim(t1=t1, t2=t2, optim=False)(signal)
-    signal_f = _IIRFilter(0.05, btype='lowpass')(driver).p.get_values()
+    # signal_f = _IIRFilter(0.05, btype='lowpass')(driver).p.get_values()
     
-    driver_diff = driver.p.get_values() - signal_f
+    # driver_diff = driver.p.get_values() - signal_f
     
     phasic_values = PhasicEstimKalman(amplitude=amplitude)(driver)
 

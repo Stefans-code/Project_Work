@@ -210,6 +210,7 @@ class DetectMA_AR(_Algorithm):
             template = self.__compute_template__(signal)
         return(chunk_dict, template)
    
+    
     def algorithm(self, signal):
         params = self._params
         order = params['order']
@@ -365,7 +366,7 @@ class MARA(_Filter):
         x = _np.concatenate(x_reconstructed, axis=0)
         return(x)
     
-class WaveletFilter(_Algorithm):
+class WaveletFilter(_Filter):
     """
     WaveletFilter is a class that performs wavelet filtering on a given signal.
 
@@ -396,14 +397,7 @@ class WaveletFilter(_Algorithm):
 
     """ 
     def __init__(self, iqr=1.5, **kwargs):
-        _Algorithm.__init__(self, iqr=iqr, **kwargs)
-        self.required_dims = ['time']
-    
-    def __get_template__(self, signal):
-        chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal)
-        return(chunk_dict, template)
-        
+        _Filter.__init__(self, iqr=iqr, **kwargs)
     
     def _normalization_noise(self, y):
         #% normalize using computed mean abs dev

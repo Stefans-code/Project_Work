@@ -65,8 +65,8 @@ class SignalQualityDeepLearning(_SQIIndicator):
         signal = signal.p.resample(10)
         signal_values = signal.p.get_values()[:,0,:]
         signal_values = _normalize(signal_values)
-        import matplotlib.pyplot as plt
-        plt.plot(signal_values)
+        # import matplotlib.pyplot as plt
+        # plt.plot(signal_values)
         
         signal_in = signal_values[[-1],:] * _np.ones((200, 2))
         signal_in[:len(signal_values)] = signal_values

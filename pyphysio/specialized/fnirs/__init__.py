@@ -11,7 +11,9 @@ import matplotlib.pyplot as _plt
 import matplotlib as _mpl
 import matplotlib.cm as _cm
 
-def compute_betas_barker(nirs_signal, dm):
+
+#COMPARE 
+def compute_betas_barker(nirs_signal, dm, pmax=10, max_iter = 10):
     Y = nirs_signal
     X = dm
     
@@ -20,17 +22,15 @@ def compute_betas_barker(nirs_signal, dm):
     # 1. Initialize beta via an OLS fit.
     model_initial = _sm.OLS(Y, X)
     results_initial = model_initial.fit()
-    beta_curr = results_initial.params
+    beta_outer = results_initial.params
     residuals = results_initial.resid
-
-    max_iter = 100
 
     iteration_outer = 0
     done_outer = False
-    while (not done_outer):
+    while ((not done_outer) and (iteration_outer<max_iter)):
         #. Fit the residual to an AR(P) model where P minimizes BIC (Eq. (5)).
         bic = []
-        for p in range(8):
+        for p in range(pmax):
             model = _sm.tsa.ARIMA(residuals, order=(p,0,0))
             results = model.fit()
             bic.append(results.bic)
@@ -52,10 +52,10 @@ def compute_betas_barker(nirs_signal, dm):
         #. Perform iteratively reweighted least squares (IRLS)
         done = False
         iterations = 0
-        beta_old = beta_curr
+        beta_inner = beta_outer
         #initialize weights to ones
         weights = _np.ones(len(Y_w))
-        while(not done):
+        while((not done) and (iterations<max_iter)):
             #a- solve beta by WLS
             #fit weighted LS
             model_WLS = _sm.WLS(Y_w, X_w, weights=weights)
@@ -66,27 +66,27 @@ def compute_betas_barker(nirs_signal, dm):
             #b- recalculate weights
             residuals_WLS = results_WLS.resid
             weights = _sm.robust.norms.TukeyBiweight(c=4.685).weights(residuals_WLS)
-            change = _np.min(abs((beta_new - beta_old)/beta_old))
+            change = _np.min(abs((beta_new - beta_inner)/beta_inner))
             
             #c- repeat steps 5a-b until changes in beta are small (<1%)
-            if (change <0.01) or (iterations >= max_iter):
+            if (change <0.005) or (iterations >= max_iter):
                 done = True
             
-            beta_old = beta_new
+            beta_inner = beta_new
             
             iterations +=1
 
-        change_outer = _np.min(abs((beta_curr - beta_new)/beta_curr))
+        change_outer = _np.min(abs((beta_outer - beta_inner)/beta_outer))
         
         #Repeat steps 2-5 until changes in β are sufficiently small (e.g., < 1% change).  
-        if change_outer <0.01:
+        if (change_outer <0.005) or (iteration_outer >= max_iter):
             done_outer = True
         
-        beta_curr = beta_new
-        residuals = Y - _np.dot(X, beta_curr)
+        beta_outer = beta_inner
+        residuals = Y - _np.dot(X, beta_outer)
         iteration_outer +=1
 
-    beta = beta_curr
+    beta = beta_outer
     return(beta)
 
 #%%
@@ -298,7 +298,7 @@ class NegativeCorrelationFilter(_Algorithm):
 
 
 class ComputeClusters(_Algorithm):
-    def __init__(self, clusters, n_min_good=3, mode='mean', **kwargs):
+    def __init__(self, clusters, n_min_good=0, mode='mean', **kwargs):
         _Algorithm.__init__(self, clusters = clusters, 
                             n_min_good = n_min_good,
                             mode=mode,
@@ -316,31 +316,32 @@ class ComputeClusters(_Algorithm):
         if 'good_channels' in signal_in.attrs:
             self.good_channels = signal_in.attrs['good_channels']
         else:
-            self.good_channels = _np.arange(signal_in.dims['channel'])
+            self.good_channels = _np.arange(_np.max(signal_in.channel)+1)
         
         return(_Algorithm.__call__(self, signal_in, **kwargs))
                                             
                                             
     def algorithm(self, signal):
-        def normalize_signal(x):
-            return( (x-_np.mean(x))/_np.std(x))
+
         clusters = self._params['clusters']
         n_min_good = self._params['n_min_good']
         mode = self._params['mode']
-        signal_values = signal.p.get_values()
         
         good_channels = self.good_channels
-        
-        out_signal = _np.nan*_np.zeros((len(signal_values), len(clusters), 1))
+
+        out_signal = _np.nan*_np.zeros((signal.sizes['time'], len(clusters), 1))
         for i_cluster, cluster_channels in enumerate(clusters):
             
-            cluster_good_channels = []
-            for ch in cluster_channels:
-                if ch in good_channels:
-                    cluster_good_channels.append(ch)
+            if n_min_good != 0:
+                cluster_good_channels = []
+                for ch in cluster_channels:
+                    if ch in good_channels:
+                        cluster_good_channels.append(ch)
+            else:
+                cluster_good_channels = cluster_channels
             
             if len(cluster_good_channels)>= n_min_good:
-                signals_cluster = signal_values[:, cluster_good_channels, 0]
+                signals_cluster = signal.sel({'channel':cluster_good_channels}).p.get_values()[:,:,0]
                 
                 if mode == 'pca':
                     cluster_signal = _PCA(1).fit_transform(signals_cluster.copy())

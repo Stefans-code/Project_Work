@@ -26,9 +26,15 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 def load(file):
     signal = _xr.load_dataset(file)
     
-    history = signal.attrs['history']
+    history = []
+    
+    if 'history' in signal.attrs.keys():
+        history = signal.attrs['history']
+    else:
+        signal.attrs['history'] = ['main']
+    
     if isinstance(history, str):
-        signal.attrs['history'] = ['history']
+        signal.attrs['history'] = [history]
     return(signal)
     
 def create_signal(data, times=None, sampling_freq=None,
@@ -93,7 +99,7 @@ def create_signal(data, times=None, sampling_freq=None,
         #i.e. for which there is not a valid sampling frequency
         sampling_freq = 'unevenly'
     else: 
-        assert sampling_freq > 0
+        assert sampling_freq > 0, f'Sampling frequency: {sampling_freq}'
         sampling_freq = float(sampling_freq)
         if times is None: #create times
             times = _np.arange(0, data.shape[0])/sampling_freq + start_time
@@ -206,6 +212,10 @@ class PyphysioDataArray(object):
 
     def __init__(self, xdataarray):
         self.da = xdataarray
+    
+    @property
+    def main_signal(self):
+        return self.da
     
     #++++++++++++++++++++++++++++++++++++
     #!!! CHECK

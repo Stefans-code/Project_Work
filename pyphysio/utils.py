@@ -454,11 +454,7 @@ class Wavelet(_Algorithm):
         return(chunk_dict, template)
     
     def _compute_coi(self, W):
-        id_freq = W.dims.index('freq')
-        id_time = W.dims.index('time')
-        assert id_time == 0 
-        assert id_freq == W.ndim -1
-        
+        W_out = W.copy(deep=True)
         N = W.sizes['time']
         
         freqs_nyq = self._params['freqs_nyq']
@@ -470,11 +466,11 @@ class Wavelet(_Algorithm):
         coif[:len(coif_)] = coif_
         coif[-len(coif_):] = coif_[::-1]
         
-        
-        for i in range(W.sizes['time']):
+        freqs = W.coords['freq'].values
+        for i, i_t in enumerate(W.coords['time']):
             idx_na = _np.where(freqs_nyq < coif[i])[0]
-            W[i, ..., idx_na] = _np.nan
-        return(W)
+            W_out.loc[{'time': [i_t], 'freq': freqs[idx_na]}] = _np.nan
+        return(W_out)
             
     
     def _compute_scales(self, signal):

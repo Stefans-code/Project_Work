@@ -222,8 +222,8 @@ def _IRLS(y, X, max_iter=50):
         iterations +=1
     return(beta_new)
 
-def compare_channels(function, signal_1, signal_2=None, channels=None, 
-                     diag_only=False, gen_surrogates=False, **kwargs):
+def compare(function, signal_1, signal_2=None, compare_dim='channel', 
+            diag_only=False, gen_surrogates=False, **kwargs):
     """
     Computes a matrix of a signal comparison metric between the 
     channel pairs of two signals.
@@ -237,8 +237,8 @@ def compare_channels(function, signal_1, signal_2=None, channels=None,
         First input signal with dimensions 'channel' and 'component'.
     signal_2 : xarray.DataArray, optional
         Second input signal. If not provided, `signal_1` is used twice.
-    channels : array-like, optional
-        Channels to compare. If not provided, all channels are used.
+    compare_dim : string, optional
+        Dimension to compare. If not provided, will be 'channel'.
     diag_only : boolean, optional
         Whether to only compute the metric between the same channels.
         Default: False
@@ -248,53 +248,55 @@ def compare_channels(function, signal_1, signal_2=None, channels=None,
     Returns
     -------
     numpy.ndarray
-        Correlation matrix with shape (len(channels), len(channels), n_components),
-        where n_components is the number of components in the signals.
+        Correlation matrix with shape (n_coords, n_coords),
+        where n_coords is the number of coordinates in the compared dimension.
     """
-    
+
+    assert compare_dim in signal_1.dims    
+
     if signal_2 is None:
         #TODO: implement surrogates
         if gen_surrogates:
             pass
         signal_2 = signal_1
-        idx_offset = 1 #if no signal_2, do not compute the metric for same channels
+        idx_offset = 1 #if no signal_2, do not compute the metric for same signal
     else:
+        
+        assert compare_dim in signal_2.dims
         
         #check dims
         shape_1 = list(signal_1.sizes.values())
         shape_2 = list(signal_1.sizes.values())
         
-        #TODO signal_1 and signal_2 might have a different number of channels
         for i,j in zip(shape_1, shape_2):
             assert i == j, "Sizes are not the same"
-        idx_offset = 0 #if signal_2 is given, compute the metric for same channels
+        idx_offset = 0
     
-    if channels is None:
-        channels = _np.arange(signal_1.sizes['channel'])
+
+    compare_dim_values = signal_1.coords[compare_dim].values
     
-    n_components = signal_1.sizes['component']
-    corr_mat = _np.nan*_np.ones(shape=(len(channels), len(channels), n_components))
+    corr_mat = _np.nan*_np.ones(shape=(len(compare_dim_values), 
+                                       len(compare_dim_values)))
     
-    for i_comp in range(n_components):
+    
+    for i_1 in range(len(compare_dim_values)):
+        dim_1 = compare_dim_values[i_1]
+        s_1 = signal_1.sel({compare_dim: [dim_1]})
         
-        for i_ch in _np.arange(len(channels)):
-            ch_1 = channels[i_ch]
-            s_1 = signal_1.isel({'channel': [ch_1], 'component': [i_comp]})
+        if diag_only:
+            inner_max = i_1+1
+            idx_offset = 0
+        else:
+            inner_max = len(compare_dim_values)
+        
+        for i_2 in _np.arange(i_1+idx_offset, inner_max):
+            dim_2 = compare_dim_values[i_2]
+            s_2 = signal_2.sel({compare_dim: [dim_2]})
             
-            if diag_only:
-                inner_max = i_ch+1
-                idx_offset = 0
-            else:
-                inner_max = len(channels)
+            R = function(s_1, s_2, **kwargs)
             
-            for j_ch in _np.arange(i_ch+idx_offset, inner_max):
-                ch_2 = channels[j_ch]
-                s_2 = signal_2.isel({'channel': [ch_2], 'component': [i_comp]})
-                
-                R = function(s_1, s_2, **kwargs)
-                
-                corr_mat[i_ch, j_ch, i_comp] = R
-                corr_mat[j_ch, i_ch, i_comp] = R
+            corr_mat[i_1, i_2] = R
+            corr_mat[i_2, i_1] = R
 
     
     return(corr_mat)
@@ -412,23 +414,23 @@ def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
     
     def smooth(W, scales, nNotes):
         # code adapted from pycwt.mother.Morlet.smooth()
-
+    
         m, n = W.shape
-
-        n_ = int(2 ** _np.ceil(_np.log2(len(W[0, :]))))
+    
+        n_ = int(2 ** _np.ceil(_np.log2(n)))
         # Filter in time.
         k = 2 * _np.pi * _fft.fftfreq(n_)
         k2 = k ** 2
-
+    
         # Smoothing by Gaussian window (absolute value of wavelet function)
         F = _np.exp(-0.5 * (scales[:, _np.newaxis] ** 2) * k2)  # Outer product
         smooth = _fft.ifft(F * _fft.fft(W, axis=1, n=n_),
-                           axis=1, n=n_, overwrite_x=True)
+                          axis=1, n=n_, overwrite_x=True)
         T = smooth[:, :n]  # Remove possibly padded region due to FFT
 
         if _np.isreal(W).all():
             T = T.real
-
+    
         # Filter in scale
         wsize = nNotes*2
         
@@ -439,11 +441,12 @@ def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
         win /= win.sum()
         
         T = _convolve2d(T, win[:, _np.newaxis], 'same')  # Scales are "vertical"
-
         return T
-    
-    coef1 = W1.values[:,:,0,0]
-    coef2 = W2.values[:,:,0,0]
+
+    coi = wavelet_object._compute_coi(W1)[0,:,:].T
+    idx_na = _np.where(_np.isnan(coi))
+    coef1 = W1.values[0,:,:].T
+    coef2 = W2.values[0,:,:].T
     coef12 = coef1 * coef2.conj()
     
     scales = wavelet_object._params['scales']
@@ -454,13 +457,13 @@ def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
     coef2 = _np.abs(coef2)**2 / scaleMatrix
     coef12 = coef12    / scaleMatrix
     
-    S1 = smooth( coef1, scales, nNotes)
-    S2 = smooth( coef2, scales, nNotes)
+    
+    S1 = smooth(coef1, scales, nNotes)
+    S2 = smooth(coef2, scales, nNotes)
     S12 = smooth(coef12, scales, nNotes)
     
     WC = abs(S12)**2 / (S1*S2)
-    
-    WC = wavelet_object._compute_coi(WC)
+    WC[idx_na] = _np.nan
     WC_out = _np.nanmean(WC)
     return(WC_out)
     

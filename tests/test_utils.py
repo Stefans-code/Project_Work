@@ -9,7 +9,22 @@ import matplotlib.pyplot as plt
 # signal = create_signal(data, sampling_freq=sampling_freq)
 # pwd = utils.Wavelet()(signal)
 # assert pwd.p.get_values().ndim == signal.p.get_values().ndim + 1
-    
+
+
+#%% test wavelet
+size = (1000,2)
+
+#PCA
+data = np.random.uniform(size = size)
+signal = create_signal(data, sampling_freq=100)
+
+wavelet = utils.Wavelet()
+W = wavelet(signal)
+
+freqs_w = W.freq.values
+coi = wavelet._compute_coi(W)
+
+#%%
 
 size = (1000,5,6,7)
 

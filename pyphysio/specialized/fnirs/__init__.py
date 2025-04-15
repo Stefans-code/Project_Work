@@ -69,7 +69,7 @@ def compute_betas_barker(nirs_signal, dm, pmax=10, max_iter = 10):
             change = _np.min(abs((beta_new - beta_inner)/beta_inner))
             
             #c- repeat steps 5a-b until changes in beta are small (<1%)
-            if (change <0.005) or (iterations >= max_iter):
+            if (change <0.01) or (iterations >= max_iter):
                 done = True
             
             beta_inner = beta_new
@@ -79,7 +79,7 @@ def compute_betas_barker(nirs_signal, dm, pmax=10, max_iter = 10):
         change_outer = _np.min(abs((beta_outer - beta_inner)/beta_outer))
         
         #Repeat steps 2-5 until changes in β are sufficiently small (e.g., < 1% change).  
-        if (change_outer <0.005) or (iteration_outer >= max_iter):
+        if (change_outer <0.01) or (iteration_outer >= max_iter):
             done_outer = True
         
         beta_outer = beta_inner

@@ -17,7 +17,7 @@ ibi = heart.BeatFromECG()(signal)
 
 from pyphysio.interactive import Annotate
 
-annotator = Annotate(signal, ibi)
+# annotator = Annotate(signal, ibi)
 
 bvp_data = TestData().bvp() 
 

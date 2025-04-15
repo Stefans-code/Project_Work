@@ -31,8 +31,11 @@ class DetectMA(_Algorithm):
         Standard deviation coefficient for threshold computation when method is 'mad'.
     th_amp : float, optional
         Amplitude threshold when method is 'fixed'.
-    fuse : bool, optional
+    fuse : {None, 'all', 'component'}, optional
         Flag indicating whether to detect motion artifacts by channel or globally.
+        - None: Detect by channel
+        - 'all': Detect globally (fused channels)
+        - 'component': Detect by component (fused channels)
     **kwargs : dict, optional
         Additional keyword arguments.
 

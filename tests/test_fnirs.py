@@ -10,9 +10,10 @@ from pyphysio.specialized.fnirs import Raw2Oxy
 
 nirs = load_nirx2('/home/bizzego/UniTn/data/fnirs_technical_validation/2022-09-13_001')
 
-print(get_ss_ls_channels(nirs, max_dist=3.1)) ##so to have ss
-print(get_near_channels(nirs, ch_target=1))
-plot_probe(nirs)
+get_ss_ls_channels(nirs, max_dist=3.1) ##so to have ss
+get_near_channels(nirs, ch_target=1)
+# plot_probe(nirs)
+# plt.close('all')
 
 pcafilt = PCAFilter()
 res = pcafilt(nirs)

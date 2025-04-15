@@ -456,7 +456,6 @@ class PyphysioDataArray(object):
 
                 if na_remaining != 'keep':
                     signal = signal.dropna(dim='time')
-                    print('Nans in the output signal, please check the results')
                 return(signal)
             
             elif na_action == 'remove':

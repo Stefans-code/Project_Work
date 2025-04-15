@@ -33,7 +33,7 @@ nirs = nirs.assign_coords(stim=('time', stim))
 '''    
 
 def load_xrnirs(file):
-    nirs = _xr.load_dataset(file)
+    nirs = _xr.load_dataarray(file)
     attrs = nirs.attrs
     todel=[]
     for k in attrs.keys():
@@ -50,21 +50,19 @@ def load_xrnirs(file):
     return(nirs)
 
 def SDto1darray(nirs):
-    for k in nirs.keys():
-        SD = nirs[k].p.main_signal.attrs
-        for attribute in ['SDkey', 'SDmask', 
-                          'SrcPos', 'SrcPos2D', 
-                          'DetPos', 'DetPos2D', 
-                          'ChnPos', 'ChnPos2D',
-                          'Channels']:
-            if attribute in SD.keys():
-                attr_np = _np.array(SD[attribute])
-                attr_shape = attr_np.shape
-                attr_np = attr_np.ravel()
-                SD[attribute] = attr_np
-                SD[f'{attribute}_shape'] = attr_shape
-        nirs[k].p.main_signal.attrs = SD
-        
+    SD = nirs.attrs
+    for attribute in ['SDkey', 'SDmask', 
+                      'SrcPos', 'SrcPos2D', 
+                      'DetPos', 'DetPos2D', 
+                      'ChnPos', 'ChnPos2D',
+                      'Channels']:
+        if attribute in SD.keys():
+            attr_np = _np.array(SD[attribute])
+            attr_shape = attr_np.shape
+            attr_np = attr_np.ravel()
+            SD[attribute] = attr_np
+            SD[f'{attribute}_shape'] = attr_shape
+    nirs.attrs = SD
     return(nirs)
 
 def load_snirf(datafile, load_2D=True, has_stim=False):
@@ -486,7 +484,7 @@ def load_events(FILE, has_stim=True):
         print('Error processing event file')
         
 #%%
-def load_nirx(DATADIR):
+def load_nirx(DATADIR, has_stim=False):
     """Import NIRS data generated with NIRx devices.
     
     Parameters
@@ -494,9 +492,8 @@ def load_nirx(DATADIR):
     DATADIR : str
         Path to the directory containing the files
     
-    has_stim : boolean, optional
+    has_stimboolean, optional
         Whether the try to load the information about the stimuli
-              
 
     Returns
     -------
@@ -582,24 +579,23 @@ def load_nirx(DATADIR):
         data.append(data_[:, goodIDX])
     
     data = _np.stack(data, axis=2)
+
+    if 'Conditions' in filelist:
+        filelist_cond = os.listdir(f'{DATADIR}/Conditions')
+        idx_evt = _np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
+        FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
+    else:
+        idx_evt = _np.where([x.endswith('.evt') for x in filelist])[0][0]
+        FILE_EVT = filelist[idx_evt]
     
-    # #detector dir:
-    # if 'Conditions' in filelist:
-    #     filelist_cond = os.listdir(f'{DATADIR}/Conditions')
-    #     idx_evt = _np.where([x.endswith('.evt') for x in filelist_cond])[0][0]
-    #     FILE_EVT = f'Conditions/{filelist_cond[idx_evt]}'
-    # else:
-    #     idx_evt = _np.where([x.endswith('.evt') for x in filelist])[0][0]
-    #     FILE_EVT = filelist[idx_evt]
+    N = data.shape[0]
+    stim = _np.zeros(N)
     
-    # N = data.shape[0]
-    # stim = _np.zeros(N)
-    
-    # if has_stim:
-    #     idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
-    #     if len(idx)>0:
-    #         stim[idx] = codes
+    if has_stim:
+        idx, codes = load_events(f'{DATADIR}/{FILE_EVT}', has_stim)
+        if len(idx)>0:
+            stim[idx] = codes
     nirs = create_signal(data, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
     
-    # nirs = nirs.assign_coords(stim=('time', stim))
+    nirs = nirs.assign_coords(stim=('time', stim))
     return(nirs)

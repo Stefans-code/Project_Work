@@ -450,8 +450,7 @@ class Wavelet(_Algorithm):
         fsamp = signal.p.get_sampling_freq()
         freqs = self._params['freqs_nyq']*fsamp
         
-        template = self.__compute_template__(signal, {'freq': freqs})
-        
+        template = self.__compute_template__(signal, {'freq': freqs})        
         return(chunk_dict, template)
     
     def _compute_coi(self, W):
@@ -547,7 +546,7 @@ class Wavelet(_Algorithm):
                 
         
         W = W.T
-        W = W[:, _np.newaxis, :]
+        # W = W[:, _np.newaxis, :]
         
         return W
         # W = _np.expand_dims(W,[2,3])
@@ -723,8 +722,8 @@ class PCA(_Algorithm):
         self.required_dims = ['time', dimension]
     
     def __get_template__(self, signal):
-        assert dimension in signal.dims
         dimension = self._params['dimension']
+        assert dimension in signal.dims
         n_out = self._params['n_out']
         
         chunk_dict = self.__compute_chunk_dict__(signal)

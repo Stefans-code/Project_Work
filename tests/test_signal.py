@@ -13,7 +13,6 @@ sampling_freqs = [0.01, 1, 1./3]
 
 for size in sizes:
     for sampling_freq in sampling_freqs:
-        print(size)
         data = np.random.uniform(size = size)
         signal = create_signal(data, sampling_freq=sampling_freq)
         # plt.figure()

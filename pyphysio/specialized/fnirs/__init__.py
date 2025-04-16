@@ -5,7 +5,7 @@ from sklearn.decomposition import PCA as _PCA, FastICA as _ICA
 from sklearn.preprocessing import StandardScaler as _StandardScaler
 import statsmodels.api as _sm
 
-from ._dl_sqi import SignalQualityDeepLearning
+# from ._dl_sqi import SignalQualityDeepLearning
 from ._convert import Raw2Oxy
 import matplotlib.pyplot as _plt
 import matplotlib as _mpl

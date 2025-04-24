@@ -15,7 +15,7 @@ setup(
               'pyphysio.specialized.resp',
               'pyphysio.indicators',
               'pyphysio.generators'],
-    package_data={'pyphysio': ['test_data/*']},
+    package_data={'pyphysio': ['test_data/*', 'specialized/fnirs/_dlweights/*']},
     # data_files={'test_data_out': ['info_medical', 'medical.txt.bz2']},
     version='3.1.13',
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP, fNIRS, ...)',
@@ -43,7 +43,8 @@ setup(
         'xarray',
         'pywavelets',
         'bottleneck',
-        'pyxdf'
+        'pyxdf',
+        'csaps'
     ],
     requires=[
         'h5py'

@@ -17,7 +17,7 @@ setup(
               'pyphysio.generators'],
     package_data={'pyphysio': ['test_data/*', 'specialized/fnirs/_dlweights/*']},
     # data_files={'test_data_out': ['info_medical', 'medical.txt.bz2']},
-    version='3.1.13',
+    version='4.0-beta',
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP, fNIRS, ...)',
     author='a.bizzego',
     author_email='andrea.bizzego@unitn.it',
@@ -44,7 +44,8 @@ setup(
         'pywavelets',
         'bottleneck',
         'pyxdf',
-        'csaps'
+        'csaps',
+        'nilearn'
     ],
     requires=[
         'h5py'

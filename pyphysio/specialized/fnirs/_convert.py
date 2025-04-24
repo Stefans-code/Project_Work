@@ -227,6 +227,41 @@ def _OD2Conc(nirs, SD, channel, ppf=[6,6], force_max_dist=True):
 
     return(concentration)
 
+
+class Raw2OD(_Filter):
+    def __init__(self, age=None, **kwargs):
+        _Filter.__init__(self, age=age, **kwargs)
+        self.required_dims = ['time']
+    
+    def algorithm(self, signal):
+        signal_values = signal.values
+        
+        dm = _np.mean(signal_values, axis=0)
+        x_out = -_np.log(signal_values/(_np.ones(shape = signal_values.shape)*dm))
+        return(x_out)
+
+class OD2Oxy(_Filter):
+    def __init__(self, age=None, **kwargs):
+        _Filter.__init__(self, age=age, **kwargs)
+        self.required_dims = ['time', 'component']
+    
+    def algorithm(self, signal):
+        SD = signal.attrs
+        
+        Lambda = SD['Lambda']
+        age = self._params['age']
+        
+        ppf = [6.,6.] if age is None else _get_dpf(Lambda, age)
+        ppf = _np.array(ppf)
+        
+        # print(ppf)
+        OD = signal.values
+        
+        channel = int(signal.coords['channel'])
+        oxy = _OD2Conc(OD, SD, channel, ppf)
+        
+        return(oxy)
+
 class Raw2Oxy(_Filter):
     def __init__(self, age=None, **kwargs):
         _Filter.__init__(self, age=age, **kwargs)

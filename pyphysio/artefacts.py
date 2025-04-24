@@ -73,14 +73,7 @@ class DetectMA(_Algorithm):
     
     def __get_template__(self, signal):
         chunk_dict = self.__compute_chunk_dict__(signal)
-        
-        fuse = self._params['fuse']
-        if fuse == 'all':
-            template = self.__compute_template__(signal, {'channel': 1, 'component': 1})
-        elif fuse == 'component':
-            template = self.__compute_template__(signal, {'component': 1})
-        else:
-            template = self.__compute_template__(signal)
+        template = self.__compute_template__(signal)
         return(chunk_dict, template)
 
     def algorithm(self, signal):
@@ -166,6 +159,21 @@ class DetectMA(_Algorithm):
         signal_out = _np.zeros(len(signal_values))
         idx_MA = _np.where(MA>0)[0] + half
         signal_out[idx_MA] = 1
+        
+        fuse = self._params['fuse']
+        
+        if fuse == 'all':
+            signal_out = signal_out.reshape((signal_out.shape[0], 1, 1))
+            signal_out = _np.repeat(_np.repeat(signal_out, 
+                                               signal.sizes['channel'],
+                                               axis=1),
+                                    signal.sizes['component'],
+                                    axis=2)
+        elif fuse == 'component':
+            signal_out = signal_out.reshape((signal_out.shape[0], 1, 1))
+            signal_out = _np.repeat(signal_out,
+                                    signal.sizes['component'],
+                                    axis=2)
         return(signal_out)
         
 class DetectMA_AR(_Algorithm):
@@ -298,20 +306,7 @@ class MARA(_Filter):
         fsamp = signal.p.get_sampling_freq()
 
         MA_signal = signal['MA']
-        ch = signal.channel.values[0]
-        cp = signal.component.values[0]
         
-        # if MA.sizes['channel'] == 1:
-        #     ch_MA = 0
-        # else:
-        #     ch_MA = ch
-            
-        # if MA.sizes['component'] == 1:
-        #     cp_MA = 0
-        # else:
-        #     cp_MA = cp
-            
-        # MA_signal = MA.isel(channel=[ch_MA], component=[cp_MA])
         MA_signal_values = MA_signal.values.ravel()
         MA_signal_diff = _np.diff(MA_signal_values)
         idx_st = _np.where(MA_signal_diff > 0)[0]

@@ -38,7 +38,7 @@ class PowerInBand(_Indicator):
         fsamp = signal.p.get_sampling_freq()
         psd = PSD(scaling='density', **params)(signal)
         freq = psd.coords['freq'].values
-        power = psd.values
+        power = psd.values.ravel()
         i_min = _np.searchsorted(freq, params["freq_min"])
         i_max = _np.searchsorted(freq, params["freq_max"])
         result = _np.array(_np.sum(power[i_min:i_max]*fsamp))

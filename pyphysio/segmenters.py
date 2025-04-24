@@ -475,6 +475,7 @@ def fmap(segmenter, algorithms, signal):
     result = _xr.merge(result,compat='override')
     return result
 
+#TODO: fix this
 def indicators2df(fmap_results):
     import pandas as _pd
 
@@ -483,37 +484,46 @@ def indicators2df(fmap_results):
         
     ind_sample = fmap_results[k[0]]
     assert ind_sample.ndim <=3, "computed results have more than three dimensions"
-    n_channels = ind_sample.p.get_nchannels()
-    n_components = ind_sample.p.get_ncomponents()
     
     t = ind_sample.p.get_times()
     label = ind_sample['label'].p.get_values().ravel()
     
-    df_all = []
-    for i_comp in range(n_components):
+    df_all = {}
+    for key in list(fmap_results.keys()):
+        result_indicator = fmap_results[key]
+        indicator_df = []
+        
+        if not result_indicator.p.has_multi_channels():
+            result_indicator = result_indicator.expand_dims(dim={'channel': [0]}, axis = 1)
+            n_channels = 1
+        else:
+            n_channels = result_indicator.p.get_nchannels()
+        
         for i_chan in range(n_channels):
+            if not result_indicator.p.has_multi_components():
+                result_indicator = result_indicator.expand_dims(dim={'component': [0]}, axis = 2)
+                n_components = 1
+            else:
+                n_components = result_indicator.p.get_ncomponents()
             
-            indicator_df = {}
-            indicator_df['time'] = t
-            indicator_df['label'] = label
-    
-            for key in list(fmap_results.keys()):
-                result_key = fmap_results[key]
+            for i_comp in range(n_components):
                 
-                if ind_sample.ndim == 3:
-                    indicator_df[key] = result_key.p.get_values()[:, i_chan, i_comp].ravel()
-                    indicator_df['component'] = _np.repeat(i_comp+1, len(t))
-                    indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
-                    
-                else:
-                    if ind_sample.ndim == 2:
-                        indicator_df[key] = result_key[:, i_chan].p.get_values().ravel()
-                        indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
-                    else:
-                        indicator_df[key] =  result_key
-            
-            df_all.append(_pd.DataFrame(indicator_df))
+                curr_value = {}
+                curr_value['time'] = t
+                curr_value['label'] = label
     
-    
-    df_all = _pd.concat(df_all, axis = 0)
+                # if ind_sample.ndim == 3:
+                curr_value[key] = result_indicator.p.get_values()[:, i_chan, i_comp].ravel()
+                curr_value['component'] = _np.repeat(i_comp+1, len(t))
+                curr_value['channel'] = _np.repeat(i_chan+1, len(t))
+                indicator_df.append(_pd.DataFrame(curr_value))
+                # else:
+                #     if ind_sample.ndim == 2:
+                #         indicator_df[key] = result_key[:, i_chan].p.get_values().ravel()
+                #         indicator_df['channel'] = _np.repeat(i_chan+1, len(t))
+                #     else:
+                #         indicator_df[key] =  result_key
+        
+        df_all[key] = _pd.concat(indicator_df, axis=0)
+    # df_all = _pd.concat(df_all, axis = 1)
     return(df_all)

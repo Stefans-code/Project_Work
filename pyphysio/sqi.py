@@ -2,8 +2,6 @@
 import numpy as _np
 from .indicators.frequencydomain import PowerInBand as _PowerInBand
 import scipy.stats as _sps
-from .utils import Diff as _Diff
-import xarray as _xr
 from ._base_algorithm import _Algorithm
 
 class _SQIIndicator(_Algorithm):
@@ -25,7 +23,8 @@ class _SQIIndicator(_Algorithm):
         
     def __get_template__(self, signal):
         chunk_dict = self.__compute_chunk_dict__(signal)
-        template = self.__compute_template__(signal, {'time': 1, 
+        t_out = signal['time'][0]
+        template = self.__compute_template__(signal, {'time': [t_out], 
                                                       'is_good': 2})
         return(chunk_dict, template)
         
@@ -35,14 +34,13 @@ class _SQIIndicator(_Algorithm):
         
         is_good = (sqi_indicator >= threshold[0]) & (sqi_indicator <= threshold[1])
         
-        out_shape = _np.array(signal.shape)
-        out_shape[0] = 1
+        _, template = self.__get_template__(signal)
+        out_shape = [template.sizes[d] for d in signal.dims]
         
         sqi_indicator = _np.array(sqi_indicator).reshape(out_shape)
         is_good = _np.array(is_good).reshape(out_shape)
         
         out = _np.stack([sqi_indicator, is_good], axis = -1)
-        
         return(out)
 
 class Kurtosis(_SQIIndicator):

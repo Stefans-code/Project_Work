@@ -276,6 +276,17 @@ class PyphysioDataArray(object):
         time = self.da.coords['time'].values
         # time = time/_np.timedelta64(1, 's')
         return time
+
+    def reset_times(self, t0):
+        t_old = self.da.coords['time'].values
+        t_new = t_old - t_old[0] + t0
+        
+        signal_out = self.da.copy(deep=True)
+        signal_out.attrs['start_time'] = t0
+        signal_out = signal_out.assign_coords({'time': t_new})
+        # time = time/_np.timedelta64(1, 's')
+        return signal_out
+        
     
     def segment_time(self, t_start, t_stop=None):
         """
@@ -473,7 +484,8 @@ class PyphysioDataArray(object):
             print('No nans in the signal, no action performed')
             return(self.da)
     
-    def plot(self, marker=None, color = None, ncols=4, sharey=False):
+    
+    def plot(self, marker=None, color = None, ncols=4, sharey=False, broadcast=False):
         """
         The plot function of the PyphysioDataArray class is used to plot the signal(s) contained in the 
         PyphysioDataArray object. The function can handle signals with multiple channels and components.
@@ -490,11 +502,19 @@ class PyphysioDataArray(object):
         Returns
             None
         """
-        if marker is None and self.get_sampling_freq() == 'unevenly':
-                marker = '.'
+        
+        if marker is None:
+            try:
+                if self.get_sampling_freq() == 'unevenly':
+                    marker = '.'
+            except:
+                pass
                 
         fig = _gcf()
-        t_ = self.get_times()
+        try:
+            t_ = self['time']
+        except:
+            t_ = self.get_times()
         
         v_ = self.get_values()
         assert v_.ndim <=3, "Not supported for signals with more than 3 dimensions"
@@ -515,9 +535,10 @@ class PyphysioDataArray(object):
         if len(fig.axes) >= n_ch:
             #plotting signal with number of channels <= existing number of axes'
             if (n_ch == 1):
-                #plot same channel across all axes'
-                v_ = _np.repeat(v_, len(fig.axes), axis = 1)
-                n_ch = len(fig.axes)
+                if broadcast:
+                    #plot same channel across all axes'
+                    v_ = _np.repeat(v_, len(fig.axes), axis = 1)
+                    n_ch = len(fig.axes)
             
         else: 
             #create new figure
@@ -538,6 +559,8 @@ class PyphysioDataArray(object):
             _sca(axes[i_ch])
             ax = _gca()
             
+            v_channel = v_[:, i_ch, ...]
+            
             #TODO: if good then use a solid line
             #else use a dotted line
                     
@@ -547,16 +570,16 @@ class PyphysioDataArray(object):
                 ax.vlines(t_, ymin, ymax, linestyle = linestyle, color=color)
             else:
                 for i_comp in range(n_comp):
-                    v_current = v_[:, i_ch, i_comp]
+                    v_current = v_channel[:, i_comp]
                     
                     if marker is None:
-                        ax.plot(t_, _np.squeeze(v_current), linestyle = linestyle, color=color)
+                        ax.plot(t_, v_current, linestyle = linestyle, color=color)
                     else:
-                        ax.plot(t_, _np.squeeze(v_current), marker, linestyle = linestyle, color=color)
+                        ax.plot(t_, v_current, marker, linestyle = linestyle, color=color)
             
             _ylabel(i_ch)
             _grid(True)
                 
-            _xlim(self.get_start_time(), self.get_end_time())
-            _tight_layout()
-            _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)
+        _xlim(self.get_start_time(), self.get_end_time())
+        _tight_layout()
+        _subplots_adjust(top=0.9, bottom=0.1, left=0.05, right=0.95, hspace=0.2, wspace=0.2)

@@ -57,8 +57,15 @@ class SignalQualityDeepLearning(_SQIIndicator):
         model.eval()
         self.model = model
         _SQIIndicator.__init__(self, threshold=threshold)
-        self.dimensions = {'time' : 1, 'component': 1}
+        self.required_dims = ['time', 'component']
         
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        t_out = signal['time'][0]
+        template = self.__compute_template__(signal, {'time': [t_out],
+                                                      'component': 1,
+                                                      'is_good': 2})
+        return(chunk_dict, template)
     
     def algorithm(self, signal):
         assert (signal.p.get_duration() - 20) < 1/FSAMP
@@ -73,10 +80,11 @@ class SignalQualityDeepLearning(_SQIIndicator):
         signal_in = _torch.tensor(signal_in.T).float()
         
         output = self.model.forward(signal_in.unsqueeze(0).to(device))
-        # print(output)
         _, quality = _torch.max(output,1)
         quality = quality.cpu().numpy()
-        return(_np.array([[quality]]))
+        quality = _np.reshape(quality, (1, 1))
+        quality_out = self.__check_good__(quality, signal)
+        return(quality_out)
 
         # confidence_good = output.cpu().detach().numpy()[0][1]
         # print(confidence_good)

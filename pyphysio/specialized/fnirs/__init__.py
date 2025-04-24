@@ -6,7 +6,7 @@ from sklearn.preprocessing import StandardScaler as _StandardScaler
 import statsmodels.api as _sm
 
 # from ._dl_sqi import SignalQualityDeepLearning
-from ._convert import Raw2Oxy
+from ._convert import Raw2Oxy, Raw2OD, OD2Oxy
 import matplotlib.pyplot as _plt
 import matplotlib as _mpl
 import matplotlib.cm as _cm
@@ -159,8 +159,6 @@ def get_near_channels(nirs, ch_target, n_near=3):
 #%%
 class PCAFilter(_Algorithm):
     """
-    See Molavi 2012
-    TODO: use sklearn
 
     """    
     def __init__(self, nSV=0.8, return_systemic=False, **kwargs):
@@ -175,7 +173,6 @@ class PCAFilter(_Algorithm):
         return (chunk_dict, template)
     
     def algorithm(self, signal): #TODO: correct syntax for **kwargs
-
         nSV = self._params['nSV']
         return_systemic = self._params['return_systemic']
         n_channels = signal.p.get_nchannels()
@@ -186,6 +183,7 @@ class PCAFilter(_Algorithm):
         y = _np.concatenate([y[:,:,0], y[:,:,1]], axis=1)
         c = _np.dot(y.T, y)
         V, St, _ = _sal.svd(c)
+        
         svs = St / _np.sum(St)
         ev = _np.zeros(len(svs))
         if nSV>=1:
@@ -369,6 +367,8 @@ class ComputeClusters(_Algorithm):
                 out_signal[:,i_cluster, :] = cluster_signal
         
         return(out_signal)
+
+
 
 """
 class FunctionalSeparationFilter(_Algorithm):

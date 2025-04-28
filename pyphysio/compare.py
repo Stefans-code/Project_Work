@@ -248,7 +248,7 @@ def compare(function, signal_1, signal_2=None, compare_dim='channel',
     Returns
     -------
     numpy.ndarray
-        Correlation matrix with shape (n_coords, n_coords),
+        Comparison matrix with shape (n_coords, n_coords),
         where n_coords is the number of coordinates in the compared dimension.
     """
 
@@ -259,9 +259,10 @@ def compare(function, signal_1, signal_2=None, compare_dim='channel',
         if gen_surrogates:
             pass
         signal_2 = signal_1
-        idx_offset = 1 #if no signal_2, do not compute the metric for same signal
-    else:
         
+        #compareison_matrix will be symmetrical
+        symmetrical = True
+    else:
         assert compare_dim in signal_2.dims
         
         #check dims
@@ -270,12 +271,12 @@ def compare(function, signal_1, signal_2=None, compare_dim='channel',
         
         for i,j in zip(shape_1, shape_2):
             assert i == j, "Sizes are not the same"
-        idx_offset = 0
+        symmetrical = False
     
 
     compare_dim_values = signal_1.coords[compare_dim].values
     
-    corr_mat = _np.nan*_np.ones(shape=(len(compare_dim_values), 
+    comp_mat = _np.nan*_np.ones(shape=(len(compare_dim_values), 
                                        len(compare_dim_values)))
     
     
@@ -285,21 +286,25 @@ def compare(function, signal_1, signal_2=None, compare_dim='channel',
         
         if diag_only:
             inner_max = i_1+1
-            idx_offset = 0
         else:
             inner_max = len(compare_dim_values)
         
-        for i_2 in _np.arange(i_1+idx_offset, inner_max):
+        if symmetrical:
+            inner_min = i_1
+        else:
+            inner_min = 0
+            
+        for i_2 in _np.arange(inner_min, inner_max):
             dim_2 = compare_dim_values[i_2]
             s_2 = signal_2.sel({compare_dim: [dim_2]})
             
             R = function(s_1, s_2, **kwargs)
             
-            corr_mat[i_1, i_2] = R
-            corr_mat[i_2, i_1] = R
+            comp_mat[i_1, i_2] = R
+            if symmetrical:
+                comp_mat[i_2, i_1] = R
 
-    
-    return(corr_mat)
+    return(comp_mat)
 
 def robust_correlation(s1, s2):
     '''

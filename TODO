@@ -1,43 +1,4 @@
 
 temporal derivative distribution repair for fNIRS?
 
-============================= 
-pre-whiteninig -->p-th order AR model, then use the residuals (innovation term) (
-See: 
-Characterization and correction of the false-discovery rates in resting state connectivity using functional near-infrared spectroscopy
-Autoregressive model based algorithm for correcting motion and serially correlated errors in fNIRS
- 
- code from GBard:
- import numpy as np
-from statsmodels.tsa.ar_model import AR
-
-def pre_whiten(signal, order=10):
-  """Pre-whitens a signal using an auto-regressive model.
-
-  Args:
-    signal: The signal to be pre-whitened.
-    order: The order of the auto-regressive model.
-
-  Returns:
-    The pre-whitened signal.
-  """
-
-  # Fit an auto-regressive model to the signal.
-  model = AR(signal)
-  model.fit()
-
-  # Get the autoregressive coefficients.
-  coefficients = model.coef_
-
-  # Pre-whiten the signal.
-  pre_whitened_signal = signal - np.dot(coefficients, signal[:-order])
-
-  return pre_whitened_signal
-
-============================= 
-motion artifact correction con AR model (see huppert): 
-Autoregressive model based algorithm for correcting motion and serially correlated errors in fNIRS
-Characterization and correction of the false-discovery rates in resting state connectivity using functional near-infrared spectroscopy
-
-=============================
 

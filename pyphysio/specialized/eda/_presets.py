@@ -1,5 +1,5 @@
 from ...indicators.frequencydomain import *
-from ...indicators.nonlinear import *
+# from ...indicators.nonlinear import *
 from ...indicators.peaks import *
 from ...indicators.timedomain import *
 # from ...sqi.sqi import *

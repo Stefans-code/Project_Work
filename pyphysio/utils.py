@@ -818,8 +818,6 @@ class PeakSelection(_Filter):
 
     Parameters
     ----------
-    indices : array, >=0
-        Array containing indexes (first column) and values (second column) of the maxima
     win_pre : float, >0
         Duration (in seconds) of interval before the peak that is considered to find the start of the peak
     win_post : float, >0

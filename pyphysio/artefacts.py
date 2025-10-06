@@ -40,6 +40,8 @@ class DetectMA(_Algorithm):
         Additional keyword arguments.
 
     """
+    
+    #TODO: FUSE by cluster
 
     def __init__(self, win_len=1, win_mask=1, method='iqr',
                  iqr=1.5,

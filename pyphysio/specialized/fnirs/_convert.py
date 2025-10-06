@@ -237,7 +237,7 @@ class Raw2OD(_Filter):
         signal_values = signal.values
         
         dm = _np.mean(signal_values, axis=0)
-        x_out = -_np.log(signal_values/(_np.ones(shape = signal_values.shape)*dm))
+        x_out = -_np.log(signal_values/dm)
         return(x_out)
 
 class OD2Oxy(_Filter):

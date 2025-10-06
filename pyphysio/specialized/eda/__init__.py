@@ -5,10 +5,10 @@ from ..._base_algorithm import _Algorithm
 # from ...signal import create_signal
 from ...filters import DeConvolutionalFilter as _DeConvolutionalFilter, \
     ConvolutionalFilter as _ConvolutionalFilter, IIRFilter as _IIRFilter, \
-    KalmanFilter as _KalmanFilter
+    KalmanFilter as _KalmanFilter, _Filter
 from ...utils import PeakDetection as _PeakDetection, PeakSelection as _PeakSelection
 
-from ._presets import *
+# from ._presets import *
 
 
 def _loss(t1, t2, signal, amplitude):
@@ -64,7 +64,7 @@ def optimize_T1_T2(signal, bayesian, optim_bounds, amplitude):
     return(res)
 
 # PHASIC ESTIMATION
-class DriverEstim(_Algorithm):
+class DriverEstim(_Filter):
     """
     Estimates the driver of an EDA signal according to (see Notes)
 
@@ -99,17 +99,12 @@ class DriverEstim(_Algorithm):
                  amplitude=0.01):
         assert t1 > 0, "t1 value has to be positive"
         assert t2 > 0, "t2 value has to be positive"
-        _Algorithm.__init__(self, t1=t1, t2=t2,
+        _Filter.__init__(self, t1=t1, t2=t2,
                             rescale=rescale_driver,
                             optim=optim, 
                             optim_bayes=optim_bayes,
                             optim_bounds = optim_bounds,
                             amplitude=amplitude)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
         
     def algorithm(self, signal):
         optim = self._params['optim']
@@ -171,34 +166,9 @@ class DriverEstim(_Algorithm):
         
         return bateman
 
-class PhasicEstim(_Algorithm):
+class PhasicEstim(_Filter):
     """
     Estimates the phasic and tonic components of a EDA driver function.
-    It uses a detection algorithm based on the derivative of the driver.
-
-    
-    Parameters:
-    -----------
-    delta : float, >0
-        Minimum amplitude of the peaks in the driver
-        
-    Optional parameters
-    -------------------
-    grid_size : float, >0, default = 1
-        Sampling size of the interpolation grid
-    pre_max : float, >0, default = 2
-        Duration (in seconds) of interval before the peak where to search the start of the peak
-    post_max : float, >0, default = 2
-        Duration (in seconds) of interval after the peak where to search the end of the peak
-
-    Returns:
-    --------
-    phasic : EvenlySignal
-        The phasic component
-    tonic : EvenlySignal
-        The tonic component
-    driver_no_peak : EvenlySignal
-        The "de-peaked" driver signal used to generate the interpolation grid
     
     Notes
     -----
@@ -211,12 +181,7 @@ class PhasicEstim(_Algorithm):
         assert amplitude > 0, "Amplitude value has to be positive"
         assert win_pre > 0,  "Window pre peak value has to be positive"
         assert win_post > 0, "Window post peak value has to be positive"
-        _Algorithm.__init__(self, amplitude=amplitude, win_pre=win_pre, win_post=win_post, polyfit=polyfit, return_phasic=return_phasic)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
+        _Filter.__init__(self, amplitude=amplitude, win_pre=win_pre, win_post=win_post, polyfit=polyfit, return_phasic=return_phasic)
 
     def algorithm(self, signal):
         params = self._params
@@ -232,11 +197,9 @@ class PhasicEstim(_Algorithm):
         
         # find peaks in the driver
         maxima = _PeakDetection(delta=amplitude, refractory=1, return_peaks=True)(signal)
-        idx_maxp = _np.where(~_np.isnan(maxima.p.main_signal.values))[0].ravel()
-        # print(idx_maxp)
+        signal['peaks'] = maxima
         
-        # identify start and stop of the peaks
-        peaks = _PeakSelection(indices=idx_maxp, win_pre=win_pre, win_post=win_post)(signal)
+        peaks = _PeakSelection(win_pre=win_pre, win_post=win_post)(signal)
         
         # find tonic component (= portion outside the peaks ==> peaks == 0)
         idx_tonic = _np.where(peaks.p.get_values().ravel() == 0)[0]
@@ -259,9 +222,6 @@ class PhasicEstim(_Algorithm):
         tonic = create_signal(tonic_interp, times = idx_tonic/fsamp + signal.p.get_start_time())
         tonic = tonic.interp({'time': signal.p.get_times()}, 'cubic')
         tonic_values = tonic.p.get_values().ravel()
-        
-        # fitter = _np.poly1d(_np.polyfit(idx_tonic, driver_interp, 10))
-        # tonic = fitter(_np.arange(len(signal_values)))
 
         if not return_phasic:
             return tonic_values
@@ -302,11 +262,6 @@ class PhasicEstimKalman(_Algorithm):
         assert amplitude > 0, "Amplitude value has to be positive"
         _Algorithm.__init__(self, amplitude=amplitude,
                             return_phasic=return_phasic)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -318,7 +273,7 @@ class PhasicEstimKalman(_Algorithm):
 
         R = _np.var(signal_values)
         
-        signal_f = _IIRFilter(0.01, btype='highpass')(signal, add_signal=False).p.get_values().ravel()
+        signal_f = _IIRFilter(0.01, btype='highpass')(signal).p.get_values().ravel()
         Q = _np.var(_np.diff(signal_f))
 
         signal_k = _KalmanFilter(R, Q)(signal)
@@ -341,9 +296,6 @@ class PhasicEstimKalman(_Algorithm):
                              method='linear')
         
         tonic_values = tonic.p.get_values().ravel()
-        
-        # fitter = _np.poly1d(_np.polyfit(idx_tonic, driver_interp, 10))
-        # tonic = fitter(_np.arange(len(signal_values)))
 
         if not return_phasic:
             return tonic_values

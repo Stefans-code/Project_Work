@@ -24,17 +24,8 @@ from matplotlib.pyplot import ylabel as _ylabel, grid as _grid, subplots as _sub
 #See the _to1darray function in _load_nirx
     
 def load(file):
-    signal = _xr.load_dataset(file)
+    signal = _xr.load_dataarray(file)
     
-    history = []
-    
-    if 'history' in signal.attrs.keys():
-        history = signal.attrs['history']
-    else:
-        signal.attrs['history'] = ['main']
-    
-    if isinstance(history, str):
-        signal.attrs['history'] = [history]
     return(signal)
     
 def create_signal(data, times=None, sampling_freq=None,
@@ -147,11 +138,7 @@ def create_signal(data, times=None, sampling_freq=None,
                            coords = coords, 
                            attrs = info,
                            name = name)
-    
-    # signal = signal.to_dataset()
-    # signal.attrs['MAIN'] = name
-    # signal.attrs['history'] = [name]
-    
+
     return signal
 
 @_xr.register_dataarray_accessor('p')
@@ -485,7 +472,7 @@ class PyphysioDataArray(object):
             return(self.da)
     
     
-    def plot(self, marker=None, color = None, ncols=4, sharey=False, broadcast=False):
+    def plot(self, marker=None, color = None, ncols=4, sharey=False, broadcast=False, axes=None):
         """
         The plot function of the PyphysioDataArray class is used to plot the signal(s) contained in the 
         PyphysioDataArray object. The function can handle signals with multiple channels and components.
@@ -509,8 +496,7 @@ class PyphysioDataArray(object):
                     marker = '.'
             except:
                 pass
-                
-        fig = _gcf()
+            
         try:
             t_ = self['time']
         except:
@@ -530,30 +516,20 @@ class PyphysioDataArray(object):
             v_ = v_[:, :, _np.newaxis]
             n_comp = 1
         
-        axes = fig.axes
-
-        if len(fig.axes) >= n_ch:
-            #plotting signal with number of channels <= existing number of axes'
-            if (n_ch == 1):
-                if broadcast:
-                    #plot same channel across all axes'
-                    v_ = _np.repeat(v_, len(fig.axes), axis = 1)
-                    n_ch = len(fig.axes)
+        if axes is not None:
+            assert len(axes) >= n_ch
             
-        else: 
+        else:
             #create new figure
             n_cols = n_ch if n_ch < ncols else ncols
             n_rows = int(_np.ceil(n_ch/n_cols))
                 
-            fig, axes = _subplots(n_rows, n_cols, num = fig.number, sharex=True, sharey=sharey)
+            fig, axes = _subplots(n_rows, n_cols, sharex=True, sharey=sharey)
             
             if n_rows*n_cols > 1:
                 axes = axes.ravel()
             else:
                 axes = [axes]
-            
-        if len(axes) == 0:
-            axes = [axes]
         
         for i_ch in range(n_ch):
             _sca(axes[i_ch])

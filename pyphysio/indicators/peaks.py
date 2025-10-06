@@ -5,7 +5,7 @@
 
 import numpy as _np
 #import xarray as _xr
-from .._base_Indicator import _Indicator
+from . import _Indicator
 from ..utils import PeakDetection as _PeakDetection,\
     PeakSelection as _PeakSelection
 
@@ -76,11 +76,6 @@ class PeaksMax(_Indicator):
     """
     def __init__(self, delta, **kwargs):
         _Indicator.__init__(self, delta=delta, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         idx_peaks = _get_idx_peaks(signal, self._params)
@@ -110,11 +105,6 @@ class PeaksMin(_Indicator):
     """
     def __init__(self, delta, **kwargs):
         _Indicator.__init__(self, delta=delta, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         idx_peaks = _get_idx_peaks(signal, self._params)
@@ -144,11 +134,6 @@ class PeaksMean(_Indicator):
     """
     def __init__(self, delta, **kwargs):
         _Indicator.__init__(self, delta=delta, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         idx_peaks = _get_idx_peaks(signal, self._params)
@@ -179,11 +164,6 @@ class PeaksNum(_Indicator):
     """
     def __init__(self, delta, **kwargs):
         _Indicator.__init__(self, delta=delta, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         idx_peaks = _get_idx_peaks(signal, self._params)
@@ -214,11 +194,6 @@ class DurationMin(_Indicator):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
         
     def algorithm(self, signal):
         params = self._params
@@ -258,11 +233,6 @@ class DurationMax(_Indicator):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         params = self._params
@@ -302,11 +272,6 @@ class DurationMean(_Indicator):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -348,12 +313,7 @@ class SlopeMin(_Indicator):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
-
+        
     def algorithm(self, signal):
         params = self._params
         
@@ -392,11 +352,6 @@ class SlopeMax(_Indicator):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params
@@ -436,11 +391,6 @@ class SlopeMean(_Indicator):
         assert win_pre > 0, 'win_pre must be > 0'
         assert win_post > 0, 'win_post must be > 0'
         _Indicator.__init__(self, delta=delta, win_pre=win_pre, win_post=win_post, **kwargs)
-        self.chunk_dict = {'channel': 1, 'component': 1}
-    
-    def __get_template__(self, signal):
-        template = self.__compute_template__(signal, {'time':1})
-        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         params = self._params

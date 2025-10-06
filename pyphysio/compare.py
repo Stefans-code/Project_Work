@@ -1,4 +1,5 @@
 import numpy as _np
+import xarray as _xr
 import statsmodels.api as _sm
 from scipy.stats import median_abs_deviation as _median_abs_deviation
 from scipy.signal import correlate as _correlate
@@ -411,7 +412,7 @@ def mutual_info(s1, s2,
     mi = _normalized_mutual_info_score(s1_digit, s2_digit)
     return(mi)
 
-def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
+def wavelet_coherence(W1, W2, wavelet_object, use_coi = True, return_WC=False, **kwargs):
     '''
     '''
     import scipy.fftpack as _fft
@@ -448,10 +449,15 @@ def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
         T = _convolve2d(T, win[:, _np.newaxis], 'same')  # Scales are "vertical"
         return T
 
-    coi = wavelet_object._compute_coi(W1)[0,:,:].T
-    idx_na = _np.where(_np.isnan(coi))
-    coef1 = W1.values[0,:,:].T
-    coef2 = W2.values[0,:,:].T
+    W1 = W1.squeeze()
+    W2 = W2.squeeze()
+    
+    expected_dims = ('time', 'freq')
+    assert W1.dims == expected_dims
+    assert W2.dims == expected_dims
+    
+    coef1 = W1.values.T
+    coef2 = W2.values.T
     coef12 = coef1 * coef2.conj()
     
     scales = wavelet_object._params['scales']
@@ -468,9 +474,21 @@ def wavelet_coherence(W1, W2, wavelet_object, **kwargs):
     S12 = smooth(coef12, scales, nNotes)
     
     WC = abs(S12)**2 / (S1*S2)
-    WC[idx_na] = _np.nan
+    
+    if use_coi:
+        coi = wavelet_object._compute_coi(W1).T
+        idx_na = _np.where(_np.isnan(coi))
+        WC[idx_na] = _np.nan
+    
+    if return_WC:
+        WC_da = W1.copy()
+        WC_da.data = WC.T
+        return WC_da
+    
     WC_out = _np.nanmean(WC)
     return(WC_out)
-    
+
+
+
     
     

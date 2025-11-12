@@ -1,6 +1,7 @@
 import os
 import numpy as _np
 import xarray as _xr
+import pandas as _pd
 import h5py as _h5py
 from ..signal import create_signal
 import scipy.optimize as _opt
@@ -125,14 +126,19 @@ def load_snirf(datafile, load_2D=True, has_stim=False):
     
     nirs_signal = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
     
+    
     if has_stim:
-        stim_data = nirs.stim
         stim_signal = []
+        stim_data = nirs.stim
         for s in stim_data:
-            stim_signal.append(s.data)
+            t = s.data[:,0]
+            v = s.name
+            for t_ in t:
+                stim_signal.append([t_, v])
             
-        stim_signal = _np.concatenate(stim_signal)
-        stim_signal = create_signal(stim_signal[:, 1], times = stim_signal[:,0])
+        stim_signal = _pd.DataFrame(stim_signal, columns=['time', 'value'])
+        stim_signal = stim_signal.sort_values('time')
+        stim_signal = create_signal(stim_signal['value'].values, times = stim_signal['time'].values)
         return(nirs_signal, stim_signal)
     
     return(nirs_signal)

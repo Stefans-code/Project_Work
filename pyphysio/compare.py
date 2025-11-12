@@ -261,7 +261,7 @@ def compare(function, signal_1, signal_2=None, compare_dim='channel',
             pass
         signal_2 = signal_1
         
-        #compareison_matrix will be symmetrical
+        #comparison_matrix will be symmetrical
         symmetrical = True
     else:
         assert compare_dim in signal_2.dims
@@ -286,16 +286,17 @@ def compare(function, signal_1, signal_2=None, compare_dim='channel',
         s_1 = signal_1.sel({compare_dim: [dim_1]})
         
         if diag_only:
+            inner_min = i_1
             inner_max = i_1+1
         else:
+            if symmetrical:
+                inner_min = i_1
+            else:
+                inner_min = 0
             inner_max = len(compare_dim_values)
-        
-        if symmetrical:
-            inner_min = i_1
-        else:
-            inner_min = 0
-            
+                    
         for i_2 in _np.arange(inner_min, inner_max):
+            
             dim_2 = compare_dim_values[i_2]
             s_2 = signal_2.sel({compare_dim: [dim_2]})
             
@@ -488,7 +489,32 @@ def wavelet_coherence(W1, W2, wavelet_object, use_coi = True, return_WC=False, *
     WC_out = _np.nanmean(WC)
     return(WC_out)
 
+def bivariate_dtf(s1, s2, max_p=30, crit_type='AIC', freqs=None):
+    from mtmvar import mvar_criterion, AR_coeff, mvar_H
 
-
+    Fs = s1.p.get_sampling_freq()
     
+    if freqs is None:
+        freqs = _np.linspace(0.01, 0.2, 200)
+
+    s1_v = s1.p.get_values().ravel()
+    s2_v = s2.p.get_values().ravel()
+    
+    x = _np.vstack((s1_v, s2_v))
+    # Estimate optimal model order for this pair
+    crit, p_range, p_opt = mvar_criterion(x, max_p, crit_type, False)
+    print(f"  Optimal model order: p = {p_opt}")
+
+    # Estimate AR coefficients and compute transfer function
+    Ar, V = AR_coeff(x, p_opt)
+    H, _ = mvar_H(Ar, freqs, Fs)
+    
+    DTF_2chan = _np.abs(H)**2
+
+    DTF_1to2 = DTF_2chan[0,1,:]
+    DTF_2to1 = DTF_2chan[1,0,:]
+    
+    
+    DTF_out = (DTF_1to2 @ DTF_2to1) / _np.linalg.norm(DTF_1to2**2 + DTF_2to1**2)
+    return(DTF_out)
     

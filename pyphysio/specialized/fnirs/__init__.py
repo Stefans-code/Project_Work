@@ -369,7 +369,7 @@ class ComputeClusters(_Algorithm):
         return(out_signal)
 
 
-
+    
 """
 class FunctionalSeparationFilter(_Algorithm):
     '''

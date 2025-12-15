@@ -8,6 +8,6 @@ deploy:
         TWINE_PASSWORD: $TWINE_PASSWORD
     script:
         - rm -rf dist
-        - pip install twine build
-        - python -m build
-        - python -m twine upload dist/*
+        - pip install twine build --verbose
+        - python -m build --verbose
+        - python -m twine upload dist/*  --verbose

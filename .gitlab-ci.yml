@@ -4,10 +4,10 @@ deploy:
     only:
         - tags
     variables:
-        TWINE_USERNAME: $TWINE_USERNAME
-        TWINE_PASSWORD: $TWINE_PASSWORD
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: $TWINE_TOKEN
     script:
         - rm -rf dist
         - pip install twine build --verbose
         - python -m build --verbose
-        - python -m twine upload dist/* --verbose
+        - python -m twine upload dist/*  --verbose

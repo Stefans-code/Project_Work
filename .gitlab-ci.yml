@@ -4,7 +4,7 @@ deploy:
     only:
         - tags
     variables:
-        TWINE_USERNAME: $TWINE_USERNAME
+        TWINE_USERNAME: __token__
         TWINE_PASSWORD: $TWINE_PASSWORD
     script:
         - rm -rf dist

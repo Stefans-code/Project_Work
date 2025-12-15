@@ -66,9 +66,10 @@ def SDto1darray(nirs):
     nirs.attrs = SD
     return(nirs)
 
-def load_snirf(datafile, load_2D=True, has_stim=False):
+def load_snirf(datafile, montage_info='3D', has_stim=False):
     from snirf import Snirf
     
+    load_3D = montage_info == '3D'
     snirf = Snirf(datafile, 'r')
 
     nirs = snirf.nirs[0]
@@ -86,59 +87,79 @@ def load_snirf(datafile, load_2D=True, has_stim=False):
     fsamp = 1/(time[1] - time[0])
 
     SD = {}
-    SD['SpatialUnit'] = 'cm' #TODO; check
+    SD['SpatialUnit'] = 'cm'
+    
+    assert nirs.metaDataTags.LengthUnit in ['cm', 'mm']
+    
+    units_mm = nirs.metaDataTags.LengthUnit == 'mm'
     
     SD['Lambda'] = probe.wavelengths
-    distance_conv = 1
     
     info_channels = []
     for i_ch in range(n_ch):
         idx_src = data.measurementList[i_ch].sourceIndex - 1
         idx_det = data.measurementList[i_ch].detectorIndex - 1
         
-        srcPos = probe.sourcePos3D[idx_src]
-        detPos = probe.detectorPos3D[idx_det]
-        distance = _np.linalg.norm(srcPos - detPos)
         
-        if distance > 10:
-            distance_conv = 10
-            
-        if load_2D:
-            srcPos2D = probe.sourcePos2D[idx_src]
-            detPos2D = probe.detectorPos2D[idx_det]
-            distance2D = _np.linalg.norm(srcPos2D - detPos2D)
-            ch_dict = [i_ch, idx_src, idx_det, distance/distance_conv, distance2D/distance_conv]
+        if load_3D:
+            srcPos = probe.sourcePos3D[idx_src]
+            detPos = probe.detectorPos3D[idx_det]
+            distance = _np.linalg.norm(srcPos - detPos)
+        
         else:
-            ch_dict = [i_ch, idx_src, idx_det, distance/distance_conv]
+            srcPos = probe.sourcePos2D[idx_src]
+            detPos = probe.detectorPos2D[idx_det]
+            distance = _np.linalg.norm(srcPos - detPos)
+            
+        if units_mm:
+            distance = distance/10
+            srcPos = srcPos/10
+            detPos = detPos/10
+            
+        ch_dict = [i_ch, idx_src, idx_det, distance]
+        
         
         info_channels.append(ch_dict)
     
     info_channels = _np.array(info_channels)
     SD['Channels'] = info_channels
-    SD['SpatialUnit'] = 'cm' #TODO; check
     SD['Lambda'] = probe.wavelengths
-    SD['SrcPos'] = probe.sourcePos3D/distance_conv
-    SD['DetPos'] = probe.detectorPos3D/distance_conv
-    
-    if load_2D:
-        SD['SrcPos2D'] = probe.sourcePos2D/distance_conv
-        SD['DetPos2D'] = probe.detectorPos2D/distance_conv
+    SD['SrcPos'] = srcPos
+    SD['DetPos'] = detPos
     
     nirs_signal = create_signal(nirs_out, sampling_freq=fsamp, start_time=0, name = 'nirs', info=SD)
     
-    
+    values_as_string = False
+    recoding_dict = None
     if has_stim:
         stim_signal = []
         stim_data = nirs.stim
         for s in stim_data:
-            t = s.data[:,0]
+            if _np.ndim(s.data) == 1:
+                t = [s.data[0]]
+            else:
+                t = s.data[:, 0]
             v = s.name
+            if isinstance(v, str):
+                values_as_string = True
+                
             for t_ in t:
                 stim_signal.append([t_, v])
             
         stim_signal = _pd.DataFrame(stim_signal, columns=['time', 'value'])
         stim_signal = stim_signal.sort_values('time')
-        stim_signal = create_signal(stim_signal['value'].values, times = stim_signal['time'].values)
+        
+        signal_values = stim_signal['value'].values
+        
+        if values_as_string:
+            unique_values = _np.unique(signal_values)
+            recoding_dict = dict([(v, i) for i,v in enumerate(unique_values)])
+            signal_values = _np.array([recoding_dict[v] for v in signal_values])
+        
+        
+        stim_signal = create_signal(signal_values, times = stim_signal['time'].values)
+        if recoding_dict is not None:
+            stim_signal.attrs.update({'event_codes': recoding_dict})
         return(nirs_signal, stim_signal)
     
     return(nirs_signal)

@@ -80,11 +80,13 @@ class SignalQualityDeepLearning(_SQIIndicator):
         signal_in = _torch.tensor(signal_in.T).float()
         
         output = self.model.forward(signal_in.unsqueeze(0).to(device))
-        _, quality = _torch.max(output,1)
-        quality = quality.cpu().numpy()
-        quality = _np.reshape(quality, (1, 1))
-        quality_out = self.__check_good__(quality, signal)
-        return(quality_out)
+        prediction = output.cpu().detach().numpy()[0][1]
+        prediction_out = self.__check_good__(prediction, signal)
+        # _, quality = _torch.max(output,1)
+        # quality = quality.cpu().numpy()
+        # quality = _np.reshape(quality, (1, 1))
+        # quality_out = self.__check_good__(quality, signal)
+        return(prediction_out) #quality_out
 
         # confidence_good = output.cpu().detach().numpy()[0][1]
         # print(confidence_good)

@@ -4,7 +4,10 @@ from ..._base_algorithm import _Algorithm
 from sklearn.decomposition import PCA as _PCA, FastICA as _ICA
 from sklearn.preprocessing import StandardScaler as _StandardScaler
 import statsmodels.api as _sm
-
+from ...sqi import _SQIIndicator
+from ...filters import IIRFilter as _IIRFilter, Normalize as _Normalize
+from ... import create_signal
+from ...utils import PSD as _PSD
 # from ._dl_sqi import SignalQualityDeepLearning
 from ._convert import Raw2Oxy, Raw2OD, OD2Oxy
 import matplotlib.pyplot as _plt
@@ -369,6 +372,104 @@ class ComputeClusters(_Algorithm):
         return(out_signal)
 
 
+#%% SQI
+class ScalpCouplingIndexCorrelation(_SQIIndicator):
+    """
+    Compute the Scalp Coupling Index (correlation method)
+    see Pollonini et al. 2016, Biomedical Optics, 7(12)
+
+    """    
+    def __init__(self, threshold = [0.8, 1], cardiac_band=[0.5, 2.5], **kwargs):
+        _SQIIndicator.__init__(self, threshold=threshold, cardiac_band=cardiac_band, **kwargs)
+        self.required_dims = ['time', 'component']
+    
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1,
+                                                      'component': 1,
+                                                      'is_good': 2})
+        return(chunk_dict, template)
+    
+    def algorithm(self, signal):
+        cardiac_band = self._params['cardiac_band']
+        
+        if cardiac_band != None:
+            signal = _IIRFilter(cardiac_band)(signal)
+        
+        signal = _Normalize()(signal)
+        
+        signal_values = signal.values.squeeze()
+        
+        sci = _np.corrcoef(signal_values[:, 0], signal_values[:, 1])[0,1]
+        
+        sci_out = self.__check_good__(sci, signal)
+        return sci_out
+
+class ScalpCouplingIndexPower(_SQIIndicator):
+    
+    """
+    Compute the Scalp Coupling Index (power method)
+    see Pollonini et al. 2016, Biomedical Optics, 7(12)
+
+    """    
+    def __init__(self, threshold = [0.1, 1], cardiac_band=[0.5, 2.5], method='period', **kwargs):
+        _SQIIndicator.__init__(self, threshold=threshold, cardiac_band=cardiac_band,
+                               method=method, **kwargs)
+        self.required_dims = ['time', 'component']
+    
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1,
+                                                      'component': 1,
+                                                      'is_good': 2})
+        return(chunk_dict, template)
+    
+    def algorithm(self, signal):
+        cardiac_band = self._params['cardiac_band']
+        
+        if cardiac_band != None:
+            signal = _IIRFilter(cardiac_band)(signal)
+        
+        signal = _Normalize()(signal) 
+        
+        signal_values = signal.values.squeeze() + 10
+        
+        method = self._params['method']
+        
+        crosscorr = (signal_values[:, 0] * signal_values[:, 1])/100
+        
+        crosscorr = create_signal(crosscorr, sampling_freq=signal.p.get_sampling_freq())
+
+        crosscorr = _Normalize()(crosscorr) 
+        psd = _PSD(method, scaling='spectrum')(crosscorr)
+        
+        max_power_cardiac = float(psd.query(freq=f"freq > {cardiac_band[0]} & freq < {cardiac_band[1]}").max())
+        
+        max_out = self.__check_good__(max_power_cardiac, signal)
+        return max_out
+
+# class CVWavelengths(_SQIIndicator):
+#     """
+#     Compute the absolute difference of Coefficients of Variation of the two wavelengths.
+#     Ref:
+#         Lloyd‐Fox, Sarah, et al. "Social perception in infancy: a near infrared spectroscopy study." Child development 80.4 (2009): 986-999.
+
+#     """
+    
+#     def __init__(self, threshold, **kwargs):
+#         _SQIIndicator.__init__(self,  threshold=threshold, **kwargs)
+#         self.required_dims = ['time', 'component']
+    
+#     def algorithm(self, signal):
+        
+#         cv_ch = CVSignal([0,1])(signal)
+#         cv_ch = cv_ch.values
+#         cv1 = cv_ch[0,0,0]
+#         cv2 = cv_ch[0,0,1]
+#         cv_diff = abs(cv1-cv2)
+        
+#         cv_diff_out = self.__check_good__(cv_diff, signal)
+#         return(cv_diff_out)
     
 """
 class FunctionalSeparationFilter(_Algorithm):

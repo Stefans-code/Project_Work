@@ -4,6 +4,7 @@ from .indicators.frequencydomain import PowerInBand as _PowerInBand
 from .filters import IIRFilter as _IIRFilter, Normalize as _Normalize
 import scipy.stats as _sps
 from ._base_algorithm import _Algorithm
+from .utils import PSD as _PSD
 
 class _SQIIndicator(_Algorithm):
     """ 
@@ -79,22 +80,27 @@ class SpectralPowerRatio(_SQIIndicator):
     Compute the Spectral Power Ratio
 
     """
-    def __init__(self, threshold, method='ar', bandN=[5,14], bandD=[5,50],**kwargs):
+    def __init__(self, threshold, method='ar', bandN=None, bandD=None, **kwargs):
         _SQIIndicator.__init__(self, threshold, method=method, bandN=bandN, bandD=bandD, **kwargs)
         self.required_dims = ['time']
     
     def algorithm(self, signal):
         params = self._params
+        method = params['method']
         bandN = params['bandN']
         bandD = params['bandD']
         assert bandD[1] < signal.p.get_sampling_freq()/2, 'The higher frequency in bandD is greater than fsamp/2: cannot compute power' # CHECK: check sampling frequency of the signal (e.g. <=128)
-        p_N = _PowerInBand(bandN[0], bandN[1], params['method'])(signal)
-        p_D = _PowerInBand(bandD[0],bandD[1], params['method'])(signal)
         
-        spr = p_N/p_D
+        psd = _PSD(method=method)(signal)
+        
+        power_N = psd.query(freq=f"freq >= {bandN[0]} & freq <= {bandN[1]}").sum(dim='freq')
+        power_D = psd.query(freq=f"freq >= {bandD[0]} & freq <= {bandD[1]}").sum(dim='freq')
+        
+        
+        spr = float(power_N)/float(power_D)
         spr_out = self.__check_good__(spr, signal)
         return spr_out
-
+    
 class CVSignal(_SQIIndicator):
     """
     Compute the Coefficient of variation of the signal
@@ -130,92 +136,3 @@ class PercentageNAN(_SQIIndicator):
         perc = 100*n_nan/len(signal_values)
         perc_out = self.__check_good__(perc, signal)
         return perc_out
-
-class ScalpCoupling(_SQIIndicator):
-    """
-    Compute the Scalp Coupling Index
-    see Pollonini et al. 2016, Biomedical Optics, 7(12)
-
-    """    
-    def __init__(self, threshold, **kwargs):
-        _SQIIndicator.__init__(self, threshold=threshold, **kwargs)
-        self.required_dims = ['time', 'component']
-        
-    def algorithm(self, signal):
-        # print('-----> ', self.name)
-        #1 BANDPASS 0.5-2.5
-        signal_proc = _IIRFilter(fp=[0.5, 2.5], fs=[0.1, 3], ftype='ellip')(signal)
-        #2 NORMALIZE
-        signal_proc = _Normalize()(signal_proc, dimensions={'time':0}).values
-        
-        data1 = signal_proc[:,0, 0]
-        data2 = signal_proc[:,0, 1]
-        corr = float(_np.correlate(data1, data2, 
-                                   mode='valid')/len(data1))
-        corr_out = self.__check_good__(corr, signal)
-        # print(result.shape)
-        # print('<----- ', self.name)
-        return corr_out
-
-# class ScalpCouplingPower(NIRSSignalQualityIndicator):
-#     #TODO: Merge with cardiac power
-#     """
-#     Compute the Scalp Coupling Index
-#     see Pollonini et al. 2016, Biomedical Optics, 7(12)
-
-#     """    
-#     def __init__(self, threshold, method='welch', **kwargs):
-#         _SignalQualityIndicator.__init__(self, threshold=threshold, method=method, **kwargs)
-#         self.dimensions = {'time':1, 'component': 1}
-    
-#     def algorithm(self, signal):
-#         # print('----->', self.name)
-#         method = self._params['method']
-        
-#         #1 BANDPASS 0.5-2.5
-#         signal_proc = filt.IIRFilter(fp=[0.5, 2.5], fs=[0.1, 3], ftype='ellip')(signal)
-        
-#         #2 NORMALIZE
-#         signal_proc = filt.Normalize()(signal_proc).values
-        
-#         nsamp = len(signal_proc)
-        
-#         data1 = signal_proc[:,0, 0]
-#         data2 = signal_proc[:,0, 1]
-#         corr = _np.correlate(data1.ravel(), data2.ravel(),
-#                              mode='same')/nsamp
-
-#         corr = _np.stack([corr, corr], 1)
-#         corr = _np.expand_dims(corr, 1)
-#         corr = signal.copy(data=corr)
-        
-#         corr = corr.sel(component = [0])
-#         psd = tools.PSD(method, normalize=False)(corr)
-        
-#         SCI_power = _np.max(psd.values, axis = 0)
-        
-#         # print('<-----', self.name)
-#         return _np.expand_dims(SCI_power, 0)
-
-class CVWavelengths(_SQIIndicator):
-    """
-    Compute the absolute difference of Coefficients of Variation of the two wavelengths.
-    Ref:
-        Lloyd‐Fox, Sarah, et al. "Social perception in infancy: a near infrared spectroscopy study." Child development 80.4 (2009): 986-999.
-
-    """
-    
-    def __init__(self, threshold, **kwargs):
-        _SQIIndicator.__init__(self,  threshold=threshold, **kwargs)
-        self.required_dims = ['time', 'component']
-    
-    def algorithm(self, signal):
-        
-        cv_ch = CVSignal([0,1])(signal)
-        cv_ch = cv_ch.values
-        cv1 = cv_ch[0,0,0]
-        cv2 = cv_ch[0,0,1]
-        cv_diff = abs(cv1-cv2)
-        
-        cv_diff_out = self.__check_good__(cv_diff, signal)
-        return(cv_diff_out)

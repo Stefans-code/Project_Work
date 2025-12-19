@@ -429,8 +429,8 @@ class PyphysioDataArray(object):
         tp_with_nans = _np.where(n_nans_foreach_timepoint > 0)[0]
             
         #nans at different timepoints across channels           
-        if _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp and \
-            na_action == 'remove':
+        if na_action == 'remove' and \
+            _np.mean(n_nans_foreach_timepoint[tp_with_nans]) != n_ch*n_cp:
                 #we cannot remove timepoints with nans, as not all ch / cp have nans
                 #at the same timepoints
                 raise ValueError('Nans in the signal, but impossible to remove timepoints as nan values do not share the same timepoints')
@@ -446,7 +446,7 @@ class PyphysioDataArray(object):
         #using the xarray.DataArray.interpolate_na or dropna
         if nans_in_dataset:
             if na_action == 'keep':
-                print('Nans in the output signal, please check the results')
+                # print('Nans in the output signal, please check the results')
                 return(self.da)
             elif na_action == 'impute':
                 signal = self.da.interpolate_na('time', method=method,
@@ -468,7 +468,7 @@ class PyphysioDataArray(object):
                 signal.attrs['sampling_freq'] = 'unevenly'
                 return(signal)
         else:
-            print('No nans in the signal, no action performed')
+            # print('No nans in the signal, no action performed')
             return(self.da)
     
     

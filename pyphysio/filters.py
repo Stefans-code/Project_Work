@@ -117,7 +117,7 @@ class IIRFilter(_Filter):
 
     """
 
-    def __init__(self, fp, fs=None, btype='bandpass', order=3, loss=.1, att=40, ftype='cheby1', safe=True):
+    def __init__(self, fp, fs=None, btype='bandpass', order=3, loss=.1, att=40, ftype='cheby1', safe=False):
         assert loss > 0, "Loss value should be positive"
         assert att > 0, "Attenuation value should be positive"
         assert att > loss, "Attenuation value should be greater than loss value"

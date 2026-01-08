@@ -14,7 +14,24 @@ import matplotlib.pyplot as _plt
 import matplotlib as _mpl
 import matplotlib.cm as _cm
 
-
+def get_cardiac_freq(nirs, bpm_min=45, bpm_max=120):
+    f_max = bpm_max/60
+    f_min = bpm_min/60
+    
+    nirs_cardiac = _IIRFilter([f_min, f_max])(nirs)
+    
+    ## Estimate cardiac frequency
+    ### Average channels
+    nirs_mean = nirs_cardiac.mean(dim=['component', 'channel'])
+    
+    ### Compute spectrum
+    psd = _PSD('period')(nirs_mean)
+    
+    ### Obtain peak freq
+    f_peak = float(psd['freq'][_np.argmax(psd.values.ravel())].values)
+    
+    return(f_peak)
+    
 #COMPARE 
 def compute_betas_barker(nirs_signal, dm, pmax=10, max_iter = 10):
     Y = nirs_signal
@@ -443,8 +460,11 @@ class ScalpCouplingIndexPower(_SQIIndicator):
         crosscorr = _Normalize()(crosscorr) 
         psd = _PSD(method, scaling='spectrum')(crosscorr)
         
-        max_power_cardiac = float(psd.query(freq=f"freq > {cardiac_band[0]} & freq < {cardiac_band[1]}").max())
-        
+        if cardiac_band != None:
+            max_power_cardiac = float(psd.query(freq=f"freq > {cardiac_band[0]} & freq < {cardiac_band[1]}").max())
+        else:
+            max_power_cardiac = float(psd.max())
+            
         max_out = self.__check_good__(max_power_cardiac, signal)
         return max_out
 

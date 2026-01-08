@@ -247,7 +247,6 @@ class OD2Oxy(_Filter):
     
     def algorithm(self, signal):
         SD = signal.attrs
-        
         Lambda = SD['Lambda']
         age = self._params['age']
         
@@ -257,7 +256,7 @@ class OD2Oxy(_Filter):
         # print(ppf)
         OD = signal.values
         
-        channel = int(signal.coords['channel'])
+        channel = int(signal.coords['channel'][0])
         oxy = _OD2Conc(OD, SD, channel, ppf)
         
         return(oxy)

@@ -1,6 +1,9 @@
 # coding=utf-8
 from setuptools import setup
+# from .pyphysio import version
 #import conda_build.bdist_conda
+
+version = '4.1-beta'
 
 setup(
     name='pyphysio',
@@ -17,7 +20,7 @@ setup(
               'pyphysio.generators'],
     package_data={'pyphysio': ['test_data/*', 'specialized/fnirs/_dlweights/*']},
     # data_files={'test_data_out': ['info_medical', 'medical.txt.bz2']},
-    version='4.1-beta',
+    version=version,
     description='Python library for physiological signals analysis (IBI & HRV, ECG, BVP, EDA, RESP, fNIRS, ...)',
     author='a.bizzego',
     author_email='andrea.bizzego@unitn.it',

@@ -4,6 +4,8 @@ import os as _os
 from .signal import create_signal, load
 from .loaders import load_xrnirs
 
+__version__ = '4.1-beta'
+
 _xr.set_options(keep_attrs=True)
 
 try:
@@ -17,7 +19,7 @@ except:
     
 print("Please cite:")
 print("Bizzego et al. (2019) 'pyphysio: A physiological signal processing library for data science approaches in physiology', SoftwareX")
-
+print(__version__)
 
 #namespace
 from .signal import *

@@ -279,7 +279,7 @@ class Raw2Oxy(_Filter):
         # print(ppf)
         OD = _intensity2OD(signal_values)
         
-        channel = int(signal.coords['channel'])
+        channel = int(signal.coords['channel'][0])
         oxy = _OD2Conc(OD, SD, channel, ppf)
         
         return(oxy)

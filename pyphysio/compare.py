@@ -5,7 +5,7 @@ from scipy.stats import median_abs_deviation as _median_abs_deviation
 from scipy.signal import correlate as _correlate
 from sklearn.metrics import normalized_mutual_info_score as _normalized_mutual_info_score
 from .utils import Wavelet as _Wavelet
-
+from .filters import Prewhitening as _Prewhitening
 import statsmodels.tsa.api as _smt
 
 #%%%
@@ -307,6 +307,17 @@ def compare(function, signal_1, signal_2=None, compare_dim='channel',
                 comp_mat[i_2, i_1] = R
 
     return(comp_mat)
+
+def ewm_correlation(s1, s2, span, prewhitening=True, T=1):
+    fsamp = s1.p.get_sampling_freq()
+    pord = int(fsamp*T)
+    if prewhitening:
+        s1 = _Prewhitening(pmax=pord)(s1)
+        s2 = _Prewhitening(pmax=pord)(s2)
+    
+    s1_ewm = s1.rolling_exp(time=span, window_type='span')
+    corr = s1_ewm.corr(s2)
+    return(corr)
 
 def robust_correlation(s1, s2):
     '''

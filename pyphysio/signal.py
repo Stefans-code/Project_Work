@@ -362,6 +362,12 @@ class PyphysioDataArray(object):
     def get_info(self):
         return self.da.attrs
 
+    def select_channels(self, channels, keep_dims=True):
+        if isinstance(channels, int) and keep_dims:
+            channels = [channels]
+        
+        return self.da.sel({'channel': channels})
+        
     # #TODO: 
     # def replace(self, new_vals):
     #     return self.assign({'signal': (('time', 'channel', 'component'), new_vals)})

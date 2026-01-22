@@ -7,7 +7,8 @@ except:
 from scipy.signal import filtfilt as _filtfilt, \
     filter_design as _filter_design, iirfilter as _iirfilter, \
         deconvolve as _deconvolve, firwin as _firwin, \
-            iirnotch as _iirnotch, lfilter as _lfilter
+            iirnotch as _iirnotch, lfilter as _lfilter, \
+                iirdesign as _iirdesign
 from ._base_algorithm import _Algorithm
 
 class _Filter(_Algorithm):
@@ -147,7 +148,7 @@ class IIRFilter(_Filter):
             ws = fs / nyq
             assert (ws<1).all(), f"invalid fs for given sampling frequency {fsamp}"
         
-            b, a = _filter_design.iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
+            b, a = _iirdesign(wp, ws, loss, att, ftype=ftype, output="ba")
         
 
         sig_filtered = _filtfilt(b, a, signal.values.ravel(), axis=0)

@@ -3,6 +3,53 @@ import numpy as _np
 #TODO: we should test it
 from ..signal import create_signal
 
+# Import physiological signal generators
+from .physiological import (
+    ECGGenerator,
+    RespirationGenerator,
+    EDAGenerator,
+    fNIRSGenerator,
+    EEGGenerator,
+    EMGGenerator,
+    BloodVolumePulseGenerator,
+    RealTestDataGenerator,
+)
+
+# Import fundamental signal generators
+from .fundamental import (
+    FundamentalSignalGenerator,
+    SinusoidalGenerator,
+    NoiseGenerator,
+    CompositeSignalGenerator,
+    WindowGenerator,
+    SawtoothGenerator,
+    GaussianComponentGenerator,
+    PolynomialGenerator,
+)
+
+__all__ = [
+    # Physiological generators
+    'ECGGenerator',
+    'RespirationGenerator',
+    'EDAGenerator',
+    'fNIRSGenerator',
+    'EEGGenerator',
+    'EMGGenerator',
+    'BloodVolumePulseGenerator',
+    'RealTestDataGenerator',
+    # Fundamental generators
+    'FundamentalSignalGenerator',
+    'SinusoidalGenerator',
+    'NoiseGenerator',
+    'CompositeSignalGenerator',
+    'WindowGenerator',
+    'SawtoothGenerator',
+    'GaussianComponentGenerator',
+    'PolynomialGenerator',
+    # Legacy functions
+    'generate_signal',
+]
+
 #%%
 def to3d(template, n_ch=None, n_cp=None):
     assert template.ndim <= 3

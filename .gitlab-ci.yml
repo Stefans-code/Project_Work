@@ -1,8 +1,9 @@
 deploy:
     image: python:3.10
     stage: deploy
-    only:
-        - tags
+    rules:
+        - if: $CI_COMMIT_TAG                  # Run automatically on tags
+        - if: $CI_PIPELINE_SOURCE == "web"    # Allow manual "Run Pipeline" from UI
     variables:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: $TWINE_TOKEN

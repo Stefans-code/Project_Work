@@ -11,4 +11,5 @@ deploy:
         - rm -rf dist
         - pip install twine build --verbose
         - python -m build --verbose
+        - echo "Token length is ${#TWINE_TOKEN}"
         - python -m twine upload dist/* -u "__token__" -p "$TWINE_TOKEN" --verbose

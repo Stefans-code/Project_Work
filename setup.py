@@ -48,14 +48,12 @@ setup(
         'bottleneck',
         'pyxdf',
         'csaps',
-        'nilearn'
-    ],
-    requires=[
-        'h5py'
-        'pytorch',
-        'csaps',
         'nilearn',
-        'pytest',
+        'h5py',
+        'pytest'
+    ],
+    requires=[        
+        'pytorch',
     ],
 )
 

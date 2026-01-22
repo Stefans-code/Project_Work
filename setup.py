@@ -3,7 +3,7 @@ from setuptools import setup
 # from .pyphysio import version
 #import conda_build.bdist_conda
 
-version = '4.3-beta'
+version = '4.4.0'
 
 setup(
     name='pyphysio',

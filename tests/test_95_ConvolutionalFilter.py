@@ -4,6 +4,9 @@ from pyphysio.signal import create_signal
 import pyphysio.filters as filt
 from pyphysio.generators.fundamental import SinusoidalGenerator
 
+# Make tests deterministic
+np.random.seed(0)
+
 # TODO-AI [PRIORITY: HIGH]: Use accessor for signal arrays (`signal.p.get_values()`)
 # and seed any calls to `np.random.*` to ensure determinism in tests.
 # TODO-AI [PRIORITY: MEDIUM]: Parametrize window types and window lengths.
@@ -21,7 +24,7 @@ class TestConvolutionalFilter:
         # Create clean sinusoidal signal
         components = [{'frequency': signal_freq, 'amplitude': 1.0}]
         clean_signal = SinusoidalGenerator.multi_component_sine(duration, fsamp, components)
-        clean_data = clean_signal.data.flatten()
+        clean_data = clean_signal.p.get_values().ravel()
         
         # Add noise
         noise_std = 0.1
@@ -36,7 +39,7 @@ class TestConvolutionalFilter:
             # Apply convolutional filter with small window
             conv_filter = filt.ConvolutionalFilter(win_type, win_len=0.02)
             filtered_signal = conv_filter(noisy_signal)
-            filtered_data = np.asarray(filtered_signal).ravel()
+            filtered_data = filtered_signal.p.get_values().ravel()
             
             # Compute errors
             noisy_error = np.mean((noisy_data - clean_data) ** 2)

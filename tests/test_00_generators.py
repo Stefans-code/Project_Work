@@ -50,16 +50,18 @@ class TestFundamentalSignalGenerator:
         signal = FundamentalSignalGenerator.zeros(
             duration=10.0, sampling_freq=100
         )
-        assert signal.shape == (1000,)
-        assert np.allclose(signal.values, 0)
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
+        assert np.allclose(vals, 0)
     
     def test_ones_generation(self):
         """Test generation of ones signal"""
         signal = FundamentalSignalGenerator.ones(
             duration=10.0, sampling_freq=100
         )
-        assert signal.shape == (1000,)
-        assert np.allclose(signal.values, 1)
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
+        assert np.allclose(vals, 1)
     
     def test_constant_generation(self):
         """Test generation of constant signal"""
@@ -67,7 +69,8 @@ class TestFundamentalSignalGenerator:
         signal = FundamentalSignalGenerator.constant(
             duration=10.0, sampling_freq=50, value=value
         )
-        assert np.allclose(signal.values, value)
+        vals = signal.p.get_values().ravel()
+        assert np.allclose(vals, value)
     
     def test_ramp_generation(self):
         """Test generation of ramp signal"""
@@ -75,7 +78,8 @@ class TestFundamentalSignalGenerator:
             duration=10.0, sampling_freq=10, start_value=0, end_value=10
         )
         expected = np.linspace(0, 10, 100)
-        assert np.allclose(signal.values, expected)
+        vals = signal.p.get_values().ravel()
+        assert np.allclose(vals, expected)
     
     def test_delta_single(self):
         """Test generation of single delta function"""
@@ -83,10 +87,12 @@ class TestFundamentalSignalGenerator:
             duration=10.0, sampling_freq=10,
             delta_times=[0.5], delta_values=[1.0]
         )
-        assert len(signal.shape) == 1
-        assert signal.shape[0] == 100
-        # Delta should be at t=0.5s -> index 5
-        assert signal.values[5] == 1.0
+        vals = signal.p.get_values().ravel()
+        assert vals.ndim == 1
+        assert vals.shape[0] == 100
+        # Delta should be at t=0.5s -> index ~5
+        idx = int(round(0.5 * 10))
+        assert vals[idx] == 1.0
     
     def test_delta_multiple(self):
         """Test generation of multiple delta functions"""
@@ -94,8 +100,9 @@ class TestFundamentalSignalGenerator:
             duration=10.0, sampling_freq=10,
             delta_times=[0.5, 1.5], delta_values=[1.0, 2.0]
         )
-        assert signal.values[5] == 1.0
-        assert signal.values[15] == 2.0
+        vals = signal.p.get_values().ravel()
+        assert vals[int(round(0.5 * 10))] == 1.0
+        assert vals[int(round(1.5 * 10))] == 2.0
     
     def test_boxcar_generation(self):
         """Test generation of boxcar (rectangular pulse) signal"""
@@ -105,11 +112,12 @@ class TestFundamentalSignalGenerator:
             transitions=[(0.25, 0.75)]
         )
         # Check that signal is non-zero in the boxcar region
+        vals = signal.p.get_values().ravel()
         start_idx = int(0.25 * 100)
         end_idx = int(0.75 * 100)
-        assert np.allclose(signal.values[start_idx:end_idx], 2.0)
-        assert np.allclose(signal.values[:start_idx], 0)
-        assert np.allclose(signal.values[end_idx:], 0)
+        assert np.allclose(vals[start_idx:end_idx], 2.0)
+        assert np.allclose(vals[:start_idx], 0)
+        assert np.allclose(vals[end_idx:], 0)
 
 
 class TestSinusoidalGenerator:

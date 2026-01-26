@@ -39,6 +39,9 @@ from pyphysio.generators.fundamental import (
     SpikeGenerator, BaselineShiftGenerator
 )
 
+# Make tests deterministic where randomization is used
+np.random.seed(0)
+
 # TODO-AI [PRIORITY: HIGH]: Use `signal.p.get_values()` consistently instead of
 # `signal.values` or `signal.data` for numeric comparisons.
 # TODO-AI [PRIORITY: HIGH]: Seed randomness (e.g., spike amplitudes) to make

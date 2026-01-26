@@ -25,7 +25,21 @@ from pyphysio.generators import (
     fNIRSGenerator,
     EEGGenerator,
     EMGGenerator,
+    SpikeGenerator,
+    BaselineShiftGenerator,
 )
+
+# TODO-AI [PRIORITY: HIGH]: Use the pyphysio accessor for data access.
+# - Replace direct uses of `signal.values`, `signal.data`, `np.asarray(signal)`
+#   with `signal.p.get_values()` or `signal.p.get_values().ravel()`.
+# TODO-AI [PRIORITY: HIGH]: Seed RNG for deterministic tests.
+# - Use generator `seed=` parameters when available or call `np.random.seed(0)`
+#   immediately before stochastic calls.
+# TODO-AI [PRIORITY: MEDIUM]: Convert brittle numeric assertions to tolerant
+# comparisons (use relative tolerances or `pytest.approx`).
+# TODO-AI [PRIORITY: MEDIUM]: Parametrize repeated tests (zeros/ones/const/ramp).
+# TODO-AI [PRIORITY: LOW]: Remove leftover TODO comments inside tests or
+# convert them into explicit assertions.
 
 
 class TestFundamentalSignalGenerator:
@@ -552,6 +566,67 @@ class TestGeneratorIntegration:
         for name, signal in signals.items():
             assert signal.shape == (10000,), f"{name} has wrong shape"
             assert np.isfinite(signal.values).all(), f"{name} has NaN/inf values"
+
+
+class TestArtifactGenerators:
+    """Tests for SpikeGenerator and BaselineShiftGenerator"""
+
+    def test_spike_generator_single_and_peak(self):
+        duration = 2.0
+        fs = 100
+        # single spike at 0.5s, amplitude 5.0
+        sig = SpikeGenerator.spikes(duration=duration, sampling_freq=fs,
+                                    times=[0.5], amplitudes=5.0, durations=0.02,
+                                    shape='linear')
+        assert sig.shape[0] == int(duration * fs)
+        idx = int(0.5 * fs)
+        # peak near expected index and noticeably > 0
+        assert sig.values[idx] > 3.0
+
+    def test_spike_generator_per_event_params(self):
+        duration = 2.0
+        fs = 100
+        times = [0.2, 1.0]
+        amps = [2.0, 4.0]
+        durs = [0.01, 0.05]
+        sig = SpikeGenerator.spikes(duration=duration, sampling_freq=fs,
+                                    times=times, amplitudes=amps, durations=durs,
+                                    shape='gaussian')
+        assert sig.shape[0] == int(duration * fs)
+        idx0 = int(times[0] * fs)
+        idx1 = int(times[1] * fs)
+        peak0 = np.max(sig.values[max(0, idx0-2):idx0+3])
+        peak1 = np.max(sig.values[max(0, idx1-3):idx1+4])
+        assert peak0 > 0
+        assert peak1 > 0
+        assert peak1 > peak0
+
+    def test_baseline_shift_single_and_maintained(self):
+        duration = 3.0
+        fs = 100
+        clean = np.zeros(int(duration * fs))
+        shift = BaselineShiftGenerator.baseline_shifts(duration=duration, sampling_freq=fs,
+                                                       times=[1.0], amplitudes=3.0, durations=0.1)
+        assert shift.shape[0] == int(duration * fs)
+        idx = int(1.0 * fs)
+        # after ramp end, mean offset should be approx amplitude
+        post_mean = np.mean(shift.values[idx + int(0.1*fs) + 1:])
+        assert np.isclose(post_mean, 3.0, atol=0.6)
+
+    def test_baseline_shift_multiple_per_event(self):
+        duration = 4.0
+        fs = 100
+        times = [0.5, 2.0]
+        amps = [1.0, -0.5]
+        durs = [0.1, 0.2]
+        shift = BaselineShiftGenerator.baseline_shifts(duration=duration, sampling_freq=fs,
+                                                       times=times, amplitudes=amps, durations=durs)
+        assert shift.shape[0] == int(duration * fs)
+        idx0 = int(times[0] * fs)
+        idx1 = int(times[1] * fs)
+        # check cumulative effect after second shift
+        tail_mean = np.mean(shift.values[idx1 + int(durs[1]*fs) + 1:])
+        assert np.isclose(tail_mean, amps[0] + amps[1], atol=0.8)
 
 
 if __name__ == '__main__':

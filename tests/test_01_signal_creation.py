@@ -9,6 +9,13 @@ from pyphysio.signal import create_signal, load
 from pyphysio import TestData
 import xarray as xr
 
+# TODO-AI [PRIORITY: HIGH]: Standardize signal access via accessor.
+# - Replace uses of `signal.values` with `signal.p.get_values()`.
+# TODO-AI [PRIORITY: HIGH]: Make random data deterministic in tests.
+# - Add `np.random.seed(0)` at module start or use a seeded `rng` fixture.
+# TODO-AI [PRIORITY: MEDIUM]: Replace loose duration/threshold checks with
+# exact or `pytest.approx` comparisons derived from sampling_freq and length.
+
 
 class TestSignalCreationBasic:
     """Test basic signal creation functionality."""

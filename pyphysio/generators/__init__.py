@@ -25,6 +25,8 @@ from .fundamental import (
     SawtoothGenerator,
     GaussianComponentGenerator,
     PolynomialGenerator,
+    SpikeGenerator,
+    BaselineShiftGenerator,
 )
 
 __all__ = [
@@ -46,6 +48,8 @@ __all__ = [
     'SawtoothGenerator',
     'GaussianComponentGenerator',
     'PolynomialGenerator',
+    'SpikeGenerator',
+    'BaselineShiftGenerator',
     # Legacy functions
     'generate_signal',
 ]

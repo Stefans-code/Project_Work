@@ -1,0 +1,118 @@
+import pytest
+import numpy as np
+from pyphysio.signal import create_signal
+import pyphysio.filters as filt
+from pyphysio.generators.fundamental import SinusoidalGenerator
+
+# TODO-AI [PRIORITY: HIGH]: Replace direct data access with `signal.p.get_values()`
+# and use seeded generator signals for spectral response tests.
+# TODO-AI [PRIORITY: MEDIUM]: Parametrize `btype`/`ftype` combinations to avoid
+# repeated code and improve coverage.
+
+class TestIIRFilter:
+    """Tests for IIRFilter to verify frequency filtering behavior."""
+    
+    def _compute_power_at_frequency(self, signal, freq_hz, fsamp, bandwidth_hz=5):
+        """Compute power in a frequency band using FFT.
+        
+        Args:
+            signal: Input signal
+            freq_hz: Center frequency in Hz
+            fsamp: Sampling frequency in Hz
+            bandwidth_hz: Bandwidth around target frequency in Hz
+            
+        Returns:
+            Power in the frequency band
+        """
+        data = signal.data.flatten() if hasattr(signal.data, 'flatten') else signal.data
+        fft_vals = np.fft.fft(data)
+        freqs = np.fft.fftfreq(len(data), 1/fsamp)
+        power = np.abs(fft_vals) ** 2 / len(data)  # Normalize by length to avoid overflow
+        
+        # Select frequency band
+        mask = (np.abs(freqs) >= freq_hz - bandwidth_hz/2) & (np.abs(freqs) <= freq_hz + bandwidth_hz/2)
+        band_power = np.sum(power[mask])
+        return band_power
+    
+    def test_iir_filter_frequency_response(self):
+        """Test IIRFilter correctly filters frequencies for all btype and ftype combinations."""
+        fsamp = 1000  # sampling frequency
+        
+        # Define test cases for different filter types using Hz frequencies
+        # fp and fs are in Hz (not normalized), with wider separation to allow filter solutions
+        test_cases = [
+            {'btype': 'lowpass', 'fp': 100, 'fs': 150, 'low_freq': 50, 'high_freq': 250},
+            {'btype': 'highpass', 'fp': 200, 'fs': 150, 'low_freq': 50, 'high_freq': 250},
+            {'btype': 'bandpass', 'fp': [100, 200], 'fs': [50, 250], 'low_freq': 50, 'mid_freq': 150, 'high_freq': 250},
+            {'btype': 'bandstop', 'fp': [100, 200], 'fs': [140, 160], 'low_freq': 50, 'mid_freq': 150, 'high_freq': 250},
+        ]
+        
+        ftypes = ['butter', 'cheby1', 'cheby2', 'ellip']
+        
+        for case in test_cases:
+            btype = case['btype']
+            for ftype in ftypes:
+                # Create multi-component sinusoidal signal
+                duration = 10  # seconds
+                
+                # Use Hz frequencies directly for signal generation
+                if btype in ['lowpass', 'highpass']:
+                    components = [
+                        {'frequency': case['low_freq'], 'amplitude': 1.0},
+                        {'frequency': case['high_freq'], 'amplitude': 1.0}
+                    ]
+                else:
+                    components = [
+                        {'frequency': case['low_freq'], 'amplitude': 1.0},
+                        {'frequency': case['mid_freq'], 'amplitude': 1.0},
+                        {'frequency': case['high_freq'], 'amplitude': 1.0}
+                    ]
+                
+                signal = SinusoidalGenerator.multi_component_sine(duration, fsamp, components)
+                
+                # Compute original power in relevant bands
+                if btype == 'lowpass':
+                    power_pass = self._compute_power_at_frequency(signal, case['low_freq'], fsamp)
+                    power_stop = self._compute_power_at_frequency(signal, case['high_freq'], fsamp)
+                elif btype == 'highpass':
+                    power_pass = self._compute_power_at_frequency(signal, case['high_freq'], fsamp)
+                    power_stop = self._compute_power_at_frequency(signal, case['low_freq'], fsamp)
+                elif btype == 'bandpass':
+                    power_pass = self._compute_power_at_frequency(signal, case['mid_freq'], fsamp)
+                    power_stop_low = self._compute_power_at_frequency(signal, case['low_freq'], fsamp)
+                    power_stop_high = self._compute_power_at_frequency(signal, case['high_freq'], fsamp)
+                elif btype == 'bandstop':
+                    power_pass_low = self._compute_power_at_frequency(signal, case['low_freq'], fsamp)
+                    power_pass_high = self._compute_power_at_frequency(signal, case['high_freq'], fsamp)
+                    power_stop = self._compute_power_at_frequency(signal, case['mid_freq'], fsamp)
+                
+                # Apply IIR filter with Nyquist-normalized frequencies
+                filter_obj = filt.IIRFilter(fp=case['fp'], fs=case['fs'], btype=btype,
+                                          ftype=ftype, order=5, loss=0.1, att=40)
+                filtered = filter_obj(signal)
+                
+                # Compute filtered power and assert correct filtering
+                if btype == 'lowpass':
+                    power_pass_filt = self._compute_power_at_frequency(filtered, case['low_freq'], fsamp)
+                    power_stop_filt = self._compute_power_at_frequency(filtered, case['high_freq'], fsamp)
+                    assert power_pass_filt > 0.5 * power_pass, f"Lowpass {ftype}: pass band power too low"
+                    assert power_stop_filt < 0.1 * power_stop, f"Lowpass {ftype}: stop band not attenuated enough"
+                elif btype == 'highpass':
+                    power_pass_filt = self._compute_power_at_frequency(filtered, case['high_freq'], fsamp)
+                    power_stop_filt = self._compute_power_at_frequency(filtered, case['low_freq'], fsamp)
+                    assert power_pass_filt > 0.5 * power_pass, f"Highpass {ftype}: pass band power too low"
+                    assert power_stop_filt < 0.1 * power_stop, f"Highpass {ftype}: stop band not attenuated enough"
+                elif btype == 'bandpass':
+                    power_pass_filt = self._compute_power_at_frequency(filtered, case['mid_freq'], fsamp)
+                    power_stop_low_filt = self._compute_power_at_frequency(filtered, case['low_freq'], fsamp)
+                    power_stop_high_filt = self._compute_power_at_frequency(filtered, case['high_freq'], fsamp)
+                    assert power_pass_filt > 0.5 * power_pass, f"Bandpass {ftype}: pass band power too low"
+                    assert power_stop_low_filt < 0.1 * power_stop_low, f"Bandpass {ftype}: low stop band not attenuated"
+                    assert power_stop_high_filt < 0.1 * power_stop_high, f"Bandpass {ftype}: high stop band not attenuated"
+                elif btype == 'bandstop':
+                    power_pass_low_filt = self._compute_power_at_frequency(filtered, case['low_freq'], fsamp)
+                    power_pass_high_filt = self._compute_power_at_frequency(filtered, case['high_freq'], fsamp)
+                    power_stop_filt = self._compute_power_at_frequency(filtered, case['mid_freq'], fsamp)
+                    assert power_pass_low_filt > 0.5 * power_pass_low, f"Bandstop {ftype}: low pass band power too low"
+                    assert power_pass_high_filt > 0.5 * power_pass_high, f"Bandstop {ftype}: high pass band power too low"
+                    assert power_stop_filt < 0.1 * power_stop, f"Bandstop {ftype}: stop band not attenuated enough"

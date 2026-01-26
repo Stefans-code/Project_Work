@@ -620,6 +620,151 @@ class CompositeSignalGenerator:
         return result
 
 
+class SpikeGenerator:
+    """
+    Generate spike artifacts with controllable amplitude and duration.
+
+    The spike shape can be a linear ramp (up then down) or a Gaussian-shaped
+    transient. Duration controls the width (and thus slope) of the spike.
+    """
+    @staticmethod
+    def spikes(duration, sampling_freq, times, amplitudes=1.0,
+               durations=0.02, shape='linear', start_time=0):
+        """
+        Create a signal composed of spikes occurring at `spike_times`.
+
+        Parameters
+        ----------
+        duration : float
+            Total duration of the returned signal (seconds)
+        sampling_freq : float
+            Sampling frequency in Hz
+        times : list of float
+            Times (seconds) at which spikes occur
+        amplitudes : float or list of float
+            Peak amplitude(s) of spikes
+        durations : float or list of float
+            Duration(s) of each spike in seconds (controls slope/width)
+        shape : {'linear', 'gaussian'}
+            Shape of the spike transient
+        start_time : float
+            Start time offset
+
+        Returns
+        -------
+        signal : xarray.DataArray
+        """
+        n_timepoints = int(duration * sampling_freq)
+        tvec = np.arange(n_timepoints) / sampling_freq
+        data = np.zeros(n_timepoints)
+
+        # normalize amplitudes and durations to lists matching event times
+        if np.isscalar(amplitudes):
+            amplitudes = [amplitudes] * len(times)
+        if np.isscalar(durations):
+            durations = [durations] * len(times)
+
+        for t_spike, amp, dur in zip(times, amplitudes, durations):
+            idx_center = int(np.round((t_spike - start_time) * sampling_freq))
+            width = max(1, int(np.round(dur * sampling_freq)))
+            start_idx = idx_center - width // 2
+            end_idx = start_idx + width
+
+            if end_idx <= 0 or start_idx >= n_timepoints:
+                continue
+
+            s_idx = max(0, start_idx)
+            e_idx = min(n_timepoints, end_idx)
+
+            local_len = e_idx - s_idx
+
+            if shape == 'linear':
+                # ramp up then down
+                half = max(1, local_len // 2)
+                up = np.linspace(0, amp, half, endpoint=False)
+                down = np.linspace(amp, 0, local_len - half)
+                spike_wave = np.concatenate([up, down])[:local_len]
+            else:
+                # gaussian centered in the local window
+                x = np.linspace(-1, 1, local_len)
+                sigma = 0.25
+                spike_wave = amp * np.exp(-0.5 * (x / sigma) ** 2)
+
+            data[s_idx:e_idx] += spike_wave
+
+        return create_signal(data, sampling_freq=sampling_freq,
+                 start_time=start_time, name='spikes')
+
+
+class BaselineShiftGenerator:
+    """
+    Generate baseline shifts (slow steps/ramps) at specified times.
+
+    Each shift can be applied as an instantaneous step or as a ramp over a
+    specified duration. The duration controls the slope of the change.
+    """
+    @staticmethod
+    def baseline_shifts(duration, sampling_freq, times, amplitudes=0.0,
+                        durations=0.5, start_time=0):
+        """
+        Create a baseline-shift signal.
+
+        Parameters
+        ----------
+        duration : float
+            Total duration of the returned signal (seconds)
+        sampling_freq : float
+            Sampling frequency in Hz
+        times : list of float
+            Times (seconds) when each baseline shift starts
+        amplitudes : float or list of float
+            Amplitude(s) of baseline shifts. If single float provided, will be
+            applied for all shift events.
+        durations : float or list of float
+            Duration(s) (seconds) over which each baseline transition occurs
+        start_time : float
+            Start time offset
+
+        Returns
+        -------
+        signal : xarray.DataArray
+        """
+        n_timepoints = int(duration * sampling_freq)
+        tvec = np.arange(n_timepoints) / sampling_freq
+        data = np.zeros(n_timepoints)
+
+        # Normalize amplitudes and durations to lists (match event times)
+        if np.isscalar(amplitudes):
+            amplitudes = [amplitudes] * len(times)
+        if np.isscalar(durations):
+            durations = [durations] * len(times)
+
+        for t_shift, amp, dur in zip(times, amplitudes, durations):
+            idx_start = int(np.round((t_shift - start_time) * sampling_freq))
+            if idx_start >= n_timepoints:
+                continue
+            ramp_len = max(1, int(np.round(dur * sampling_freq)))
+            # linear ramp from 0 to amp
+            ramp = np.linspace(0, amp, ramp_len)
+
+            # Apply ramp
+            end_idx = min(n_timepoints, idx_start + ramp_len)
+            r_end = end_idx - idx_start
+            if idx_start < 0:
+                # partial ramp if starts before signal
+                ramp_slice = ramp[-idx_start:r_end]
+                data[0:end_idx] += ramp_slice
+            else:
+                data[idx_start:end_idx] += ramp[:r_end]
+
+            # After ramp, maintain the baseline shift
+            if end_idx < n_timepoints:
+                data[end_idx:] += amp
+
+        return create_signal(data, sampling_freq=sampling_freq,
+                             start_time=start_time, name='baseline_shifts')
+
+
 class WindowGenerator:
     """
     Generate window functions for signal windowing and analysis.

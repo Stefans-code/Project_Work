@@ -372,12 +372,12 @@ class PyphysioDataArray(object):
     # def replace(self, new_vals):
     #     return self.assign({'signal': (('time', 'channel', 'component'), new_vals)})
         
-    def resample(self, f_out):
+    def resample(self, f_out, method='cubic'):
         t_start = self.get_start_time()
         t_end = self.get_end_time()
         
         t_out = _np.arange(t_start, t_end, 1/f_out)
-        resampled_dataarray = self.da.interp(time=t_out, method='cubic')
+        resampled_dataarray = self.da.interp(time=t_out, method=method)
         resampled_dataarray.attrs['sampling_freq'] = f_out
         return(resampled_dataarray)
     

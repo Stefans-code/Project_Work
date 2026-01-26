@@ -5,6 +5,12 @@ import pyphysio.indicators.timedomain as td
 import pyphysio.indicators.frequencydomain as fd
 import pyphysio.indicators.peaks as pk
 
+# TODO-AI [PRIORITY: HIGH]: Use `signal.p.get_values()` for all numeric assertions.
+# TODO-AI [PRIORITY: HIGH]: Use deterministic generator-produced signals
+# (e.g., `SinusoidalGenerator`) where indicators rely on spectral content.
+# TODO-AI [PRIORITY: MEDIUM]: Replace `assert np.isnan(...) or ...` with
+# deterministic checks or isolate NaN-propagation tests using explicit NaN inputs.
+
 
 class TestMean:
     """Tests for Mean indicator."""

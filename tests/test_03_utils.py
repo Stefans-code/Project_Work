@@ -7,6 +7,10 @@ from pyphysio.signal import create_signal
 from pyphysio.utils import Diff, Wavelet, PCA, PeakDetection, PeakSelection, Maxima, PSD, SignalRange
 from pyphysio import TestData
 
+# TODO-AI [PRIORITY: HIGH]: Use accessor `signal.p.get_values()` for numeric checks.
+# TODO-AI [PRIORITY: MEDIUM]: Reduce extremely large test arrays to speed CI.
+# TODO-AI [PRIORITY: MEDIUM]: Seed random inputs via `rng` fixture to avoid flakiness.
+
 
 class TestDiffFilter:
     """Test the Diff filter (difference calculation)."""

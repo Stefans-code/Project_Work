@@ -7,6 +7,10 @@ def generate_evenly(shape=(1000, 5, 3), fsamp=100, starttime=0):
         shape = [shape]
     check(signal, shape, fsamp, starttime)
     return(signal)
+    
+# TODO-AI [PRIORITY: MEDIUM]: Make this helper deterministic and expose as
+# a pytest fixture in `conftest.py`.
+# - Use a `rng` fixture or accept a `seed` parameter instead of global RNG.
 
 def check(signal, shape=(1000, 5, 3), fsamp=100, starttime=0):
     assert len(signal) == shape[0]

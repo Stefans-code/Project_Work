@@ -3,6 +3,14 @@ import numpy as np
 from pyphysio.signal import create_signal
 import pyphysio.filters as filt
 
+# TODO-AI [PRIORITY: HIGH]: Use generator-based deterministic signals for
+# algorithmic correctness tests instead of pure random arrays.
+# - Prefer `SinusoidalGenerator` + seeded noise (use `rng` fixture).
+# TODO-AI [PRIORITY: HIGH]: Replace direct `signal.values` / `np.asarray(signal)`
+# calls with `signal.p.get_values()`.
+# TODO-AI [PRIORITY: MEDIUM]: Parametrize invalid/valid parameter checks
+# using `pytest.mark.parametrize`.
+
 
 class TestNormalize:
     """Tests for Normalize filter."""

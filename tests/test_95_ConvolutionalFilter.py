@@ -3,19 +3,25 @@ import numpy as np
 from pyphysio.signal import create_signal
 import pyphysio.filters as filt
 from pyphysio.generators.fundamental import SinusoidalGenerator
+import os
+from pathlib import Path
+import matplotlib.pyplot as plt
+from _helpers import save_comparison_figure
 
-# Make tests deterministic
-np.random.seed(0)
+# Determinism: use `rng` fixture in tests that require randomness
 
 # TODO-AI [PRIORITY: HIGH]: Use accessor for signal arrays (`signal.p.get_values()`)
 # and seed any calls to `np.random.*` to ensure determinism in tests.
 # TODO-AI [PRIORITY: MEDIUM]: Parametrize window types and window lengths.
 
 
+# Using `figure_dir` and `generate_figures` from `tests/conftest.py`
+
+
 class TestConvolutionalFilter:
     """Tests for ConvolutionalFilter to verify smoothing behavior across different windows and lengths."""
     
-    def test_convolutional_filter_smoothing_effect(self):
+    def test_convolutional_filter_smoothing_effect(self, figure_dir, rng):
         """Test that convolutional filters smooth noisy signals."""
         fsamp = 1000  # sampling frequency
         duration = 5  # seconds
@@ -28,7 +34,10 @@ class TestConvolutionalFilter:
         
         # Add noise
         noise_std = 0.1
-        noise = np.random.normal(0, noise_std, len(clean_data))
+        try:
+            noise = rng.normal(0, noise_std, len(clean_data))
+        except Exception:
+            noise = np.random.normal(0, noise_std, len(clean_data))
         noisy_data = clean_data + noise
         noisy_signal = create_signal(noisy_data, sampling_freq=fsamp, name='noisy_signal')
         
@@ -48,8 +57,11 @@ class TestConvolutionalFilter:
             # Filter should reduce noise
             assert filtered_error < noisy_error, \
                 f"{win_type} filter should reduce noise: filtered={filtered_error:.6f}, noisy={noisy_error:.6f}"
+            if figure_dir:
+                times = np.arange(len(noisy_data)) / fsamp
+                save_comparison_figure(figure_dir, f'convolutional_smoothing_{win_type}', times, noisy_data, filtered_data)
     
-    def test_convolutional_filter_window_length_effect(self):
+    def test_convolutional_filter_window_length_effect(self, figure_dir):
         """Test that window length relative to signal period affects filtering quality.
         
         When window length << signal period, filtering is ineffective.
@@ -63,13 +75,13 @@ class TestConvolutionalFilter:
         # Create clean signal
         components = [{'frequency': signal_freq, 'amplitude': 1.0}]
         clean_signal = SinusoidalGenerator.multi_component_sine(duration, fsamp, components)
-        clean_data = clean_signal.data.flatten()
+        clean_data = clean_signal.p.get_values().ravel()
         
         # Add sinusoidal noise (high frequency - not in the signal)
         noise_freq = 50  # Hz - much higher frequency than signal
         noise_components = [{'frequency': noise_freq, 'amplitude': 0.3}]
         noise_signal = SinusoidalGenerator.multi_component_sine(duration, fsamp, noise_components)
-        noise_data = noise_signal.data.flatten()
+        noise_data = noise_signal.p.get_values().ravel()
         
         noisy_data = clean_data + noise_data
         noisy_signal = create_signal(noisy_data, sampling_freq=fsamp, name='noisy_signal')
@@ -88,9 +100,12 @@ class TestConvolutionalFilter:
         for win_len in window_lengths:
             conv_filter = filt.ConvolutionalFilter('gauss', win_len=win_len)
             filtered_signal = conv_filter(noisy_signal)
-            filtered_data = np.asarray(filtered_signal).ravel()
+            filtered_data = filtered_signal.p.get_values().ravel()
             error = np.mean((filtered_data - clean_data) ** 2)
             errors.append(error)
+            if figure_dir:
+                times = np.arange(len(noisy_data)) / fsamp
+                save_comparison_figure(figure_dir, f'convolutional_winlen_{win_len}', times, noisy_data, filtered_data)
         
         # Window length comparable to signal period should work best
         # Much smaller window (0.02s) should not work as well
@@ -101,7 +116,7 @@ class TestConvolutionalFilter:
         assert errors[1] < errors[2], \
             f"Window {window_lengths[1]}s (~ period) should work better than {window_lengths[2]}s (> period): {errors}"
     
-    def test_convolutional_filter_window_types_comparison(self):
+    def test_convolutional_filter_window_types_comparison(self, figure_dir, rng):
         """Test different window types on noisy signal."""
         fsamp = 1000  # sampling frequency
         duration = 5  # seconds
@@ -110,11 +125,14 @@ class TestConvolutionalFilter:
         # Create clean signal
         components = [{'frequency': signal_freq, 'amplitude': 1.0}]
         clean_signal = SinusoidalGenerator.multi_component_sine(duration, fsamp, components)
-        clean_data = clean_signal.data.flatten()
+        clean_data = clean_signal.p.get_values().ravel()
         
         # Add noise
         noise_std = 0.1
-        noise = np.random.normal(0, noise_std, len(clean_data))
+        try:
+            noise = rng.normal(0, noise_std, len(clean_data))
+        except Exception:
+            noise = np.random.normal(0, noise_std, len(clean_data))
         noisy_data = clean_data + noise
         noisy_signal = create_signal(noisy_data, sampling_freq=fsamp, name='noisy_signal')
         
@@ -126,9 +144,12 @@ class TestConvolutionalFilter:
         for win_type in window_types:
             conv_filter = filt.ConvolutionalFilter(win_type, win_len=win_len)
             filtered_signal = conv_filter(noisy_signal)
-            filtered_data = np.asarray(filtered_signal).ravel()
+            filtered_data = filtered_signal.p.get_values().ravel()
             error = np.mean((filtered_data - clean_data) ** 2)
             results[win_type] = error
+            if figure_dir:
+                times = np.arange(len(noisy_data)) / fsamp
+                save_comparison_figure(figure_dir, f'convolutional_compare_{win_type}', times, noisy_data, filtered_data)
         
         # All window types should reduce noise
         noisy_error = np.mean((noisy_data - clean_data) ** 2)
@@ -136,7 +157,7 @@ class TestConvolutionalFilter:
             assert error < noisy_error, \
                 f"{win_type} should reduce noise: {error:.6f} < {noisy_error:.6f}"
     
-    def test_convolutional_filter_preserves_signal_shape(self):
+    def test_convolutional_filter_preserves_signal_shape(self, figure_dir):
         """Test that convolutional filter preserves signal length and shape."""
         fsamp = 500  # sampling frequency
         duration = 3  # seconds
@@ -159,10 +180,15 @@ class TestConvolutionalFilter:
             # Check shape preservation
             assert filtered_signal.shape == signal_obj.values.ravel().shape, \
                 f"{win_type} filter should preserve signal shape"
-            assert len(filtered_signal) == len(signal.data.flatten()), \
+            assert len(filtered_signal) == len(signal.p.get_values().ravel()), \
                 f"{win_type} filter should preserve signal length"
+            if figure_dir:
+                orig = signal_obj.p.get_values().ravel()
+                filt_vals = filtered_signal.p.get_values().ravel()
+                times = np.arange(len(orig)) / fsamp
+                save_comparison_figure(figure_dir, f'convolutional_shape_{win_type}', times, orig, filt_vals)
     
-    def test_convolutional_filter_dgauss_derivative_effect(self):
+    def test_convolutional_filter_dgauss_derivative_effect(self, figure_dir):
         """Test that derivative of Gaussian filter highlights changes in signal."""
         fsamp = 1000  # sampling frequency
         
@@ -175,7 +201,7 @@ class TestConvolutionalFilter:
         # Apply dgauss filter (derivative of Gaussian)
         dgauss_filter = filt.ConvolutionalFilter('dgauss', win_len=0.1)
         filtered_signal = dgauss_filter(signal)
-        filtered_data = np.asarray(filtered_signal).ravel()
+        filtered_data = filtered_signal.p.get_values().ravel()
         
         # Derivative should show peak around the step location
         # Find location of maximum absolute value
@@ -185,8 +211,12 @@ class TestConvolutionalFilter:
         # Maximum should be near the step (within 500 samples = 0.5 seconds)
         assert abs(max_idx - step_idx) < 500, \
             f"dgauss filter should highlight step at idx {step_idx}, found peak at {max_idx}"
+        if figure_dir:
+            orig = signal.p.get_values().ravel()
+            times = np.arange(len(orig)) / fsamp
+            save_comparison_figure(figure_dir, 'convolutional_dgauss_step', times, orig, filtered_data)
     
-    def test_convolutional_filter_normalization_effect(self):
+    def test_convolutional_filter_normalization_effect(self, figure_dir):
         """Test that normalization affects filter output scale."""
         fsamp = 1000  # sampling frequency
         duration = 2  # seconds
@@ -211,8 +241,12 @@ class TestConvolutionalFilter:
         # Normalized should be closer to 1.0 (original value)
         assert abs(norm_mean - 1.0) < abs(no_norm_mean - 1.0), \
             f"Normalized filter should preserve constant signal better: {norm_mean:.4f} vs {no_norm_mean:.4f}"
+        if figure_dir:
+            orig = signal.p.get_values().ravel()
+            times = np.arange(len(orig)) / fsamp
+            save_comparison_figure(figure_dir, 'convolutional_normalization', times, orig, filtered_norm.p.get_values().ravel())
     
-    def test_convolutional_filter_custom_irf(self):
+    def test_convolutional_filter_custom_irf(self, figure_dir):
         """Test convolutional filter with custom impulse response."""
         fsamp = 1000  # sampling frequency
         duration = 2  # seconds
@@ -231,8 +265,12 @@ class TestConvolutionalFilter:
         # For constant input with normalized irf, output should be close to input
         assert np.allclose(filtered_signal, 1.0, atol=0.1), \
             f"Custom filter with constant input should produce constant output close to 1.0"
+        if figure_dir:
+            orig = signal.p.get_values().ravel()
+            times = np.arange(len(orig)) / fsamp
+            save_comparison_figure(figure_dir, 'convolutional_custom_irf', times, orig, filtered_signal.p.get_values().ravel())
     
-    def test_convolutional_filter_noise_reduction_vs_smoothing(self):
+    def test_convolutional_filter_noise_reduction_vs_smoothing(self, figure_dir, rng):
         """Test trade-off between noise reduction and signal preservation."""
         fsamp = 1000  # sampling frequency
         duration = 5  # seconds
@@ -241,11 +279,14 @@ class TestConvolutionalFilter:
         # Create clean signal
         components = [{'frequency': signal_freq, 'amplitude': 1.0}]
         clean_signal = SinusoidalGenerator.multi_component_sine(duration, fsamp, components)
-        clean_data = clean_signal.data.flatten()
+        clean_data = clean_signal.p.get_values().ravel()
         
         # Add noise
         noise_std = 0.1
-        noise = np.random.normal(0, noise_std, len(clean_data))
+        try:
+            noise = rng.normal(0, noise_std, len(clean_data))
+        except Exception:
+            noise = np.random.normal(0, noise_std, len(clean_data))
         noisy_data = clean_data + noise
         noisy_signal = create_signal(noisy_data, sampling_freq=fsamp, name='noisy_signal')
         
@@ -255,7 +296,7 @@ class TestConvolutionalFilter:
         for win_len in window_lengths:
             conv_filter = filt.ConvolutionalFilter('gauss', win_len=win_len)
             filtered_signal = conv_filter(noisy_signal)
-            filtered_data = np.asarray(filtered_signal).ravel()
+            filtered_data = filtered_signal.p.get_values().ravel()
             
             # Compute errors relative to clean signal
             error = np.mean((filtered_data - clean_data) ** 2)
@@ -265,3 +306,6 @@ class TestConvolutionalFilter:
             # Even large windows should improve over pure noise
             assert error < np.mean((noisy_data - clean_data) ** 2), \
                 f"Filter should improve upon noisy signal for window {win_len}"
+            if figure_dir:
+                times = np.arange(len(noisy_data)) / fsamp
+                save_comparison_figure(figure_dir, f'convolutional_noise_tradeoff_{win_len}', times, noisy_data, filtered_data)

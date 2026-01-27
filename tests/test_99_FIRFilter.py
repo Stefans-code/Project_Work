@@ -3,6 +3,9 @@ import numpy as np
 from pyphysio.signal import create_signal
 import pyphysio.filters as filt
 from pyphysio.generators.fundamental import SinusoidalGenerator
+from pathlib import Path
+import matplotlib.pyplot as plt
+from _helpers import save_comparison_figure
 
 
 class TestFIRFilter:
@@ -20,7 +23,7 @@ class TestFIRFilter:
         Returns:
             Power in the frequency band
         """
-        data = signal.data.flatten() if hasattr(signal.data, 'flatten') else signal.data
+        data = signal.p.get_values().ravel()
         fft_vals = np.fft.fft(data)
         freqs = np.fft.fftfreq(len(data), 1/fsamp)
         power = np.abs(fft_vals) ** 2 / len(data)  # Normalize by length to avoid overflow
@@ -30,7 +33,7 @@ class TestFIRFilter:
         band_power = np.sum(power[mask])
         return band_power
     
-    def test_fir_filter_frequency_response(self):
+    def test_fir_filter_frequency_response(self, figure_dir):
         """Test FIRFilter correctly filters frequencies for all btype combinations."""
         fsamp = 1000  # sampling frequency
         
@@ -84,6 +87,9 @@ class TestFIRFilter:
             # Apply FIR filter with Hz frequencies
             filter_obj = filt.FIRFilter(fp=case['fp'], fs=case['fs'], btype=btype, order=order, att=40)
             filtered = filter_obj(signal)
+            if figure_dir:
+                times = np.arange(len(signal.p.get_values().ravel())) / fsamp
+                save_comparison_figure(figure_dir, f'fir_{btype}_order{order}', times, signal.p.get_values().ravel(), filtered.p.get_values().ravel())
             
             # Compute filtered power and assert correct filtering
             if btype == 'lowpass':

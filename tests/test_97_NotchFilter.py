@@ -3,6 +3,11 @@ import numpy as np
 from pyphysio.signal import create_signal
 import pyphysio.filters as filt
 from pyphysio.generators.fundamental import SinusoidalGenerator
+from pathlib import Path
+import matplotlib.pyplot as plt
+from _helpers import save_comparison_figure
+
+# Use `figure_dir` fixture from `conftest.py` and centralized helpers
 
 # TODO-AI [PRIORITY: HIGH]: Use `signal.p.get_values()` when computing FFT/power
 # and seed any random components used to build test signals.
@@ -24,7 +29,7 @@ class TestNotchFilter:
         Returns:
             Power in the frequency band
         """
-        data = signal.data.flatten() if hasattr(signal.data, 'flatten') else signal.data
+        data = signal.p.get_values().ravel()
         fft_vals = np.fft.fft(data)
         freqs = np.fft.fftfreq(len(data), 1/fsamp)
         power = np.abs(fft_vals) ** 2 / len(data)  # Normalize by length to avoid overflow
@@ -34,7 +39,7 @@ class TestNotchFilter:
         band_power = np.sum(power[mask])
         return band_power
     
-    def test_notch_filter_frequency_attenuation(self):
+    def test_notch_filter_frequency_attenuation(self, figure_dir):
         """Test NotchFilter correctly attenuates target frequency while preserving others."""
         fsamp = 1000  # sampling frequency
         
@@ -64,6 +69,10 @@ class TestNotchFilter:
             # Apply notch filter
             filter_obj = filt.NotchFilter(f=notch_freq, Q=Q)
             filtered = filter_obj(signal)
+
+            if figure_dir:
+                times = np.arange(len(signal.p.get_values().ravel())) / fsamp
+                save_comparison_figure(figure_dir, f'notch_{notch_freq}_Q{Q}', times, signal.p.get_values().ravel(), filtered.p.get_values().ravel())
             
             # Compute filtered power at each frequency
             filt_power = {freq: self._compute_power_at_frequency(filtered, freq, fsamp) for freq in nearby_freqs}

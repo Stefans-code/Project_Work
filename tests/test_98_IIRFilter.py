@@ -3,6 +3,9 @@ import numpy as np
 from pyphysio.signal import create_signal
 import pyphysio.filters as filt
 from pyphysio.generators.fundamental import SinusoidalGenerator
+from pathlib import Path
+import matplotlib.pyplot as plt
+from _helpers import save_comparison_figure
 
 # TODO-AI [PRIORITY: HIGH]: Replace direct data access with `signal.p.get_values()`
 # and use seeded generator signals for spectral response tests.
@@ -24,7 +27,7 @@ class TestIIRFilter:
         Returns:
             Power in the frequency band
         """
-        data = signal.data.flatten() if hasattr(signal.data, 'flatten') else signal.data
+        data = signal.p.get_values().ravel()
         fft_vals = np.fft.fft(data)
         freqs = np.fft.fftfreq(len(data), 1/fsamp)
         power = np.abs(fft_vals) ** 2 / len(data)  # Normalize by length to avoid overflow
@@ -34,7 +37,7 @@ class TestIIRFilter:
         band_power = np.sum(power[mask])
         return band_power
     
-    def test_iir_filter_frequency_response(self):
+    def test_iir_filter_frequency_response(self, figure_dir):
         """Test IIRFilter correctly filters frequencies for all btype and ftype combinations."""
         fsamp = 1000  # sampling frequency
         
@@ -90,6 +93,9 @@ class TestIIRFilter:
                 filter_obj = filt.IIRFilter(fp=case['fp'], fs=case['fs'], btype=btype,
                                           ftype=ftype, order=5, loss=0.1, att=40)
                 filtered = filter_obj(signal)
+                if figure_dir:
+                    times = np.arange(len(signal.p.get_values().ravel())) / fsamp
+                    save_comparison_figure(figure_dir, f'iir_{btype}_{ftype}', times, signal.p.get_values().ravel(), filtered.p.get_values().ravel())
                 
                 # Compute filtered power and assert correct filtering
                 if btype == 'lowpass':

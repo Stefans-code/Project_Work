@@ -54,7 +54,7 @@ class DetectMA(_Algorithm):
             assert th_amp is not None
         if method == 'mad':
             assert th_std_coeff is not None
-            th_amp = _np.Inf #deactivate detection based on AMP
+            th_amp = _np.inf #deactivate detection based on AMP
             #TODO: ideas on how to compute threshold for AMP?
             
         _Algorithm.__init__(self, win_len=win_len, win_mask=win_mask,

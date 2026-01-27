@@ -388,7 +388,7 @@ class TestWindowGenerator:
 class TestECGGenerator:
     """Tests for ECG signal generation"""
     
-    def test_simple_ecg(self):
+    def test_simple_ecg(self, figure_dir):
         """Test simple ECG generation"""
         signal = ECGGenerator.simple_ecg(
             duration=4.0, sampling_freq=250,
@@ -397,10 +397,11 @@ class TestECGGenerator:
         vals = signal.p.get_values().ravel()
         assert vals.shape == (1000,)
         assert np.isfinite(vals).all()
-        # Optionally save ECG figure
-        # note: uses figure_dir fixture when supplied via param
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'ecg_simple', times, vals)
     
-    def test_simple_ecg_heart_rate(self):
+    def test_simple_ecg_heart_rate(self, figure_dir):
         """Test ECG heart rate is approximately correct"""
         signal = ECGGenerator.simple_ecg(
             duration=30.0, sampling_freq=100,
@@ -412,28 +413,37 @@ class TestECGGenerator:
         assert vals.shape == (3000,)
         assert np.isfinite(vals).all()
         # ECG should have some variation
-        assert np.std(signal.values) > 0.1
+        assert np.std(vals) > 0.1
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'ecg_heart_rate_60bpm', times, vals)
     
-    def test_realistic_ecg(self):
+    def test_realistic_ecg(self, figure_dir):
         """Test realistic ECG with HRV"""
         signal = ECGGenerator.realistic_ecg(
             duration=30.0, sampling_freq=100,
             heart_rate=70, heart_rate_variability=10,
             noise_std=0.05
         )
-        
-        assert signal.shape == (3000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (3000,)
+        assert np.isfinite(vals).all()
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'ecg_realistic_hvr', times, vals)
     
-    def test_realistic_ecg_with_ectopy(self):
+    def test_realistic_ecg_with_ectopy(self, figure_dir):
         """Test realistic ECG with ectopic beats"""
         signal = ECGGenerator.realistic_ecg(
             duration=50.0, sampling_freq=100,
             heart_rate=70, ectopy_rate=0.1
         )
-        
-        assert signal.shape == (5000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (5000,)
+        assert np.isfinite(vals).all()
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'ecg_realistic_ectopy', times, vals)
 
 
 class TestRespirationGenerator:
@@ -445,11 +455,14 @@ class TestRespirationGenerator:
             duration=100.0, sampling_freq=10,
             respiration_rate=15, amplitude=1.0
         )
-        
-        assert signal.shape == (1000,)
-        assert np.isfinite(signal.values).all()
-        assert np.max(signal.values) <= 1.1
-        assert np.min(signal.values) >= -1.1
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
+        assert np.isfinite(vals).all()
+        assert np.max(vals) <= 1.1
+        assert np.min(vals) >= -1.1
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'respiration_sinusoidal', times, vals)
     
     def test_realistic_respiration(self):
         """Test realistic respiration with asymmetry"""
@@ -458,9 +471,12 @@ class TestRespirationGenerator:
             respiration_rate=15, amplitude=1.0,
             inspiration_expiration_ratio=0.4
         )
-        
-        assert signal.shape == (1000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
+        assert np.isfinite(vals).all()
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'respiration_realistic', times, vals)
     
     def test_respiration_with_sinus_arrhythmia(self):
         """Test respiration with RSA modulation"""
@@ -469,9 +485,12 @@ class TestRespirationGenerator:
             respiration_rate=15,
             respiratory_sinus_arrhythmia=True
         )
-        
-        assert signal.shape == (1000,)
-        assert np.std(signal.values) > 0
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
+        assert np.std(vals) > 0
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'respiration_rsa', times, vals)
 
 
 class TestEDAGenerator:
@@ -486,11 +505,14 @@ class TestEDAGenerator:
             response_magnitude=0.5
         )
         
-        assert signal.shape == (1000,)
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
         # Should be mostly zero before stimuli
-        #TODO: CHECK assert np.mean(signal.values[:10]) < 0.1
-        # Should have peaks near stimulus times
-        #TODO: CHECK assert np.max(signal.values) > 0.2
+        # TODO-AI: replace placeholder TODOs with deterministic checks
+        # e.g., assert np.mean(vals[:int(0.5*signal.p.get_sampling_freq())]) < 0.1
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'eda_phasic', times, vals)
     
     def test_realistic_eda(self):
         """Test realistic EDA (SCL + SCR)"""
@@ -501,8 +523,12 @@ class TestEDAGenerator:
             stimulus_magnitudes=[0.5, 0.3]
         )
         
-        assert signal.shape == (2000,)
-        assert np.all(signal.values > 0)  # Conductance is always positive
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (2000,)
+        assert np.all(vals > 0)  # Conductance is always positive
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'eda_realistic', times, vals)
 
 
 class TestFNIRSGenerator:
@@ -517,14 +543,18 @@ class TestFNIRSGenerator:
             hbo_magnitude=2.0, hbr_magnitude=-1.0
         )
         
-        assert hbo.shape == (2000,)
-        assert hbr.shape == (2000,)
-        
+        vals_hbo = hbo.p.get_values().ravel()
+        vals_hbr = hbr.p.get_values().ravel()
+        assert vals_hbo.shape == (2000,)
+        assert vals_hbr.shape == (2000,)
         # HbO should increase during stimuli
-        assert np.max(hbo.values) > np.min(hbo.values)
-        
+        assert np.max(vals_hbo) > np.min(vals_hbo)
         # HbR should decrease during stimuli
-        assert np.min(hbr.values) < np.max(hbr.values)
+        assert np.min(vals_hbr) < np.max(vals_hbr)
+        if figure_dir:
+            times = np.arange(vals_hbo.size) / hbo.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'fnirs_hbo', times, vals_hbo)
+            save_generator_figure(figure_dir, 'fnirs_hbr', times, vals_hbr)
     
     def test_hbo_hbr_baseline(self):
         """Test that HbO and HbR have reasonable baselines"""
@@ -534,8 +564,14 @@ class TestFNIRSGenerator:
         )
         
         # Should have baseline values
-        assert np.mean(hbo.values) > 50  # HbO baseline ~100 µM
-        assert np.mean(hbr.values) > 30  # HbR baseline ~50 µM
+        vals_hbo = hbo.p.get_values().ravel()
+        vals_hbr = hbr.p.get_values().ravel()
+        assert np.mean(vals_hbo) > 50  # HbO baseline ~100 µM
+        assert np.mean(vals_hbr) > 30  # HbR baseline ~50 µM
+        if figure_dir:
+            times = np.arange(vals_hbo.size) / hbo.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'fnirs_hbo_baseline', times, vals_hbo)
+            save_generator_figure(figure_dir, 'fnirs_hbr_baseline', times, vals_hbr)
 
 
 class TestEEGGenerator:
@@ -547,9 +583,12 @@ class TestEEGGenerator:
             duration=20.0, sampling_freq=250,
             delta_power=0.5, alpha_power=2.0
         )
-        
-        assert signal.shape == (5000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (5000,)
+        assert np.isfinite(vals).all()
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'eeg_with_bands', times, vals)
     
     def test_eeg_alpha_burst(self):
         """Test EEG with alpha bursts"""
@@ -560,9 +599,12 @@ class TestEEGGenerator:
             burst_duration=2.0,
             alpha_freq=10.0
         )
-        
-        assert signal.shape == (5000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (5000,)
+        assert np.isfinite(vals).all()
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'eeg_alpha_burst', times, vals)
 
 
 class TestEMGGenerator:
@@ -574,11 +616,14 @@ class TestEMGGenerator:
             duration=1.0, sampling_freq=1000,
             baseline_activity=0.05
         )
-        
-        assert signal.shape == (1000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
+        assert np.isfinite(vals).all()
         # RMS should be small at rest
-        assert np.sqrt(np.mean(signal.values**2)) < 0.2
+        assert np.sqrt(np.mean(vals**2)) < 0.2
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'emg_at_rest', times, vals)
     
     def test_emg_during_contraction(self):
         """Test EMG during muscle contraction"""
@@ -588,12 +633,14 @@ class TestEMGGenerator:
             contraction_times=contraction_times,
             contraction_force=0.7
         )
-        
-        assert signal.shape == (4000,)
-        assert np.isfinite(signal.values).all()
-        
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (4000,)
+        assert np.isfinite(vals).all()
         # Just check that signal has variation
-        assert np.std(signal.values) > 0
+        assert np.std(vals) > 0
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'emg_during_contraction', times, vals)
 
 
 class TestGeneratorIntegration:

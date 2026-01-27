@@ -28,6 +28,43 @@ from pyphysio.generators import (
     SpikeGenerator,
     BaselineShiftGenerator,
 )
+import os
+from pathlib import Path
+import matplotlib.pyplot as plt
+
+
+@pytest.fixture
+def generate_figures(request):
+    """Fixture to enable/disable figure generation based on command-line option."""
+    return request.config.getoption("--generate-generator-figures")
+
+
+@pytest.fixture
+def figure_dir(request, generate_figures):
+    """Create directory for saving generator test figures if requested."""
+    if generate_figures:
+        fig_dir = Path(__file__).parent / "test_generator_figures"
+        fig_dir.mkdir(exist_ok=True)
+        return fig_dir
+    return None
+
+
+def save_generator_figure(figure_dir, test_name, times, values, figsize=(10, 2)):
+    """Save a simple figure comparing generated signal for inspection."""
+    if figure_dir is None:
+        return None
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    ax.plot(times, values, linewidth=1)
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Amplitude')
+    ax.set_title(test_name)
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    safe_name = test_name.replace(' ', '_').replace('/', '_').lower()
+    filepath = figure_dir / f"{safe_name}.png"
+    plt.savefig(filepath, dpi=100, bbox_inches='tight')
+    plt.close()
+    return filepath
 
 # TODO-AI [PRIORITY: HIGH]: Use the pyphysio accessor for data access.
 # - Replace direct uses of `signal.values`, `signal.data`, `np.asarray(signal)`
@@ -45,7 +82,7 @@ from pyphysio.generators import (
 class TestFundamentalSignalGenerator:
     """Tests for FundamentalSignalGenerator class"""
     
-    def test_zeros_generation(self):
+    def test_zeros_generation(self, generate_figures, figure_dir):
         """Test generation of zero signal"""
         signal = FundamentalSignalGenerator.zeros(
             duration=10.0, sampling_freq=100
@@ -53,6 +90,9 @@ class TestFundamentalSignalGenerator:
         vals = signal.p.get_values().ravel()
         assert vals.shape == (1000,)
         assert np.allclose(vals, 0)
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'zeros_signal', times, vals)
     
     def test_ones_generation(self):
         """Test generation of ones signal"""
@@ -123,7 +163,7 @@ class TestFundamentalSignalGenerator:
 class TestSinusoidalGenerator:
     """Tests for SinusoidalGenerator class"""
     
-    def test_simple_sine(self):
+    def test_simple_sine(self, figure_dir):
         """Test simple sinusoid generation"""
         freq = 10  # 10 Hz
         signal = SinusoidalGenerator.simple_sine(
@@ -131,14 +171,18 @@ class TestSinusoidalGenerator:
         )
         
         # Check shape
-        assert signal.shape == (1000,)
-        
+        assert signal.p.get_values().ravel().shape == (1000,)
+
         # Check frequency content using zero crossings
-        zero_crossings = np.where(np.diff(np.sign(signal.values)))[0]
+        vals = signal.p.get_values().ravel()
+        zero_crossings = np.where(np.diff(np.sign(vals)))[0]
         # Frequency is number of zero crossings / 2 / duration
         duration = 1000 / 100
         estimated_freq = len(zero_crossings) / 2 / duration
         assert np.isclose(estimated_freq, freq, atol=1)
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'simple_sine_10Hz', times, vals)
     
     def test_sine_with_phase(self):
         """Test sinusoid with phase shift"""
@@ -199,19 +243,23 @@ class TestSinusoidalGenerator:
 class TestNoiseGenerator:
     """Tests for NoiseGenerator class"""
     
-    def test_white_noise(self):
+    def test_white_noise(self, figure_dir):
         """Test white noise generation"""
         signal = NoiseGenerator.white_noise(
             duration=100.0, sampling_freq=100, std=1.0
         )
         
+        vals = signal.p.get_values().ravel()
         # Check standard deviation
-        assert np.isclose(np.std(signal.values), 1.0, atol=0.15)
+        assert np.isclose(np.std(vals), 1.0, atol=0.15)
         
         # Check that it looks like noise (not a sinusoid or other pattern)
         # Just verify that the signal is random with expected properties
-        assert np.min(signal.values) < -1  # Should have values across range
-        assert np.max(signal.values) > 1
+        assert np.min(vals) < -1  # Should have values across range
+        assert np.max(vals) > 1
+        if figure_dir:
+            times = np.arange(vals.size) / signal.p.get_sampling_freq()
+            save_generator_figure(figure_dir, 'white_noise', times, vals)
     
     def test_pink_noise(self):
         """Test pink (1/f) noise generation"""
@@ -346,9 +394,11 @@ class TestECGGenerator:
             duration=4.0, sampling_freq=250,
             heart_rate=70
         )
-        
-        assert signal.shape == (1000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (1000,)
+        assert np.isfinite(vals).all()
+        # Optionally save ECG figure
+        # note: uses figure_dir fixture when supplied via param
     
     def test_simple_ecg_heart_rate(self):
         """Test ECG heart rate is approximately correct"""
@@ -358,8 +408,9 @@ class TestECGGenerator:
         )
         
         # Just check that the signal was generated correctly
-        assert signal.shape == (3000,)
-        assert np.isfinite(signal.values).all()
+        vals = signal.p.get_values().ravel()
+        assert vals.shape == (3000,)
+        assert np.isfinite(vals).all()
         # ECG should have some variation
         assert np.std(signal.values) > 0.1
     

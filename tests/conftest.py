@@ -14,6 +14,12 @@ def pytest_addoption(parser):
         default=False,
         help="Generate before/after filtering figures for WaveletFilter tests"
     )
+    parser.addoption(
+        "--generate-generator-figures",
+        action="store_true",
+        default=False,
+        help="Generate figures of generated signals for visual inspection in generator tests"
+    )
 
 
 @pytest.fixture(scope='session')

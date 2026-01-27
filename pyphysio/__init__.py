@@ -4,7 +4,7 @@ import os as _os
 from .signal import create_signal, load
 from .loaders import load_xrnirs
 
-__version__ = '4.5.0'
+__version__ = '4.6.0'
 
 _xr.set_options(keep_attrs=True)
 

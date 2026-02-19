@@ -60,7 +60,7 @@ data = np.array([np.sin(2*np.pi*x*t) for x in freqs]).T
 
 signal = create_signal(data, sampling_freq=20, name = 'random')
 
-res = utils.PeakDetection(0.1)(signal)
+res = utils.PeakDetection(0.1, return_peaks=True)(signal)
 
 for i in np.arange(1, len(freqs)):
     res_ch = res.sel(channel=i).dropna(dim = 'time')

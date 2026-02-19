@@ -7,11 +7,11 @@ from scipy.signal import welch as _welch, periodogram as _periodogram, \
 # import pycwt.wavelet as wave
 import pywt as _pywt
 #TODO replace with pywavelets
+from sklearn.decomposition import PCA as _PCA
 from ._base_algorithm import _Algorithm
 
 
 def __finalize_special__(res_sig):
-    # print('----->', self.name, 'finalize')
     original_coords = list(res_sig.coords)
     res_sig = res_sig.reset_coords()
     dimensions = list(res_sig.dims)
@@ -20,7 +20,6 @@ def __finalize_special__(res_sig):
             res_sig = res_sig.drop(c)
     res_sig = res_sig.to_array()
     res_sig = res_sig.squeeze(dim='variable').drop('variable')
-    # print('<-----', self.name, 'finalize')
     return res_sig
 
 class Diff(_Algorithm): #xarray done
@@ -42,9 +41,12 @@ class Diff(_Algorithm): #xarray done
     def __init__(self, degree=1):
         assert degree > 0, "The degree value should be positive"
         _Algorithm.__init__(self, degree=degree)
-        self.dimensions = {'time' : 0}
-
+        self.chunk_dict = {'channel': 1, 'component': 1}
     
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
+
     def algorithm(self, signal):
         """
         Calculates the differences between consecutive values
@@ -91,16 +93,16 @@ class PeakDetection(_Algorithm): #xarray done
         Array containing values of the minima
     """
 
-    def __init__(self, delta, refractory=0, start_max=True, return_peaks = True):
+    def __init__(self, delta, refractory=0, return_peaks = True):
         delta = _np.array(delta)
         assert delta.ndim <= 1, "Delta value should be 1 or 0-dimensional"
         assert delta.all() > 0, "Delta value/s should be positive"
         assert refractory >= 0, "Refractory value should be non negative"
-        _Algorithm.__init__(self, delta=delta, refractory=refractory, start_max=start_max, return_peaks=return_peaks)
+        _Algorithm.__init__(self, delta=delta, refractory=refractory, return_peaks=return_peaks)
         self.dimensions = {'time' : 0}
 
-    def __finalize__(self, res_sig, arr_windows):
-        return __finalize_special__(res_sig)
+    # def __finalize__(self, res_sig, arr_windows):
+    #     return __finalize_special__(res_sig)
         
     
     def algorithm(self, signal):
@@ -110,73 +112,78 @@ class PeakDetection(_Algorithm): #xarray done
             refractory = 1
         else:  # else transform the refractory from seconds to samples
             refractory = refractory * signal.p.get_sampling_freq()
-        look_for_max = params['start_max']
+        # look_for_max = params['start_max']
         delta = params['delta']
-
         return_peaks = params['return_peaks']
-        minp = []
-        maxp = []
-
-        minv = []
-        maxv = []
+        
+        signal_values = signal.p.get_values().ravel()
+        
+        if return_peaks == False: #looking for valleys
+            signal_values = -signal_values
+            
+        max_idxs = []
+        max_vals = []
 
         scalar = delta.ndim == 0
         if scalar:
             d = delta
-
-        s = signal.values.ravel()
-        if not scalar and len(delta) != len(signal):
-            print("delta vector's length differs from signal's one, returning empty.")
         else:
-            mn_pos_candidate = mx_pos_candidate = 0
-            mn_candidate = mx_candidate = s[0]
-
-            i_activation_min = 0
-            i_activation_max = 0
-
-            for i in range(1, len(s)):
-                sample = s[i]
-                if not scalar:
-                    d = delta[i]
-
-                if sample > mx_candidate:
-                    mx_candidate = sample
-                    mx_pos_candidate = i
-                if sample < mn_candidate:
-                    mn_candidate = sample
-                    mn_pos_candidate = i
-
-                if look_for_max:
-                    if i >= i_activation_max and sample < mx_candidate - d:  # new max
-                        maxp.append(mx_pos_candidate)
-                        maxv.append(mx_candidate)
-                        i_activation_max = i + refractory
-
-                        mn_candidate = sample
-                        mn_pos_candidate = i
-
-                        look_for_max = False
-                else:
-                    if i >= i_activation_min and sample > mn_candidate + d:  # new min
-                        minp.append(mn_pos_candidate)
-                        minv.append(mn_candidate)
-                        i_activation_min = i + refractory
-
-                        mx_candidate = sample
-                        mx_pos_candidate = i
-
-                        look_for_max = True
+            assert len(delta) == len(signal), "delta vector's length differs from signal's one, returning empty."
         
-        out = _np.ones_like(signal.values)*_np.nan
+        
+        mx_candidate_idx = 0
+        mx_candidate_val = signal_values[mx_candidate_idx]
+        i_activation_max = mx_candidate_idx
+
+        mn_candidate_idx = 0
+        mn_candidate_val = signal_values[mn_candidate_idx]
+        
+        look_max = True
+        
+        for i in range(1, len(signal_values)):
+            sample = signal_values[i]
+            if not scalar:
+                d = delta[i]
+
+            #if value is greater, then update the candidate max
+            if sample > mx_candidate_val:
+                mx_candidate_val = sample
+                mx_candidate_idx = i
+            if sample < mn_candidate_val:
+                mn_candidate_val = sample
+                mn_candidate_idx = i
+            
+            #if we are looking for the max,
+            #and we are outside the refractory period,
+            #and current value is lower than (candidate max - d)
+            #we validate the candidate maximum and store it
+            #and we update the candidate minimum
+            if look_max:
+                if i >= i_activation_max and sample < mx_candidate_val - d:  
+                    max_idxs.append(mx_candidate_idx)
+                    max_vals.append(mx_candidate_val)
+                    i_activation_max = i + refractory
+    
+                    mn_candidate_val = sample
+                    mx_candidate_idx = i
+    
+                    look_max = False
+            
+            else: #we are looking for a min
+                if sample > mn_candidate_val + d:  # new min
+                    mx_candidate_val = sample
+                    mx_candidate_idx = i
+
+                    look_max = True
+    
+        out = _np.ones_like(signal_values)*_np.nan
         
         if return_peaks:
-            out[maxp] = signal.values[maxp]
+            out[max_idxs] = _np.array(max_vals)
         else:
-            out[minp] = signal.values[minp]
+            out[max_idxs] = -1*_np.array(max_vals)
         
-        out_xarray = signal.copy(data = out)
-
-        return out_xarray
+        return out
 
 class SignalRange(_Algorithm): #xarray done
     """
@@ -218,13 +225,16 @@ class SignalRange(_Algorithm): #xarray done
         idx_step = int(win_step * fsamp)
         
         signal_values = signal.values
+
         # print('>>> signalrange')
+        deltas = _np.zeros(len(signal_values))
+        
         if len(signal) < idx_len:
             print("Input signal is shorter than the window length.")
-            return _np.max(signal) - _np.min(signal)
+            deltas = deltas + (_np.max(signal_values) - _np.min(signal_values))
         else:
             windows = _np.arange(0, len(signal_values) - idx_len + 1, idx_step)
-            deltas = _np.zeros(len(signal_values))
+            
 
             curr_delta = 0
             for start in windows:
@@ -233,12 +243,14 @@ class SignalRange(_Algorithm): #xarray done
                 deltas[start:start + idx_len] = curr_delta
 
             deltas[windows[-1] + idx_len:] = curr_delta
-
+            
             if smooth:
                 win_len = int(win_len*2*fsamp)
                 deltas = _np.convolve(deltas, _np.ones(win_len)/win_len, mode='same')
+                deltas = deltas[:len(signal_values)]
             # print('<<< signalrange')
-            return deltas
+            
+        return deltas
 
 class PSD(_Algorithm): #xarray done
     """
@@ -441,21 +453,20 @@ class PSD(_Algorithm): #xarray done
         # print(out)
         return {'channel': 1, 'component':1}, out
     
-class Wavelet(_Algorithm): #xarray dones
+class Wavelet(_Algorithm):
     """
-    TODO
+
     """
     def __init__(self, wtype = 'cmor_1.15-1.0',
-                 scales = None,
                  freqs = None,
-                 minScale = None,
+                 minScale = 2,
                  nNotes = 12,
                  detrend=True,
                  normalize=False,
                  compute_coi=False):
             
         
-        _Algorithm.__init__(self, wtype = wtype, scales = scales, freqs = freqs,
+        _Algorithm.__init__(self, wtype = wtype, freqs = freqs,
                             minScale = minScale, nNotes = nNotes,
                             detrend=detrend, normalize=normalize,
                             compute_coi=compute_coi)
@@ -464,9 +475,9 @@ class Wavelet(_Algorithm): #xarray dones
     def __finalize__(self, res_sig, arr_window):
         return __finalize_special__(res_sig)
     
-    def _get_coi(self, signal):
-        signal_values = signal.p.get_values()
-        N = signal_values.shape[0]
+    def _compute_coi(self, W):
+        N = W.shape[1]
+        freqs_nyq = self._params['freqs_nyq']
         coif_ = 1/(2*_np.arange(1, N//2))
 
         # coif_ = fsamp/(2*np.arange(1, N//2))
@@ -474,98 +485,86 @@ class Wavelet(_Algorithm): #xarray dones
         coif = _np.zeros(N) + min_coif
         coif[:len(coif_)] = coif_
         coif[-len(coif_):] = coif_[::-1]
-        return(coif)
+        
+        for i in range(W.shape[1]):
+            idx_na = _np.where(freqs_nyq < coif[i])[0]
+            W[idx_na, i] = _np.nan
+        return(W)
+            
     
-    def _get_scales(self, signal):
-        
-        #set own parameters to allow the computation of the coi
-        
-        #use nsamp and nyq_freq instead of t, fsamp
-        
+    def _compute_scales(self, signal):
         params = self._params
-        wtype = params['wtype']
-        scales = params['scales']
         freqs = params['freqs']
+        wtype = params['wtype']
         
         signal_values = signal.p.get_values()
         fsamp = signal.p.get_sampling_freq()
         
-        if (freqs is None) and (scales is None):
-            #users want the algoritm to compute the scales
+        if freqs is None: #users want the algoritm to compute the scales
             minScale = params['minScale']
             nNotes = params['nNotes']
-            if minScale is None:
-                minScale_idx = 2
-            else:
-                minScale_idx = int(_np.round(minScale*fsamp))
+            
             # The scales as of Mallat 1999
             # minScale = 2 # / wavelet.flambda()
             N = signal_values.shape[0]
             nOctaves = int(_np.round(_np.log2(N/2) / (1/nNotes)))
-            scales_idx = minScale_idx * 2 ** (_np.arange(0, nOctaves + 1) * (1/nNotes))
+            scales = minScale * 2 ** (_np.arange(0, nOctaves + 1) * (1/nNotes))
+            freqs_nyq = _pywt.scale2frequency(wtype, scales)
             
-        elif (freqs is None):
-            #user provided the scales
-            scales = _np.array(scales)
-            
-            #check correct order of scales
-            assert scales[0]<scales[-1]
-            assert (_np.diff(scales)>0).all()
-            scales_idx = scales*fsamp
-            
-        else:
-            #user provided the frequencies
+        else: #user provided the frequencies
             freqs = _np.array(freqs)
             #check correct order of frequencies
             assert freqs[0]>freqs[-1]
             assert (_np.diff(freqs)<0).all()
-            scales_idx = _pywt.frequency2scale(wtype, freqs/fsamp)
-        scales_idx = _np.sort(scales_idx)
-        return(scales_idx)
+            freqs_nyq = freqs/fsamp
+            scales = _pywt.frequency2scale(wtype, freqs_nyq)
+            
+        scales = _np.sort(scales)
+        
+        self._params['freqs_nyq'] = freqs_nyq
+        self._params['scales'] = scales
+        
     
     def algorithm(self, signal):
-        params = self._params
-        wtype = params['wtype']
-        # scales = params['scales']
-        # nNotes = params['nNotes']
-        detrend = params['detrend']
-        normalize = params['normalize']
-        compute_coi = params['compute_coi']
+        if 'scales' not in self._params:
+            self._compute_scales(signal)
         
+        params = self._params
+        #get signal values and info
         signal_values = signal.p.get_values().ravel()
         fsamp = signal.p.get_sampling_freq()
         N = len(signal_values)
-        scales_idx = self._get_scales(signal)
-
-        if (_np.isnan(signal_values).any()):
-            #cannot compute wavelets if nans are present
-            W = _np.nan*_np.zeros((len(scales_idx), N, 1, 1))
-            out = signal.copy(deep=True)
-            freqs = _pywt.scale2frequency(wtype, scales_idx)*fsamp
-            out = out.expand_dims({'freq':freqs}, axis=0)
-            # out.name = signal.name+'_'#+self.name
-            out.values = W
-            return(out)
         
+        #remove linear drift
+        detrend = params['detrend']
         if detrend:
             signal_values = _detrend(signal_values, type='linear')
-                    
-        W, freqs = _pywt.cwt(signal_values, scales_idx, wavelet=wtype)
-       
-        if compute_coi:
-            coif = self._get_coi(signal)
-            for i in range(W.shape[1]):
-                idx_na = _np.where(freqs < coif[i])[0]
-                W[idx_na, i] = _np.nan
         
+        #compute wavelet
+        wtype = params['wtype']
+        scales = params['scales']
+        
+        W, freqs_nyq = _pywt.cwt(signal_values, scales, wavelet=wtype)
+        
+        
+        freqs=freqs_nyq*fsamp
+        self._params['freqs_nyq'] = freqs_nyq
+        
+        #normalize computed W
+        normalize = params['normalize']
         if normalize:
-            scaleMatrix = _np.ones([1, N]) * scales_idx[:, None]
+            scaleMatrix = _np.ones([1, N]) * scales[:, None]
             W = W**2 / scaleMatrix
         
+        #compute coi and assign na outside
+        compute_coi = params['compute_coi']
+        if compute_coi:
+            W = self._compute_coi(W)
+                
         W = _np.expand_dims(W,[2,3])
         
-        freqs = freqs*fsamp #convert to original frequencies
         out = signal.copy(deep=True)
+        
         out = out.expand_dims({'freq':freqs}, axis=0)
         # out.name = signal.name+'_'#+self.name
         
@@ -573,23 +572,24 @@ class Wavelet(_Algorithm): #xarray dones
         return out
     
     def __get_template__(self, signal):
-        params = self._params
-        wtype = params['wtype']
+        self._compute_scales(signal)
         
-        scales_idx = self._get_scales(signal)
-
         signal_values = signal.p.get_values()
-        fsamp = signal.p.get_sampling_freq()
         N = signal_values.shape[0]
+        fsamp = signal.p.get_sampling_freq()
+        
+        scales = self._params['scales']
+        # if 'freqs' in self._params:
+        #     freqs = self._params['freqs']
+        # else:
+        freqs = self._params['freqs_nyq']*fsamp
 
-        out = _np.zeros(shape=(len(scales_idx), N,
+        out = _np.zeros(shape=(len(scales), N,
                                signal.sizes['channel'], 
                                signal.sizes['component']))
 
-        freqs = _pywt.scale2frequency(wtype, scales_idx)*fsamp
-        # print(len(freqs))
-        
-        out = _xr.DataArray(out, dims=('freq', 'time', 'channel', 'component'),
+        out = _xr.DataArray(out, 
+                            dims=('freq', 'time', 'channel', 'component'),
                             coords = {'freq': freqs,
                                       'time': signal.coords['time'].values,
                                       'channel': signal.coords['channel'],
@@ -741,6 +741,26 @@ class Minima(_Algorithm): #xarray done
         max_alg = Maxima(**params) 
         result = -1*max_alg.algorithm(-signal)
         return(result)
+
+
+
+class PCA(_Algorithm): #xarray done
+    """
+    """
+
+    def __init__(self, n_out_channels=1):
+        _Algorithm.__init__(self, n_out_channels=n_out_channels)
+        self.dimensions = {'time' : 0,
+                           'channel': n_out_channels,
+                           'component': 0}
+        
+    
+    
+    def algorithm(self, signal):
+        pca = _PCA(n_components=self._params['n_out_channels'])
+        orig_channels = signal.p.get_values()[:,:,0]
+        out_channels = pca.fit_transform(orig_channels)
+        return(out_channels)
 
 #TODO from here
 # class BootstrapEstimation(_Algorithm):

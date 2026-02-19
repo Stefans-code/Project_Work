@@ -6,9 +6,6 @@ from .utils import Diff as _Diff
 import xarray as _xr
 from ._base_algorithm import _Algorithm
 
-
-
-
 class _SignalQualityIndicator(_Algorithm):
     """ 
     A Signal Quality Indicator is a special class of indicators
@@ -27,55 +24,21 @@ class _SignalQualityIndicator(_Algorithm):
         '''
         assert len(threshold)==2
         _Algorithm.__init__(self, threshold=threshold, **kwargs)
-    
-    def is_good(self, sqi_dataarray):
-        # print('-----> is_good')
-        sqi_values = sqi_dataarray.values
+        
+    def __check_good(self, sqi_indicator, signal):
         params = self._params
         threshold = params['threshold']
         
-        if sqi_values.ndim == 0:
-            output = (sqi_values >= threshold[0]) & (sqi_values <= threshold[1])
-            output = _np.array(output)
-        else:
-            output = _np.zeros_like(sqi_values)
-            idx_good = _np.where((sqi_values >= threshold[0]) & (sqi_values <= threshold[1]))
-            output[idx_good] = 1
-            #propagate nans
-            idx_nan = _np.where(_np.isnan(sqi_values))
-            output[idx_nan] = _np.nan
+        is_good = (sqi_indicator >= threshold[0]) & (sqi_indicator <= threshold[1])
         
-        # print('<----- is_good')
-        return(output)
+        out_shape = _np.array(signal.shape)
+        out_shape[0] = 1
         
-    def __call__(self, signal, add_signal=True, dimensions=None):
-        # print('-----> SQI.__call__()')
-        values_out = super().__call__(signal, add_signal=add_signal, 
-                                      dimensions=dimensions)
+        sqi_indicator = _np.array(sqi_indicator).reshape(out_shape)
+        is_good = _np.array(is_good).reshape(out_shape)
         
-        signal_name = signal.p.main_signal.name
-        if add_signal:
-            indicator_name = signal_name+'_'+self.name
-        else:
-            indicator_name = signal_name
+        out = _np.stack([sqi_indicator, is_good], axis = - 1)
         
-        #for SQI that are called from within other algorithms
-        if isinstance(values_out, _xr.Dataset):
-            isgood = self.is_good(values_out[indicator_name])
-            #convert isgood to dataarray
-            isgood_out = values_out[indicator_name].copy(data = isgood)
-        else:
-            values_out.name = indicator_name
-            isgood = self.is_good(values_out)
-            #convert isgood to dataarray
-            isgood_out = values_out.copy(data = isgood)
-        
-        
-        isgood_name = indicator_name +'_isgood'
-        isgood_out.name = isgood_name
-        
-        out = _xr.merge([values_out, isgood_out])
-        # print('<----- SQI.__call__()')
         return(out)
 
 class Kurtosis(_SignalQualityIndicator):
@@ -85,18 +48,30 @@ class Kurtosis(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
-        self.dimensions = {'time':1}
+        self.required_dims = ['time']
+    
+    def __get_template__(self, signal):
+        chunk_dict = self.__compute_chunk_dict__(signal)
+        template = self.__compute_template__(signal, {'time': 1, 
+                                                      'is_good': 2})
+        return(chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.values.ravel()
         k = _sps.kurtosis(signal_values)
-        k_out = _np.array([k])
+        
+        k_out = self.__check_good(k)
+        
         return(k_out)
 
 class Entropy(_SignalQualityIndicator):
     def __init__(self, threshold, nbins=25, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, nbins=nbins, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         signal_values = signal.values.ravel()
@@ -115,7 +90,11 @@ class DerivativeEnergy(_SignalQualityIndicator):
     def __init__(self, threshold, dt=0.01, **kwargs):
         assert dt>0
         _SignalQualityIndicator.__init__(self, threshold, dt = dt, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
     
     def algorithm(self, signal):
         # signal_values = signal.values.ravel()
@@ -131,7 +110,11 @@ class SpectralPowerRatio(_SignalQualityIndicator):
     """
     def __init__(self, threshold, method='ar', bandN=[5,14], bandD=[5,50],**kwargs):
         _SignalQualityIndicator.__init__(self, threshold, method=method, bandN=bandN, bandD=bandD, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     
     def algorithm(self, signal):
@@ -153,7 +136,11 @@ class CVSignal(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.values.ravel()
@@ -170,7 +157,11 @@ class PercentageNAN(_SignalQualityIndicator):
     """
     def __init__(self, threshold, **kwargs):
         _SignalQualityIndicator.__init__(self, threshold, **kwargs)
-        self.dimensions = {'time':1}
+        self.chunk_dict = {'channel': 1, 'component': 1}
+    
+    def __get_template__(self, signal):
+        template = self.__compute_template__(signal)
+        return(self.chunk_dict, template)
 
     def algorithm(self, signal):
         signal_values = signal.values

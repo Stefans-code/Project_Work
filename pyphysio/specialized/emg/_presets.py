@@ -1,17 +1,15 @@
-from .indicators.frequencydomain import *
-from .indicators.nonlinear import *
-from .indicators.peaks import *
-from .indicators.timedomain import *
-from .sqi.sqi import *
+from ...indicators.frequencydomain import PowerInBand as _PowerInBand
+from ....indicators.timedomain import Max as _Max, Min as _Min, Mean as _Mean, \
+    Range as _Range, StDev as _StDev, AUC as _AUC
 
 def preset_emg(prefix='emg_', method = 'welch'):
-    mx = Max(name='maximum')
-    mn = Min(name='minimum')
-    mean = Mean(name='mean')
-    rng = Range(name='range')
-    sd = StDev(name='sd')
-    auc = AUC(name='auc')
-    en4_40 = PowerInBand(freq_min=4, freq_max=40, method=method, name="en_4_40")
+    mx = _Max(name='maximum')
+    mn = _Min(name='minimum')
+    mean = _Mean(name='mean')
+    rng = _Range(name='range')
+    sd = _StDev(name='sd')
+    auc = _AUC(name='auc')
+    en4_40 = _PowerInBand(freq_min=4, freq_max=40, method=method, name="en_4_40")
     
     t = [mx, mn, mean, rng, sd, auc, en4_40]
 

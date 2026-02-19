@@ -1,55 +1,172 @@
 import numpy as _np
 import scipy.linalg as _sal
 from ..._base_algorithm import _Algorithm
-from ._convert import Raw2Oxy
+from sklearn.decomposition import PCA as _PCA, FastICA as _ICA
+from sklearn.preprocessing import StandardScaler as _StandardScaler
+import statsmodels.api as _sm
+
 from ._dl_sqi import SignalQualityDeepLearning
-import xarray as _xr
+from ._convert import Raw2Oxy
+import matplotlib.pyplot as _plt
+import matplotlib as _mpl
+import matplotlib.cm as _cm
 
-from ... import scheduler
 
-def load_xrnirs(file):
-    nirs = _xr.load_dataset(file)
-    attrs = nirs.p.main_signal.attrs
-    todel=[]
-    for k in attrs.keys():
-        if k.endswith('_shape'):
-            attr_name = k.split('_shape')[0]
-            attr_numpy = attrs[attr_name]
-            attr_numpy = attr_numpy.reshape(attrs[k])
-            attrs[attr_name] = attr_numpy
-            todel.append(k)
-    for k in todel:
-        del attrs[k]
+#COMPARE 
+def compute_betas_barker(nirs_signal, dm, pmax=10, max_iter = 10):
+    Y = nirs_signal
+    X = dm
     
-    nirs.p.main_signal.attrs = attrs
-    nirs.attrs['history'] = [nirs.attrs['history']]
-    return(nirs)
+    Y = Y.ravel()
+    assert X.shape[0] == len(Y)
+    # 1. Initialize beta via an OLS fit.
+    model_initial = _sm.OLS(Y, X)
+    results_initial = model_initial.fit()
+    beta_outer = results_initial.params
+    residuals = results_initial.resid
 
-def SDto1darray(nirs):
-    for k in nirs.keys():
-        SD = nirs[k].p.main_signal.attrs
-        for attribute in ['SDkey', 'SDmask', 
-                          'SrcPos', 'SrcPos2D', 
-                          'DetPos', 'DetPos2D', 
-                          'ChnPos', 'ChnPos2D']:
-            if attribute in SD.keys():
-                attr_np = _np.array(SD[attribute])
-                attr_shape = attr_np.shape
-                attr_np = attr_np.ravel()
-                SD[attribute] = attr_np
-                SD[f'{attribute}_shape'] = attr_shape
-        nirs[k].p.main_signal.attrs = SD
+    iteration_outer = 0
+    done_outer = False
+    while ((not done_outer) and (iteration_outer<max_iter)):
+        #. Fit the residual to an AR(P) model where P minimizes BIC (Eq. (5)).
+        bic = []
+        for p in range(pmax):
+            model = _sm.tsa.ARIMA(residuals, order=(p,0,0))
+            results = model.fit()
+            bic.append(results.bic)
+            
+        p_optim = _np.argmin(bic)+1
+        model_AR = _sm.tsa.ARIMA(residuals, order=(p_optim,0,0))
+        results_AR = model_AR.fit()
         
-    return(nirs)
+        # Generate the whitening filter f:
+        f = [1]
+        for i in range(p_optim):
+            f.append(-results_AR.arparams[i])
+        f = _np.array(f)
+        
+        #. Apply the whitening filter to the data y and column-wise to the design matrix X
+        Y_w = _np.convolve(Y, f, 'same')
+        X_w = _np.apply_along_axis(_np.convolve, 0, X, *[f, 'same'])
+        
+        #. Perform iteratively reweighted least squares (IRLS)
+        done = False
+        iterations = 0
+        beta_inner = beta_outer
+        #initialize weights to ones
+        weights = _np.ones(len(Y_w))
+        while((not done) and (iterations<max_iter)):
+            #a- solve beta by WLS
+            #fit weighted LS
+            model_WLS = _sm.WLS(Y_w, X_w, weights=weights)
+            results_WLS = model_WLS.fit()
+            #get new beta
+            beta_new = results_WLS.params
+            
+            #b- recalculate weights
+            residuals_WLS = results_WLS.resid
+            weights = _sm.robust.norms.TukeyBiweight(c=4.685).weights(residuals_WLS)
+            change = _np.min(abs((beta_new - beta_inner)/beta_inner))
+            
+            #c- repeat steps 5a-b until changes in beta are small (<1%)
+            if (change <0.005) or (iterations >= max_iter):
+                done = True
+            
+            beta_inner = beta_new
+            
+            iterations +=1
 
+        change_outer = _np.min(abs((beta_outer - beta_inner)/beta_outer))
+        
+        #Repeat steps 2-5 until changes in β are sufficiently small (e.g., < 1% change).  
+        if (change_outer <0.005) or (iteration_outer >= max_iter):
+            done_outer = True
+        
+        beta_outer = beta_inner
+        residuals = Y - _np.dot(X, beta_outer)
+        iteration_outer +=1
 
+    beta = beta_outer
+    return(beta)
+
+#%%
+def plot_probe(nirs, values=None):
+    if values is not None:
+        norm = _mpl.colors.Normalize(vmin=_np.min(values), 
+                                     vmax=_np.max(values))
+        cmap = _plt.get_cmap('bwr')
+        m = _cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    fig = _plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    ax.axis('equal')
+ 
+    for idx_ch in nirs.channel.values:
+        ch_pos = get_ch_pos(nirs, idx_ch)
+        
+        ax.text(ch_pos[0], ch_pos[1], ch_pos[2], idx_ch, color='k', fontsize=14)
+        if values is not None:
+            color = m.to_rgba(values[idx_ch])
+        else:
+            color = 'y'
+        ax.scatter(ch_pos[0], ch_pos[1], ch_pos[2], color=color, marker='o')
+   
+    _plt.show()
+
+#%%
+def get_ss_ls_channels(nirs, max_dist=1.5):
+    idx_ss = []
+    idx_ls = []
+    distances = []
+    for idx_ch, ch in enumerate(nirs.p.main_signal.attrs['Channels']):
+        distances.append(ch[3])
+        if ch[3]<=max_dist:
+            idx_ss.append(idx_ch)
+        else:
+            idx_ls.append(idx_ch)
+    return(idx_ss, idx_ls)
+
+def get_ch_pos(nirs, ch_target, twoD=False):
+    if twoD:
+        src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos2D'])
+        det_pos = _np.array(nirs.p.main_signal.attrs['DetPos2D'])
+    else:
+        src_pos = _np.array(nirs.p.main_signal.attrs['SrcPos'])
+        det_pos = _np.array(nirs.p.main_signal.attrs['DetPos'])
+
+    ch_target_info = nirs.p.main_signal.attrs['Channels'][ch_target]
+    ch_src = int(ch_target_info[1])
+    ch_det = int(ch_target_info[2])
+
+    ch_src_pos = src_pos[ch_src]
+    ch_det_pos = det_pos[ch_det]
+    
+    ch_pos = (ch_src_pos + ch_det_pos)/2
+    return(ch_pos)
+
+def get_near_channels(nirs, ch_target, n_near=3):
+    ch_target_pos = get_ch_pos(nirs, ch_target)
+    
+    distances = []
+    for idx_ch in nirs.channel.values:
+        ch_curr_pos = get_ch_pos(nirs, idx_ch)
+        distances.append(_np.linalg.norm(ch_target_pos - ch_curr_pos))
+
+    sorted_channels = _np.argsort(distances)
+    near_channels = sorted_channels[:n_near]
+    return(near_channels)
+
+#%%
 class PCAFilter(_Algorithm):
     """
     See Molavi 2012
+    TODO: use sklearn
 
     """    
-    def __init__(self, nSV=0.8, **kwargs):
-        _Algorithm.__init__(self, nSV=nSV, **kwargs)
+    def __init__(self, nSV=0.8, return_systemic=False, **kwargs):
+        _Algorithm.__init__(self, nSV=nSV, 
+                            return_systemic=return_systemic,
+                            **kwargs)
         self.dimensions = {'time':0, 
                            'channel': 0, 
                            'component':0}
@@ -62,19 +179,18 @@ class PCAFilter(_Algorithm):
     def algorithm(self, signal): #TODO: correct syntax for **kwargs
 
         nSV = self._params['nSV']
+        return_systemic = self._params['return_systemic']
         n_channels = signal.p.get_nchannels()
         y = signal.p.get_values()
         # idx_good_channels = signal.get_good_channels()
         # y = y_[:, idx_good_channels]
         
-        
         y = _np.concatenate([y[:,:,0], y[:,:,1]], axis=1)
         c = _np.dot(y.T, y)
         V, St, _ = _sal.svd(c)
         svs = St / _np.sum(St)
-        
         ev = _np.zeros(len(svs))
-        if nSV>1:
+        if nSV>=1:
             ev[:nSV] = 1
         else:
             svsc = svs
@@ -84,11 +200,72 @@ class PCAFilter(_Algorithm):
         #%
         ev = _np.diag(ev)
         
-        y = y - _np.linalg.multi_dot([y, V, ev, V.T])
+        y_systemic = _np.linalg.multi_dot([y, V, ev, V.T])
+        if return_systemic:
+            y_systemic = _np.stack([y_systemic[:, :n_channels], y_systemic[:, n_channels:]], axis=2)
+            return y_systemic
+            
         
-        y = _np.stack([y[:, :n_channels], y[:, n_channels:]], axis=2)
-        return(y)
-    
+        y_filt = y - y_systemic
+        y_filt = _np.stack([y_filt[:, :n_channels], y_filt[:, n_channels:]], axis=2)
+        return(y_filt)
+
+class RegressShortSeparation(_Algorithm):
+    '''
+    T. Sato et al., “Reduction of global interference of scalp-hemodynamics 
+    in functional near-infrared spectroscopy using short distance probes,” 
+    NeuroImage 141, 120–132 (2016).
+    '''
+    def __init__(self, var_explained=0.9, max_dist=1.5, **kwargs):
+        _Algorithm.__init__(self, var_explained=var_explained, 
+                            max_dist=max_dist, **kwargs)
+        self.dimensions = {'time':0, 'component':0, 'channel':0}
+        
+            
+    def algorithm(self, signal):
+        params = self._params
+        max_dist = params['max_dist']
+        var_explained = params['var_explained']
+        idx_ss = []
+        idx_ls = []
+        
+        idx_ss, idx_ls = get_ss_ls_channels(signal, max_dist)
+                
+        nirs_ss = signal.isel({'channel':idx_ss})
+        
+        #normalize SS channels
+        nirs_ss_ = nirs_ss.p.get_values()
+        nirs_ss_[:,:,0] = _StandardScaler().fit_transform(nirs_ss_[:,:,0])
+        nirs_ss_[:,:,1] = _StandardScaler().fit_transform(nirs_ss_[:,:,1])
+        
+        #separately for oxy and deoxy?
+        pca = _PCA()
+        oxy_components = pca.fit_transform(nirs_ss_[:,:, 0])
+        variance = _np.cumsum(pca.explained_variance_ratio_)
+        idx_keep = _np.where(variance<=var_explained)[0]
+        oxy_components = oxy_components[:,idx_keep]
+
+        deoxy_components = pca.fit_transform(nirs_ss_[:,:, 1])
+        variance = _np.cumsum(pca.explained_variance_ratio_)
+        idx_keep = _np.where(variance<=var_explained)[0]
+        deoxy_components = deoxy_components[:,idx_keep]
+        
+        nirs_filtered = signal.p.get_values().copy()
+
+        for idx_ch in idx_ls:
+            nirs_ch_ = nirs_filtered[:,idx_ch]
+            
+            model_ar = _sm.GLS(nirs_ch_[:,0], oxy_components)
+            results_ar = model_ar.fit()
+            nirs_filtered[:, idx_ch, 0] = results_ar.resid
+                
+            model_ar = _sm.GLS(nirs_ch_[:,1], deoxy_components)
+            results_ar = model_ar.fit()
+            nirs_filtered[:, idx_ch, 1] = results_ar.resid
+                    
+        return(nirs_filtered)
+
+
 class NegativeCorrelationFilter(_Algorithm):
     '''
     Functional near infrared spectroscopy (NIRS) signal improvement based on negative correlation between oxygenated and deoxygenated hemoglobin dynamics
@@ -123,51 +300,68 @@ class NegativeCorrelationFilter(_Algorithm):
 
 
 class ComputeClusters(_Algorithm):
-    def __init__(self, clusters, n_min_good=3, normalize=True, **kwargs):
+    def __init__(self, clusters, n_min_good=0, mode='mean', **kwargs):
         _Algorithm.__init__(self, clusters = clusters, 
-                            n_min_good = n_min_good, 
-                            normalize=normalize, **kwargs)
+                            n_min_good = n_min_good,
+                            mode=mode,
+                            **kwargs)
         
         self.dimensions = {'time':0, 
-                           'channel': len(clusters), 
-                           'component':0}
+                           'channel': len(clusters)}
     
     def __call__(self, signal_in, **kwargs):
         if 'good_channels' in signal_in.attrs:
             self.good_channels = signal_in.attrs['good_channels']
         else:
-            self.good_channels = _np.arange(signal_in.dims['channel'])
+            self.good_channels = _np.arange(_np.max(signal_in.channel)+1)
         
         return(_Algorithm.__call__(self, signal_in, **kwargs))
                                             
                                             
     def algorithm(self, signal):
-        def normalize_signal(x):
-            return( (x-_np.mean(x))/_np.std(x))
+
         clusters = self._params['clusters']
         n_min_good = self._params['n_min_good']
-        normalize = self._params['normalize']
-        
-        signal_values = signal.p.get_values()
+        mode = self._params['mode']
         
         good_channels = self.good_channels
-        
-        out_signal = _np.nan*_np.zeros((len(signal_values), len(clusters), 2))
+
+        out_signal = _np.nan*_np.zeros((signal.sizes['time'], len(clusters), 1))
         for i_cluster, cluster_channels in enumerate(clusters):
             
-            cluster_good_channels = []
-            for ch in cluster_channels:
-                if ch in good_channels:
-                    cluster_good_channels.append(ch)
+            if n_min_good != 0:
+                cluster_good_channels = []
+                for ch in cluster_channels:
+                    if ch in good_channels:
+                        cluster_good_channels.append(ch)
+            else:
+                cluster_good_channels = cluster_channels
             
             if len(cluster_good_channels)>= n_min_good:
-                signals_cluster = signal_values[:, cluster_good_channels, :]
-                    
-                if normalize:
-                    signals_cluster = _np.apply_along_axis(normalize_signal, 0,  signals_cluster)
+                signals_cluster = signal.sel({'channel':cluster_good_channels}).p.get_values()[:,:,0]
                 
-                cluster_mean = _np.mean(signals_cluster, axis=1, keepdims=True)
-                out_signal[:,i_cluster, :] = cluster_mean[:,0,:]
+                if mode == 'pca':
+                    cluster_signal = _PCA(1).fit_transform(signals_cluster.copy())
+                                       
+                    corr=[]
+                    for i in range(len(cluster_good_channels)):
+                        corr.append(_np.corrcoef(cluster_signal.ravel(), 
+                                                 signals_cluster[:,i].ravel())[1,0])
+                    if _np.mean(corr)<0:
+                        cluster_signal = -cluster_signal
+                    
+                elif mode == 'ica':
+                    cluster_signal = _ICA(1).fit_transform(signals_cluster.copy())
+                    corr=[]
+                    for i in range(len(cluster_good_channels)):
+                        corr.append(_np.corrcoef(cluster_signal.ravel(), 
+                                                 signals_cluster[:,i].ravel())[1,0])
+                    if _np.mean(corr)<0:
+                        cluster_signal = -cluster_signal
+                else:
+                    cluster_signal = _np.mean(signals_cluster, axis=1, keepdims=True)
+                    
+                out_signal[:,i_cluster, :] = cluster_signal
         
         return(out_signal)
         

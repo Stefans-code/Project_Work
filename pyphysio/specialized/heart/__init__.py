@@ -213,7 +213,6 @@ class BeatFromBP(_Algorithm):
         
         # find range for the adaptive peak detection
         delta = 0.5 * _SignalRange(win_len=1.5 / fmax, win_step=1 / fmax)(signal_f)
-
         delta = delta.values.ravel()
 
         # adjust for delta values equal to 0
@@ -223,8 +222,11 @@ class BeatFromBP(_Algorithm):
 
         # detection of candidate peaks
         maxima = _PeakDetection(
-            delta=delta, refractory=ibi_min, start_max=True, return_peaks=True)(signal_f)
+            delta=delta, refractory=ibi_min, return_peaks=True)(signal_f)
         maxp = _np.where(~_np.isnan(maxima.values))[0].ravel()
+        
+        if len(maxp) == 0:
+            return(_np.nan * _np.zeros(len(signal.p.main_signal.values)))
         
         if maxp[0] == 0:
             maxp = maxp[1:]
@@ -232,7 +234,8 @@ class BeatFromBP(_Algorithm):
         # STAGE 2 - IDENTIFY PEAKS using the signal derivative
         # compute the signal derivative
         dxdt = _Diff()(signal).values
-
+        
+        # import matplotlib.pyplot as plt
         true_peaks = []
         # for each candidate peak find the correct peak
         for idx_beat in maxp:
@@ -243,15 +246,18 @@ class BeatFromBP(_Algorithm):
             stop_ = int(idx_beat + win_post)
             if stop_ > len(dxdt):
                 stop_ = -1
-
+            
             # select portion of derivative where to search
             obs = dxdt[start_:stop_]
             peak_obs = _np.argmax(obs)
+                
             i_end = 1
-            while peak_obs == (len(obs) - i_end):
+            
+            while (peak_obs == (len(obs) - i_end)) and (i_end < len(obs)):
                 peak_obs = _np.argmax(obs[:-i_end])
                 i_end += 1
-
+            
+            
             true_obs = dxdt[start_ + peak_obs: stop_]
 
             true_obs = create_signal(abs(true_obs),
@@ -273,12 +279,15 @@ class BeatFromBP(_Algorithm):
         true_peaks = _np.array(true_peaks)
         
         # STAGE 3 - FINALIZE computing IBI
-        t_ibi = true_peaks / fsamp
-        v_ibi = _np.diff(t_ibi)
-        v_ibi = _np.insert(v_ibi, 0, v_ibi[0])
-
         ibi_scaffold = _np.nan * _np.zeros(len(signal.values))
-        ibi_scaffold[true_peaks] = v_ibi
+        
+        if len(true_peaks)>1:
+            t_ibi = true_peaks / fsamp
+            v_ibi = _np.diff(t_ibi)
+        
+            v_ibi = _np.insert(v_ibi, 0, v_ibi[0])
+
+            ibi_scaffold[true_peaks] = v_ibi
 
         return ibi_scaffold
 
@@ -336,7 +345,7 @@ class BeatFromECG(_Algorithm):
 
         # find beats
         maxp = _PeakDetection(
-            delta=delta, refractory=refractory, start_max=True)(signal)
+            delta=delta, refractory=refractory)(signal)
         maxp = _np.array(maxp).ravel()
 
         if maxp[0] == 0:
